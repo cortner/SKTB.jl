@@ -1,9 +1,9 @@
 
 module TestAtoms
 
-using Potentials, AtomsInterface
+using Potentials, AtomsInterface, ASE, MatSciPy
 
-export test_ScalarFunction
+export test_ScalarFunction, test_potentialenergy
 
 """`test_ScalarFunction(p, r0)`
 
@@ -33,8 +33,26 @@ finite difference test for consistency of `potentialenergy` with
 function test_potentialenergy(calc::AbstractCalculator, at::AbstractAtoms)
     X = positions(at)
     f = potential_energy(at, calc)
-    df = potential_energy_d(at, calc)
+    df = potential_energy_d(at, calc)[:]
+    println("-----------------------------")
+    println("  p | error ")
+    println("----|------------------------")
+    for p = 2:10
+        h = 0.1^p
+        dfh = zeros(length(df))
+        for n = 1:length(df)
+            X[n] += h
+            set_positions!(at, X)
+            dfh[n] = (potential_energy(at, calc) - f) / h
+            X[n] -= h
+        end
+        @printf(" %2d | %1.7e \n", p, norm(df - dfh, Inf))
+    end
+    println("-----------------------------")    
 end
+
+
+
 
 
 end
