@@ -12,7 +12,7 @@ Implements some functionality for tight binding models
 module TightBinding
 
 
-using Potentials, ASE, MatSciPy, Prototypes
+using Potentials, ASE, MatSciPy, Prototypes, SparseTool
 
 export AbstractTBModel, TBModel
 
@@ -43,6 +43,8 @@ type TBModel <: AbstractTBModel
     # Hamiltonian parameters
     onsite::SitePotential
     hop::PairPotential
+    overlap::PairPotential
+    
     pair::PairPotential
     
     # remaining model parameters
@@ -57,9 +59,9 @@ type TBModel <: AbstractTBModel
     nkpoints::Vector{T <: Integer}
     
     # internals
-    hfd::Float64
-    needupdate::Bool
-    arrays::Dict{Symbol, Any}
+    hfd::Float64           # step used for finite-difference approximations
+    needupdate::Bool       # tells whether hamiltonian and spectrum are up-to-date
+    arrays::Dict{Symbol, Any}      # storage for various
 end
 
 
@@ -76,7 +78,20 @@ indexblock(n::Union{Integer, Vector}, tbm::TBModel) =
 
 
 @doc doc"""`hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
-binding model."""->
+binding model.
+
+#### Parameters:
+
+* `atm::ASEAtoms`
+* `tbm::TBModel`
+* `k = k=[0.;0.;0.]` : k-point at which the hamiltonian is evaluated
+
+### Output: H, M
+
+* `H` : hamiltoian in CSC format
+* `M` : overlap matrix in CSC format
+
+"""->
 function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
 
     # create a neighbourlist
@@ -89,9 +104,9 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
     # allocate space for hamiltonian and overlap matrix
     H = sparse_flexible(nnz_est)
     M = sparse_flexible(nnz_est)
-    H_nm = zeros(tbm.norbitals, tbm.norbitals)
-    M_nm = zeros(tbm.norbitals, tbm.norbitals)
-
+    # OLD: H_nm = zeros(tbm.norbitals, tbm.norbitals)
+    # OLD: M_nm = zeros(tbm.norbitals, tbm.norbitals)
+    
     # loop through all atoms
     for n, neigs, r, R in Sites(nlist)
         # index-block for atom index n
@@ -101,20 +116,18 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
-            #   TODO: fix notation
-            get_h!(R[:,m], tbm, H_nm)
+            H_nm = tbm.hop(r[m])           #   OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm    #  TODO HUAJIE
             # compute overlap block and add to sparse matrix
-            #   TODO: fix notation
-            get_m!(R[:.m], tbm, M_nm)
-            M[In, Im] += M_nm
+            M_nm = tbm.overlap(r[m])       #   OLD: get_m!(R[:.m], tbm, M_nm)
+            M[In, Im] += M_nm    #  TODO HUAJIE
         end
         # now compute the on-site terms
-        get_os!(R, tbm, H_nm)
-        H[In, In] += H_nm
-        
-        #  WHAT IS THIS???  DISCUSS!!!!! (ASSUMES ORTHOGONALITY!)
-        M[In, In] += eye(tbm.norbitals)
+        H_nn = tbm.onsite(r)               #  OLD: get_os!(R, tbm, H_nm)
+        H[In, In] += H_nn
+        # overlap diagonal block
+        M_nn = tbm.overlap(0.0)
+        M[In, In] += M_nn
     end
 
     # convert M, H and return
