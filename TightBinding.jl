@@ -151,9 +151,45 @@ end
 
 monkhorstpackgrid(atm, tbm) = monkhorstpackgrid(cell(atm), tbm.nkpoints)
 
+# HJ ------------------------------------------------------------------------
 function monkhorstpackgrid(cell, nkpoints)
-    # TODO HUAJIE
+	kx, ky, kz = nkpoints
+	if kx != 0 || ky != 0
+		error("This boundary condition has not been implemented yet!")
+	end
+	# open boundarycondition
+	if kz == 0 || kz == 1
+		K = [0.;0.;0.]
+		weight = 1.0
+	else
+		if mod(kz,2) == 1
+			error("k should be an even number in Monkhorst-Pack grid!")
+		end
+   		# compute the lattice vector of reciprocal space
+		v1 = cell[1,:][:]
+    	v2 = cell[2,:][:]
+    	v3 = cell[3,:][:]
+    	c12 = cross(v1,v2)
+    	b3 = 2 * π * c12 / dot(v3,c12)
+		# K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
+		# so we can exploit the symmetry of the brillouin zone 
+		nk = Int(kz/2) + 1
+		K = zeros(nk, 3)
+		weight = zeros(nk)
+		k_step = b3 / kz
+    	w_step = norm(b3) / kz+1
+    	for k = 1:nk
+        	K[k,:] = (k-1) * k_step
+			if k == 1 || k == nk
+		        weight[k] = w_step
+			else 
+	        	weight[k] = w_step * 2.0 
+			end
+    	end
+	end
+	return K, weight
 end
+# ------------------------------------------------------------------------
 
 
 ############################################################
@@ -236,20 +272,24 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
     # OLD: H_nm = zeros(tbm.norbitals, tbm.norbitals)
     # OLD: M_nm = zeros(tbm.norbitals, tbm.norbitals)
     
+	X = get_positions(atm)
     # loop through all atoms
     for n, neigs, r, R in Sites(nlist)
         # index-block for atom index n
         In = indexblock(n, tbm)
         # loop through the neighbours of the current atom
-        for m = 1:length(M)
+        for m = 1:length(neigs)
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
-            H_nm = tbm.hop(r[m], R[:, m])           #   OLD: get_h!(R[:,m], tbm, H_nm)
-            H[In, Im] += H_nm    #  TODO HUAJIE
+# HJ------------------------------------------------------------------------------------
+            kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
+            H_nm = tbm.hop(r[m], R[:, m])          #   OLD: get_h!(R[:,m], tbm, H_nm)
+            H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])       #   OLD: get_m!(R[:.m], tbm, M_nm)
-            M[In, Im] += M_nm    #  TODO HUAJIE
+            M[In, Im] += M_nm * exp(im * kR)   
+# ------------------------------------------------------------------------------------
         end
         # now compute the on-site terms
         H_nn = tbm.onsite(r, R)               #  OLD: get_os!(R, tbm, H_nm)
