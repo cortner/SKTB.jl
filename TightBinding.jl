@@ -21,7 +21,6 @@ export AbstractTBModel, TBModel
 abstract AbstractTBModel <: AbstractCalculator
 
 
-include("NRLTB")
 
 
 
@@ -316,9 +315,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
 # HJ----------------------------------------------------------------------------
-            # DISCUSS
-            # ARE WE USING MINIMAL IMAGE CONVENTION HERE? (OR ANYWHERE?) I DONT THINK WE CAN!!!
-            kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
+            # DISCUSS: ARE WE USING MINIMAL IMAGE CONVENTION HERE? (OR ANYWHERE?) I DONT THINK WE CAN!!!
+            kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
             H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
@@ -365,6 +363,15 @@ end
 
 ############################################################
 ### Site Energy Stuff
+
+
+
+
+##################################################
+### MODELS
+
+include("NRLTB.jl")
+include("toytbmodel.jl")
 
 
 end
