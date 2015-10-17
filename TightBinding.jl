@@ -24,14 +24,6 @@ abstract AbstractTBModel <: AbstractCalculator
 include("NRLTB")
 
 
-"""
-`hamiltonian`: compute the Hamiltonian matrix for the tight binding
-model.
-"""
-@protofun hamiltonian(at::AbstractAtoms, tbm::AbstractTBModel)
-
-
-
 
 
 """`TBModel`: basic non-self consistent tight binding calculator. This 
@@ -65,7 +57,7 @@ type TBModel <: AbstractTBModel
     # k-point sampling information:
     #    0 = open boundary
     #    1 = Gamma point
-    nkpoints::Vector{T <: Integer}
+    nkpoints::Tuple{Int, Int, Int}
     
     # internals
     hfd::Float64           # step used for finite-difference approximations
@@ -74,6 +66,21 @@ type TBModel <: AbstractTBModel
 end
 
 typealias TightBindingModel TBModel
+
+TBModel(;onsite = ZeroSitePotential(),
+        hop = ZeroPairPotential(),
+        overlap = ZeroPairPotential(),
+        pair = ZeroPairPotential(),
+        smearing = ZeroTemperature(),
+        norbitals = 0,
+        fixed_eF = true,
+        eF = 0.0,
+        nkpoints = (0,0,0),
+        hfd = 0.0,
+        needupdate = true,
+        arrays = Dict()) =
+            TBModel(onsite, hop, overlap, pair, smearing, norbitals,
+                    fixed_eF, eF, nkpoints, hfd, needupdate, arrays)
 
 
 ############################################################
@@ -101,7 +108,6 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 type FermiDiracSmearing <: SmearingFunction
     beta
-    eF
 end
 # FD distribution and its derivative. both are vectorised implementations
 fermi_dirac(eF, beta, epsn) =
@@ -291,10 +297,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
     # create a neighbourlist
     nlist = NeighbourList(rcut(tbm), atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
-    # non-zeros to make a reasonable first allocation
-    #    TODO: ask nlist how much storage we need!
-    num_neig_est = length(get_neigs(1, atm)[1])
-    nnz_est = tbm.norbitals^2 * num_neig_est * length(atm)
+    # >> ask nlist how much storage we roughly need!
+    nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
     # allocate space for hamiltonian and overlap matrix
     H = sparse_flexible(nnz_est)
     M = sparse_flexible(nnz_est)
@@ -311,14 +315,18 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
-# HJ------------------------------------------------------------------------------------
-            kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
-            H_nm = tbm.hop(r[m], R[:, m])          #   OLD: get_h!(R[:,m], tbm, H_nm)
+# HJ----------------------------------------------------------------------------
+            # DISCUSS
+            # kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
+            # I THINK THIS IS ALREADY ALL IN R    (CO)
+            # ARE WE USING MINIMAL IMAGE CONVENTION HERE? (OR ANYWHERE?) I DONT THINK WE CAN!!!
+            kR = dot(R[:,m], k)
+            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
-            M_nm = tbm.overlap(r[m], R[:,m])       #   OLD: get_m!(R[:.m], tbm, M_nm)
+            M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
             M[In, Im] += M_nm * exp(im * kR)   
-# ------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
         end
         # now compute the on-site terms
         H_nn = tbm.onsite(r, R)               #  OLD: get_os!(R, tbm, H_nm)
@@ -327,18 +335,10 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
         M_nn = tbm.overlap(0.0)
         M[In, In] += M_nn
     end
-
+    
     # convert M, H and return
     return sparse_static(H), sparse_static(M)
 end
-
-
-
-# TODO HUAJIE
-# type NRL_Overlap
-# end
-# evaluate(p::NRL_Overlap, 0.0) = eye(p.norbitals)
-# evaluate(p::NRL_Overlap, r, R) = 
 
 
 
