@@ -128,7 +128,6 @@ end
 
 
 
-
 """`sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well."""->
 function sorted_eig(H, M)
@@ -149,45 +148,61 @@ function get_k_array(tbm, symbol, k)
 end
 
 
-monkhorstpackgrid(atm, tbm) = monkhorstpackgrid(cell(atm), tbm.nkpoints)
+"""`monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel)` : extracts cell and grid 
+    information and returns an MP grid.
+"""
+monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) =
+    monkhorstpackgrid(cell(atm), tbm.nkpoints)
 
 # HJ ------------------------------------------------------------------------
-function monkhorstpackgrid(cell, nkpoints)
-	kx, ky, kz = nkpoints
-	if kx != 0 || ky != 0
-		error("This boundary condition has not been implemented yet!")
+"""`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the 
+computational cell defined by `cell` and `nkpoints`. Returns 
+
+### Parameters
+
+(TODO HUAJIE)
+
+### Returns
+
+* `K`: 3 × Nk array of k-points
+* `weights`: integration weights; scalar (uniform grid) or Nk array.
+"""
+function monkhorstpackgrid(cell::Array, nkpoints::Vector)
+    kx, ky, kz = nkpoints
+    if kx != 0 || ky != 0
+	error("This boundary condition has not been implemented yet!")
+    end
+    # open boundarycondition OR Γ-point sampling
+    if kz == 0 || kz == 1
+	K = [0.;0.;0.]
+	weight = 1.0
+    else
+	if mod(kz,2) == 1
+	    error("k should be an even number in Monkhorst-Pack grid!")
 	end
-	# open boundarycondition
-	if kz == 0 || kz == 1
-		K = [0.;0.;0.]
-		weight = 1.0
-	else
-		if mod(kz,2) == 1
-			error("k should be an even number in Monkhorst-Pack grid!")
-		end
-   		# compute the lattice vector of reciprocal space
-		v1 = cell[1,:][:]
+   	# compute the lattice vector of reciprocal space
+	v1 = cell[1,:][:]
     	v2 = cell[2,:][:]
     	v3 = cell[3,:][:]
     	c12 = cross(v1,v2)
     	b3 = 2 * π * c12 / dot(v3,c12)
-		# K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
-		# so we can exploit the symmetry of the brillouin zone 
-		nk = Int(kz/2) + 1
-		K = zeros(nk, 3)
-		weight = zeros(nk)
-		k_step = b3 / kz
+	# K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
+	# so we can exploit the symmetry of the brillouin zone 
+	nk = Int(kz/2) + 1
+	K = zeros(nk, 3)
+	weight = zeros(nk)
+	k_step = b3 / kz
     	w_step = norm(b3) / kz+1
     	for k = 1:nk
-        	K[k,:] = (k-1) * k_step
-			if k == 1 || k == nk
-		        weight[k] = w_step
-			else 
-	        	weight[k] = w_step * 2.0 
-			end
+            K[k,:] = (k-1) * k_step
+	    if k == 1 || k == nk
+		weight[k] = w_step
+	    else 
+	        weight[k] = w_step * 2.0 
+	    end
     	end
-	end
-	return K, weight
+    end
+    return K, weight
 end
 # ------------------------------------------------------------------------
 
@@ -195,6 +210,9 @@ end
 ############################################################
 ##### update functions
 
+"""`update_eig!(atm::ASEAtoms, tbm::TBModel, k)` : computes hamiltonian for
+ k-point `k`, diagonalises and stores the  diagonalisation in `tbm.arrays`
+"""
 function update_eig!(atm::ASEAtoms, tbm::TBModel, k)
     H, M = hamiltonian(atm, tbm, k)
     epsn, C = sorted_eig(H, M)
@@ -203,6 +221,9 @@ function update_eig!(atm::ASEAtoms, tbm::TBModel, k)
 end
 
 
+"""`update_eig!(atm::ASEAtoms, tbm::TBModel)` : updates the hamiltonians
+and spectral decompositions on the MP grid.
+"""
 function update_eig!(atm::ASEAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
     for n = 1:size(K, 2)
@@ -210,7 +231,13 @@ function update_eig!(atm::ASEAtoms, tbm::TBModel)
     end    
 end
 
+"""`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
+data stored in `tbm` needs to be updated (by comparing atom positions) and
+if so, does all necessary updates. At the moment, the following are updated:
 
+* spectral decompositions (`update_eig!`)
+* the fermi-level (`update_eF!`)
+"""
 function update!(atm::ASEAtoms, tbm:TBModel)
     Xnew = get_positions(atm)
     if haskey(tbm.arrays, :X)
@@ -222,18 +249,20 @@ function update!(atm::ASEAtoms, tbm:TBModel)
         tbm[:X] = Xnew
         # do all the updates
         update_eig!(atm, tbm)
-        update_eF!(atm, tbm)
+        update_eF!(tbm)
     end
 end
 
 
-
-function update_eF!(atm::ASEAtoms, tbm::TBModel)
+"""`update_eF!(tbm::TBModel)`: recompute the correct
+fermi-level; using the precomputed data in `tbm.arrays`
+"""
+function update_eF!(tbm::TBModel)
     if tbm.fixed_eF
         return
     end
     
-    # TODO HUAJIE
+    # (TODO HUAJIE)
 end
 
 
