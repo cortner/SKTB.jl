@@ -317,10 +317,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
             # compute hamiltonian block and add to sparse matrix
 # HJ----------------------------------------------------------------------------
             # DISCUSS
-            # kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
-            # I THINK THIS IS ALREADY ALL IN R    (CO)
             # ARE WE USING MINIMAL IMAGE CONVENTION HERE? (OR ANYWHERE?) I DONT THINK WE CAN!!!
-            kR = dot(R[:,m], k)
+            kR = dot(R[:,m] + X[:,n] - X[:,neigs[m]], k)
             H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
