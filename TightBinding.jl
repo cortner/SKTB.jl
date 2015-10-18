@@ -337,6 +337,34 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel; k=[0.;0.;0.])
 end
 
 
+"""`densitymatrix(at::ASEAtoms, tbm::TBModel) -> rho`:
+
+### Input 
+* `at::ASEAtoms` : configuration
+* `tbm::TBModel` : calculator
+
+### Output
+* `rho::Matrix{Float64}`: density matrix, 
+    ρ = ∑_s f(ϵ_s), 
+where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
+    ρ = ∑_k w^k ∑_s f(ϵ_s^k)
+"""
+function densitymatrix(at::ASEAtoms, tbm::TBModel)
+    update!(at, tbm)
+    K, weight = monkhorstpackgrid(atm, tbm)
+    rho = 0.0
+    for n = 1:size(K, 2)
+        k = K[:, n]
+        epsn_k = get_k_array(tbm, :epsn, k)
+        C_k = get_k_array(tbm, :C, k)
+        f = tbm.smearing(epsn_k, tbm.eF)
+        for m = 1:length(epsn_k)
+            rho += weight[n] * f[m] * C_k[:,m]*C_k[:,m]'
+        end
+    end
+    return rho
+end
+
 
 ############################################################
 ### Standard Calculator Functions
@@ -355,6 +383,94 @@ function potential_energy(at:ASEAtoms, tbm::TBModel)
     end
     
     return E
+end
+
+
+
+
+
+# compute all forces on all the atoms
+function forces(atm::AbstractAtoms, tbm::TCTBM)
+    # tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    
+    # allocate output
+    Natm = length(atm)
+    frc = zeros(3, Natm)
+
+    # precompute neighbourlist
+    nlist = NeighbourList(rcut(tbm), atm)
+
+    # BZ integration loop
+    K, weight = monkhorstpackgrid(atm, tbm)
+    for iK = 1:size(K,2)
+        k = K[:, iK]
+        epsn_k = get_k_array(tbm, :epsn, k)
+        C_k = get_k_array(tbm, :C, k)
+        df = @D tbm.smearing(epsn_k)    ##### TODO: HOW DOES SMEARING KNOW eF ????
+    
+        # loop through all atoms, to compute the force on atm[n]
+        for n, neigs, r, R in Sites(nlist)
+            # compute the block of indices for the orbitals belonging to n
+            In = indexblock(n, tbm)
+
+            # ONSITE TERMS
+            # compute ∂H_nn/∂y_n (onsite terms)   >>> DISCUSS WITH HUAJIE
+            # IN THE NEW FRAMEWORK THIS SHOULD RETURN A 3-DIMENSIONAL
+            # ARRAY WITH ALL THE DERIVATIVES W.R.T. ALL THE SITES!!!
+            dH_nn = @D tbm.onsite(r, R)   
+            for a = 1:tbm.norbitals
+                # [ frc[i,n] -= dH_nn[i,a] * dot(df, slice(C, In[a],:).^2) ]
+                Ina = In[a]
+                t1 = 0.0
+                @inbounds @simd for s = 1:length(epsn)
+                    t1 += df[s] * C[Ina,s] * C[Ina,s]
+                end
+                frc[:,n] -= dH_nn[:,a] * t1
+ 	    end
+            
+            # HOPPING TERMS
+            # loop through neighbours of atm[n]
+            for i_n = 1:length(neigs)
+                m = neigs[i_n]
+                Im = indexblock(m, tbm)
+                # compute ∂H_nm/∂y_m (hopping terms) and ∂M_nm/∂y_m
+                dH_nm = @D tbm.hop(r[i_n], R[:, i_n])
+                dM_nm = @D tbm.overlap(r[i,n], R[:, i_n])
+
+                # compute ∂H_nn/∂y_m (onsite terms)   >>>> DICUSS WITH HUAJIE
+                #   (WE ALREADY HAVE THIS IN SOME FORM?!)
+                #  get_dos!(-r, tbm, dH_nn, ρ)
+                
+                # the following is a hack to put the on-site assembly into the
+                # innermost loop
+                
+                # add contributions to the force
+                #  F_n = ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+                for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                    t1 = 0.0; t2 = 0.0; t3 = 0.0
+                    ima = Im[a]; inb = In[b]
+                    @inbounds @simd for s = 1:length(epsn)
+                        t3 = df[s] * C[ima,s] * C[inb,s]
+                        t1 += t3
+                        t2 += t3 * epsn[s]
+                    end
+                    frc[:,n] -= 2.0 * (t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b])
+                end
+                for a = 1:tbm.norbitals
+                    t1 = 0.0
+                    ina = In[a]
+                    @inbounds @simd for s = 1:length(epsn)
+                        t1 += df[s] * C[ina,s] * C[ina,s]
+                    end
+                    frc[:,m] -= dH_nn[:,a] * t1
+                end
+                
+            end  # m in neigs-loop
+        end  #  sites-loop
+    end # k-loop
+    
+    return frc
 end
 
 
