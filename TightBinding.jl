@@ -493,7 +493,7 @@ end
 ### MODELS
 
 include("NRLTB.jl")
-include("toytbmodel.jl")
+include("tbtoymodel.jl")
 
 
 end
