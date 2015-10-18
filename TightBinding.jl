@@ -345,9 +345,9 @@ end
 
 ### Output
 * `rho::Matrix{Float64}`: density matrix, 
-    ρ = ∑_s f(ϵ_s), 
+    ρ = ∑_s f(ϵ_s) ψ_s ⊗ ψ_s
 where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
-    ρ = ∑_k w^k ∑_s f(ϵ_s^k)
+    ρ = ∑_k w^k ∑_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
 """
 function densitymatrix(at::ASEAtoms, tbm::TBModel)
     update!(at, tbm)
@@ -418,7 +418,13 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
             # compute ∂H_nn/∂y_n (onsite terms)   >>> DISCUSS WITH HUAJIE
             # IN THE NEW FRAMEWORK THIS SHOULD RETURN A 3-DIMENSIONAL
             # ARRAY WITH ALL THE DERIVATIVES W.R.T. ALL THE SITES!!!
-            dH_nn = @D tbm.onsite(r, R)   
+            #  WHY DOES IT LOOK AS IF dH_nn is only norbitals instead of
+            #    norbitals x norbitals ????
+            
+            # dH_nn should be 3 x nneigs x norbitals x norbitals
+            dH_nn = @D tbm.onsite(r, R)
+            # derivative w.r.t. centre site
+            dH_nn_0 = - squeeze(sum(dH_nn, 2), 2)
             for a = 1:tbm.norbitals
                 # [ frc[i,n] -= dH_nn[i,a] * dot(df, slice(C, In[a],:).^2) ]
                 Ina = In[a]
@@ -426,7 +432,7 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
                 @inbounds @simd for s = 1:length(epsn)
                     t1 += df[s] * C[Ina,s] * C[Ina,s]
                 end
-                frc[:,n] -= dH_nn[:,a] * t1
+                frc[:,n] -= dH_nn_0[:,a] * t1
  	    end
             
             # HOPPING TERMS
