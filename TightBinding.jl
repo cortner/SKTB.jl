@@ -85,6 +85,7 @@ TBModel(;onsite = ZeroSitePotential(),
 ############################################################
 #### UTILITY FUNCTIONS
 
+# HJ: not sure this returns right Rcut for NRL ----------------------------------
 cutoff(tbm::TBModel) = max(cutoff(tbm.hopping), cutoff(tbm.onsite),
                            cutoff(tbm.pair))
 
@@ -159,15 +160,16 @@ end
 monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) =
     monkhorstpackgrid(cell(atm), tbm.nkpoints)
 
-# HJ ------------------------------------------------------------------------
 """`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the 
 computational cell defined by `cell` and `nkpoints`. Returns 
 
 ### Parameters
 
-(TODO HUAJIE)
+* 'cell' : 3 × 1 array of lattice vector for (super)cell
+* 'nkpoints' : 3 × 1 array of number of k-points in each direction. Now
+it can only be (0, 0, kz::Int). 
 
-### Returns
+### Output
 
 * `K`: 3 × Nk array of k-points
 * `weights`: integration weights; scalar (uniform grid) or Nk array.
@@ -209,7 +211,6 @@ function monkhorstpackgrid(cell::Array, nkpoints::Vector)
     end
     return K, weight
 end
-# ------------------------------------------------------------------------
 
 
 ############################################################
