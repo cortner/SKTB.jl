@@ -255,7 +255,7 @@ function update!(atm::ASEAtoms, tbm:TBModel)
         tbm[:X] = Xnew
         # do all the updates
         update_eig!(atm, tbm)
-        update_eF!(tbm)
+        update_eF!(atm, tbm)
     end
 end
 
@@ -263,12 +263,41 @@ end
 """`update_eF!(tbm::TBModel)`: recompute the correct
 fermi-level; using the precomputed data in `tbm.arrays`
 """
-function update_eF!(tbm::TBModel)
+function update_eF!(atm::ASEAtoms, tbm::TBModel)
     if tbm.fixed_eF
         return
     end
     
-    # (TODO HUAJIE)
+# HJ : can only work for Fermi-Dirac, not general Smearing ----------------------------
+    K, weight = monkhorstpackgrid(atm, tbm)
+    Ne = tbm.norbitals * length(atm) 
+	nf = ceil( Ne / 2 ) 
+	# update_eig!(atm, tbm)
+	# set an initial eF
+	μ = 0.0
+	for n = 1:size(K, 2)
+        k = K[:, n]
+        epsn_k = get_k_array(tbm, :epsn, k)
+		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
+    end
+	# iteration by Newton algorithm
+	err = 1.0
+	while abs(err) > 1.0e-8
+		Ni = 0.0
+		gi = 0.0
+		for n = 1:size(K,2)
+			Ni += weight[n] * r_sum( fermi_dirac(μ, tbm.beta, epsn_k) )
+			gi += weight[n] * r_sum( fermi_dirac_d(μ, tbm.beta, epsn_k) )
+		end
+	    μ = μ - err / gi
+	    err = Ne - Ni
+	    # println(err)
+	end
+	tbm.eF = μ
+   
+	# shall we set fixed_eF true here?
+	# tbm.fixed_eF = true
+#-----------------------------------------------------------
 end
 
 
@@ -434,7 +463,7 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
                     t1 += df[s] * C[Ina,s] * C[Ina,s]
                 end
                 frc[:,n] -= dH_nn_0[:,a] * t1
- 	    end
+ 		    end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]

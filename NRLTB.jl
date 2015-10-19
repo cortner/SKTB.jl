@@ -44,9 +44,8 @@ end
 type NRLos <: SitePotential
 	elem :: NRLParams
 end
-# HJ : we only need r here ----------------------------------------
 evaluate(p::NRLos, r, R) = get_os(r, elem)
-evaluate_d(p::NRLos, r, R) = get_dos(r, elem)
+evaluate_d(p::NRLos, r, R) = get_dos(r, R, elem)
 
 
 
@@ -129,7 +128,7 @@ end
 
 # vectorised version
 cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ cutoff_NRL(r[n], Rc, lc) 
-											for n = 1:length(r) ]
+									for n = 1:length(r) ]
 
 # first order derivative
 function d_cutoff_NRL(r, Rc, lc)
@@ -140,7 +139,7 @@ end
 
 # vectorised version
 d_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d_cutoff_NRL(r[n], Rc, lc) 
-											for n = 1:length(r) ]
+									for n = 1:length(r) ]
 
 # second order derivative
 function d2_cutoff_NRL(r, Rc, lc)
@@ -152,7 +151,7 @@ end
 
 # vectorised version
 d2_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d2_cutoff_NRL(r[n], Rc, lc) 
-											for n = 1:length(r) ]
+									for n = 1:length(r) ]
 
 
 
@@ -232,7 +231,7 @@ function dρ_os_NRL(elem::NRLParams, ρ::Vector{Float64})
 end
 
 # get the onsite terms
-function get_os(r::Vector{Float64}, ellem::NRLParams)
+function get_os(r::Vector{Float64}, elem::NRLParams)
 	n = elem.Norbital
     H = zeros(n, n)
     ρ = pseudoDensity(r, elem)
@@ -244,21 +243,15 @@ function get_os(r::Vector{Float64}, ellem::NRLParams)
 end
 
 # first order derivative
-function get_dos(r::Array{Float64}, ellem::NRLParams)
+function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
 # HJ : TO discuss --------------------------------------------------------------
-#function get_dos!(r, tbm::TCTBM{NRLTBModelParameters}, dH, ρ)
-#    elem = tbm.params.elem
-#    dH[:] = 0.0
-#    # if m!=n then size(r,2)==1, calculate ∂H_mm/∂y_n ;
-#    # if m==n then size(r,2)>1, calculate ∂H_nn/∂y_n
-#    if size(r,2) == 1
-#        R = norm(r)
-#        dρ = dR_pseudoDensity(R, elem)
-#        dh = dρ_os_NRL(elem, ρ)
-#        for i = 1:tbm.norbitals, d = 1:size(r,1)
-#            dH[d,i] = dρ * dh[i] * r[d]/R
-#        end
-#    else
+	dim = 3
+	nneig = length(r) 
+	norbitals = elem.Norbital 	
+	# note that number of neighbors include itself
+    dH = zeros(dim, 1 + nneig, norbitals, norbitals) 
+
+	# compute ∂H_nn/∂y_n
 #        ρ = pseudoDensity(r, elem)
 #        for k = 1:size(r,2)
 #            u = r[:,k]
@@ -269,9 +262,18 @@ function get_dos(r::Array{Float64}, ellem::NRLParams)
 #                dH[d,i] += dρ * dh[i] * u[d]/R
 #            end
 #        end
-#        return ρ
-#    end
-#end
+
+	# compute ∂H_mm/∂y_n ;
+	# HJ : the loop may not be efficient ? dH[m, d, i, i] maybe ? --------------
+	for m = 1:nneig
+        dρ = dR_pseudoDensity(r[m], elem)
+        dh = dρ_os_NRL(elem, ρ)
+        for d = 1:dim, i = 1:norbitals
+            dH[d, m+1, i, i] = dρ * dh[i] * R[d,m]/r[m]
+        end
+	end
+	return dH
+end
 
 
 
