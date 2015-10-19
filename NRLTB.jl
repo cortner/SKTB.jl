@@ -1,6 +1,8 @@
 
 module NRLTB
 
+using Potentials
+
 #######################################################################
 ###      The NRL tight-binding model                                ###
 #######################################################################
@@ -42,11 +44,10 @@ end
 
 
 type NRLos <: SitePotential
-	elem :: NRLParams
+    elem :: NRLParams
 end
 evaluate(p::NRLos, r, R) = get_os(r, elem)
 evaluate_d(p::NRLos, r, R) = get_dos(r, R, elem)
-
 
 
 type NRLhop <: PairPotential
@@ -56,14 +57,13 @@ evaluate(p::NRLhop, r, R) = mat_local(r, R, p.elem, "H")
 evaluate_d(p::NRLhop, r, R) = d_mat_local(r, R, p.elem, "dH")
 
 
-
 type NRLoverlap <: PairPotential
 	elem :: NRLParams
 end
 # return 1.0 for diagonal terms (when r = 0)
 # HJ : if r!=0, shall we return an error rather than 0? ---------------------------------
 evaluate(p::NRLoverlap, r) = (r == 0.0 ? 
-		eye(p.elem.Norbital) : zeros(p.elem.Norbital, p.elem.Norbital) )
+	eye(p.elem.Norbital) : error("NRLoverlap(r) may only be called with r = 0.0") )
 evaluate_d(p::NRLoverlap, r, R) = 
 		zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
@@ -106,8 +106,28 @@ end
 
 
 
+########################################################
+###  NRL Cut-off
+
+### TODO: at some point apply the nice `Potentials` abstractions!
+# type NRLCutoff <: CutoffPotential
+#     pp::PairPotential
+#     Lc::Float64
+#     Rc::Float64
+#     Mc::Float64   # NRL wants 5.0, but we take 10.0 to be on the "safe side"
+# end
+# evaluate(p::NRLCutoff, r) =
+#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
+#       .* (r .<= p.Rc) )
 
 
+nrlcutoff(r) = 
+    ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
+      .* (r .<= p.Rc) )
+
+# nrlcutoff_d(r) = 
+#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
+#       .* (r .<= p.Rc) )
 
 
 
@@ -249,8 +269,10 @@ function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
 	nneig = length(r) 
 	norbitals = elem.Norbital 	
 	# note that number of neighbors include itself
-    dH = zeros(dim, 1 + nneig, norbitals, norbitals) 
+    dH = zeros(dim, norbitals, norbitals, nneig)
+    #    TODO: dimensions changed!!!!!
 
+    
 	# compute ∂H_nn/∂y_n
 #        ρ = pseudoDensity(r, elem)
 #        for k = 1:size(r,2)

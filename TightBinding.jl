@@ -108,6 +108,7 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 type FermiDiracSmearing <: SmearingFunction
     beta
+    eF
 end
 # FD distribution and its derivative. both are vectorised implementations
 fermi_dirac(eF, beta, epsn) =
@@ -119,6 +120,11 @@ fermi_dirac_d(eF, beta, epsn) =
     fermi_dirac(fd.eF, fd.beta, epsn)
 @inline evaluate_d(fd::FermiDiracSmearing, epsn) =
     fermi_dirac_d(fd.eF, fd.beta, epsn)
+
+function set_eF!(fd::FermiDiracSmearing, eF)
+    fd.eF = eF
+end
+
 
 
 """`ZeroTemperature`: 
@@ -265,6 +271,7 @@ fermi-level; using the precomputed data in `tbm.arrays`
 """
 function update_eF!(atm::ASEAtoms, tbm::TBModel)
     if tbm.fixed_eF
+        set_eF!(tbm.smearing, tbm.eF)
         return
     end
     
@@ -293,13 +300,13 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
 	    err = Ne - Ni
 	    # println(err)
 	end
-	tbm.eF = μ
+    tbm.eF = μ
+    set_eF!(tbm.smearing, tbm.eF)
    
 	# shall we set fixed_eF true here?
 	# tbm.fixed_eF = true
 #-----------------------------------------------------------
 end
-
 
 
 
@@ -451,19 +458,19 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
             #  WHY DOES IT LOOK AS IF dH_nn is only norbitals instead of
             #    norbitals x norbitals ????
             
-            # dH_nn should be 3 x nneigs x norbitals x norbitals
+            # dH_nn should be 3 x norbitals x norbitals x nneigs
             dH_nn = @D tbm.onsite(r, R)
             # derivative w.r.t. centre site
-            dH_nn_0 = - squeeze(sum(dH_nn, 2), 2)
-            for a = 1:tbm.norbitals
-                # [ frc[i,n] -= dH_nn[i,a] * dot(df, slice(C, In[a],:).^2) ]
+            dH_nn_0 = - sum(dH_nn, 4)
+            for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                # [ frc[i,n] -= dH_nn[i, a, b] * dot(df, slice(C, In[a],:).^2) ]
                 Ina = In[a]
                 t1 = 0.0
                 @inbounds @simd for s = 1:length(epsn)
                     t1 += df[s] * C[Ina,s] * C[Ina,s]
                 end
-                frc[:,n] -= dH_nn_0[:,a] * t1
- 		    end
+                frc[:,n] -= dH_nn_0[:, a, a] * t1
+ 	    end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]
@@ -499,7 +506,7 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
                     @inbounds @simd for s = 1:length(epsn)
                         t1 += df[s] * C[ina,s] * C[ina,s]
                     end
-                    frc[:,m] -= dH_nn[:,a] * t1
+                    frc[:,m] -= dH_nn[:, a] * t1
                 end
                 
             end  # m in neigs-loop
