@@ -107,7 +107,6 @@ end
 
 ########################################################
 ###  NRL Cut-off
-
 ### TODO: at some point apply the nice `Potentials` abstractions!
 # type NRLCutoff <: CutoffPotential
 #     pp::PairPotential
@@ -119,59 +118,32 @@ end
 #     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
 #       .* (r .<= p.Rc) )
 
-
-nrlcutoff(r) = 
-    ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
-      .* (r .<= p.Rc) )
-
 # nrlcutoff_d(r) = 
 #     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
 #       .* (r .<= p.Rc) )
-
 
 
 ####################################################################################
 ############ Some functions to construct Hamiltonian and Overlap Matrices ##########
 ####################################################################################
 
-# Cutoff function in the NRL ansatz for Hamiltonian matrix elements
-# Input:
+# (Modified) cutoff function in the NRL ansatz for Hamiltonian matrix elements
 #    r  : variable
 #    Rc : cutoff radius
 #    lc : cutoff weight
+#    Mc : change NRL's 5.0 to 10.0
 
-function cutoff_NRL(r::Float64, Rc, lc)
-    fcut = r > Rc ? 0.0 : 1.0 / ( 1.0 + exp( (r-Rc)/lc + 5.0 ) )
+function cutoff_NRL(r, Rc, lc; Mc=10.0)
+    fcut = (1.0 ./ (1.0 + exp( (r-Rc) / Lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc) 
     return fcut
 end
 
-# vectorised version
-cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ cutoff_NRL(r[n], Rc, lc) 
-					for n = 1:length(r) ]
-
 # first order derivative
-function d_cutoff_NRL(r, Rc, lc)
-    temp = exp( (r-Rc)/lc + 5.0 )
-    fcut1 = r > Rc ? 0.0 : -1.0 / ( 1.0 + temp )^2 * temp / lc
-    return fcut1
+function d_cutoff_NRL(r, Rc, lc; Mc=10.0)
+    temp = exp( (r-Rc) ./ lc + Mc )
+    d_fcut = - 1.0 ./ ( 1.0 + temp ).^2 .* temp ./ lc .* (r .<= Rc)
+    return d_fcut
 end
-
-# vectorised version
-d_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d_cutoff_NRL(r[n], Rc, lc) 
-					for n = 1:length(r) ]
-
-# second order derivative
-function d2_cutoff_NRL(r, Rc, lc)
-    temp = exp( (r-Rc)/lc + 5.0 )
-    fcut2 = r > Rc ? 0.0 : 2.0 / ( 1.0 + temp )^3 * temp^2 / lc^2 - 
-			1.0 / ( 1.0 + temp )^2 * temp / lc^2
-    return fcut2
-end
-
-# vectorised version
-d2_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d2_cutoff_NRL(r[n], Rc, lc) 
-					for n = 1:length(r) ]
-
 
 
 # Pseudo electron density on site l : ρ_l
@@ -309,7 +281,7 @@ function dR_h_hop(R, bond_type, elem::NRLParams)
     cR = cutoff_NRL(R, Rc, lc)
     dcR = d_cutoff_NRL(R, Rc, lc)
     hαβγ = exp(-h^2*R) * ( (f + 2*g*R) * cR - 
-			h^2 * (e + f*R + g*R^2) * cR + (e + f*R + g*R^2) * dcR )
+		h^2 * (e + f*R + g*R^2) * cR + (e + f*R + g*R^2) * dcR )
     return hαβγ
 end
 
