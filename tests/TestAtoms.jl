@@ -9,7 +9,7 @@ export test_ScalarFunction, test_potentialenergy
 
 finite difference test for `ScalarFunction` implementations
 """
-function test_ScalarFunction(p::ScalarFunction, r0)
+function test_ScalarFunction(p::SimpleFunction, r0)
     r0 = r0[:]
     f = p(r0)
     df = @D p(r0)   # evaluate_d(p, r0)

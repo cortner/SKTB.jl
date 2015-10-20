@@ -1,12 +1,10 @@
 
-module LjSparse
+module SparseTools
 
 using Base.Markdown
 
 export sparse_flexible,
-       sparse_static,
-       setindex!,
-       getindex,
+       sparse_static
        # bilinear_form,
        # N_quad_forms
 
@@ -16,7 +14,7 @@ export sparse_flexible,
 #########################################
 
 
-@doc doc"""
+"""
 A Sparse matrix that we can add entries to using +=
 and which is grown automatically (if necessary). Usage:
 ```{.julia}
@@ -28,7 +26,7 @@ At[m, n] += a                # add to the entries of A
 # . . . more adding to A . . .
 A = sparse(At)               # convert to CCS format
 ```
-"""->
+"""
 type SparseTriplet
     I::Array{Int32,1}
     J::Array{Int32,1}
@@ -43,10 +41,10 @@ end
 SparseTriplet(N) = SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(Float64,N), 0)
 
 
-@doc doc"""
+"""
 function to automatically grow the storage for the triplet format,
 called from setindex!, if not enough storage is left
-"""->
+"""
 function grow!(A::SparseTriplet)
     N = length(A.I)
     Nnew = 2 * N
@@ -65,7 +63,8 @@ end
 # just adds A[iRow[j], iCol[k]] += v[j,k]
 # relies also on the getindex method below
 # (hidden so no doc needed)
-@doc doc"`setindex!(A::SparseTriplet, v, iRow, iCol)`: see documentation for `SparseTriplet`"->
+import Base.setindex!
+"`setindex!(A::SparseTriplet, v, iRow, iCol)`: see documentation for `SparseTriplet`"
 function setindex!(A::SparseTriplet, v, iRow, iCol)
     if A.idx == length(A.I)
         grow!(A)
@@ -79,32 +78,33 @@ function setindex!(A::SparseTriplet, v, iRow, iCol)
 end
 
 # this works together with setindex! above to make += work
-@doc doc"`getindex!(A::SparseTriplet, v, iRow, iCol)`: see documentation for `SparseTriplet`"->
+import Base.getindex
+"`getindex(A::SparseTriplet, v, iRow, iCol)`: see documentation for `SparseTriplet`"
 getindex(A::SparseTriplet, iRow, iCol) = zeros(length(iRow), length(iCol))
 
 # we need a conversion to sparse matrix format
 # to do this we first need to explicityly import Base.sparse
 # (probably because we are overloading it?)
 import Base.sparse
-@doc doc"Convert `SparseTriplet` to `SparseMatrixCSC`"->
+"Convert `SparseTriplet` to `SparseMatrixCSC`"
 sparse(A::SparseTriplet) =
     sparse( A.I[1:A.idx], A.J[1:A.idx], A.V[1:A.idx] );
 
 
 # to be able to write code that does not know about what format is used
 # for assembly, we provide a generic constructor
-@doc doc"""
+"""
 Creates an empty sparse matrix, suitable for assembly.
 The current version uses the SparseTriplet type.
-"""->
+"""
 sparse_flexible(N) = SparseTriplet(N)
 
 
 # . . . and a generic function to convert it to CCS
-@doc doc"""
+"""
 Converts a flexible sparse format to a static sparse format (CCS)
 used for fast algebra.
-"""->
+"""
 sparse_static(A::SparseTriplet) = sparse(A)
 
 
@@ -123,9 +123,9 @@ sparse_static(A::SparseTriplet) = sparse(A)
 
 # it turns out that it is useful to have a bilinear form implemented in
 # SparseTripletFormat:
-@doc doc"""`bilinear_form(A::SparseTriplet, x, y)` :
+"""`bilinear_form(A::SparseTriplet, x, y)` :
 # returns x' * A * y
-# """->
+# """
 function bilinear_form(A::SparseTriplet, x::Vector{Float64}, y::Vector{Float64})
     ljerror("""the function `LjSparse.bilinear_form` has been removed; add 
             from a previous commit""")

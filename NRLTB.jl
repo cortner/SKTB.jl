@@ -1,3 +1,5 @@
+### TODO : change evaluate_d to grad
+
 
 module NRLTB
 
@@ -43,6 +45,7 @@ end
 
 
 
+
 type NRLos <: SitePotential
     elem :: NRLParams
 end
@@ -82,8 +85,7 @@ evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r, R, p.elem, "dM")
 * eF = 0.0 : chemical potential (if fixed)
 * nkpoints : number of k-points at each direction (only (0,0,Int) has been implemented)
 * hfd = 1e-6 : finite difference step for computing hessians
-"""->
-
+"""
 function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0, 
 		    nkpoints = (0, 0, 0), hfd=1e-6)
 
@@ -91,7 +93,7 @@ function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0,
     hop  = NRLhop(elem)
     overlpa = NRLoverlap(elem)
 
-    return TBModel(onsite = onsite
+    return TBModel(onsite = onsite,
 		   hop = hop,
                    overlap = overlap,
                    smearing = FermiDiracSmearing(beta),
@@ -329,7 +331,7 @@ end
 # OUTPUT
 # h : R^{norb x norb}
 
-function mat_local(r::{Float64}, R::Vector{Float64}, elem::NRLParams, task)
+function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams, task)
     # r = norm(R)
     u = R/r
     dim == 3
