@@ -60,8 +60,7 @@ evaluate_d(p::NRLhop, r, R) = d_mat_local(r, R, p.elem, "dH")
 type NRLoverlap <: PairPotential
 	elem :: NRLParams
 end
-# return 1.0 for diagonal terms (when r = 0)
-# HJ : if r!=0, shall we return an error rather than 0? ---------------------------------
+# return 1.0 for diagonal (when r = 0)
 evaluate(p::NRLoverlap, r) = (r == 0.0 ? 
 	eye(p.elem.Norbital) : error("NRLoverlap(r) may only be called with r = 0.0") )
 evaluate_d(p::NRLoverlap, r, R) = 
@@ -89,11 +88,11 @@ function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0,
 		    nkpoints = (0, 0, 0), hfd=1e-6)
 
     onsite = NRLos(elem)
-	hop  = NRLhop(elem)
-	overlpa = NRLoverlap(elem)
+    hop  = NRLhop(elem)
+    overlpa = NRLoverlap(elem)
 
     return TBModel(onsite = onsite
-				   hop = hop,
+		   hop = hop,
                    overlap = overlap,
                    smearing = FermiDiracSmearing(beta),
                    norbitals = elem.Norbital,
@@ -148,7 +147,7 @@ end
 
 # vectorised version
 cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ cutoff_NRL(r[n], Rc, lc) 
-									for n = 1:length(r) ]
+					for n = 1:length(r) ]
 
 # first order derivative
 function d_cutoff_NRL(r, Rc, lc)
@@ -159,7 +158,7 @@ end
 
 # vectorised version
 d_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d_cutoff_NRL(r[n], Rc, lc) 
-									for n = 1:length(r) ]
+					for n = 1:length(r) ]
 
 # second order derivative
 function d2_cutoff_NRL(r, Rc, lc)
@@ -171,7 +170,7 @@ end
 
 # vectorised version
 d2_cutoff_NRL(r::Vector{Float64}, Rc, lc) = Float64[ d2_cutoff_NRL(r[n], Rc, lc) 
-									for n = 1:length(r) ]
+					for n = 1:length(r) ]
 
 
 
@@ -264,39 +263,20 @@ end
 
 # first order derivative
 function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
-# HJ : TO discuss --------------------------------------------------------------
 	dim = 3
 	nneig = length(r) 
 	norbitals = elem.Norbital 	
-	# note that number of neighbors include itself
-    dH = zeros(dim, norbitals, norbitals, nneig)
-    #    TODO: dimensions changed!!!!!
-
-    
-	# compute ∂H_nn/∂y_n
-#        ρ = pseudoDensity(r, elem)
-#        for k = 1:size(r,2)
-#            u = r[:,k]
-#            R = norm(u)
-#            dρ = dR_pseudoDensity(R, elem)
-#            dh = dρ_os_NRL(elem, ρ)
-#            for i = 1:tbm.norbitals, d = 1:size(r,1)
-#                dH[d,i] += dρ * dh[i] * u[d]/R
-#            end
-#        end
-
-	# compute ∂H_mm/∂y_n ;
-	# HJ : the loop may not be efficient ? dH[m, d, i, i] maybe ? --------------
+        dH = zeros(dim, norbitals, norbitals, nneig)
+	# compute ∂H_nn/∂y_m ;
 	for m = 1:nneig
-        dρ = dR_pseudoDensity(r[m], elem)
-        dh = dρ_os_NRL(elem, ρ)
-        for d = 1:dim, i = 1:norbitals
-            dH[d, m+1, i, i] = dρ * dh[i] * R[d,m]/r[m]
-        end
+            dρ = dR_pseudoDensity(r[m], elem)
+            dh = dρ_os_NRL(elem, ρ)
+            for d = 1:dim, i = 1:norbitals
+                dH[d, m+1, i, i] = dρ * dh[i] * R[d,m]/r[m]
+            end
 	end
 	return dH
 end
-
 
 
 

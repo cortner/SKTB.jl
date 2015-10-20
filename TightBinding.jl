@@ -273,9 +273,8 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
     if tbm.fixed_eF
         set_eF!(tbm.smearing, tbm.eF)
         return
-    end
-    
-# HJ : can only work for Fermi-Dirac, not general Smearing ----------------------------
+    end    
+    # the following algorithm works for Fermi-Dirac, not general Smearing
     K, weight = monkhorstpackgrid(atm, tbm)
     Ne = tbm.norbitals * length(atm) 
 	nf = ceil( Ne / 2 ) 
@@ -286,7 +285,7 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
 		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
-    end
+        end
 	# iteration by Newton algorithm
 	err = 1.0
 	while abs(err) > 1.0e-8
@@ -302,10 +301,6 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
 	end
     tbm.eF = μ
     set_eF!(tbm.smearing, tbm.eF)
-   
-	# shall we set fixed_eF true here?
-	# tbm.fixed_eF = true
-#-----------------------------------------------------------
 end
 
 
@@ -458,32 +453,31 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
             #  WHY DOES IT LOOK AS IF dH_nn is only norbitals instead of
             #    norbitals x norbitals ????
             
-            # dH_nn should be 3 x norbitals x norbitals x nneigs
-            dH_nn = @D tbm.onsite(r, R)
-            # derivative w.r.t. centre site
-            dH_nn_0 = - sum(dH_nn, 4)
-            for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                # [ frc[i,n] -= dH_nn[i, a, b] * dot(df, slice(C, In[a],:).^2) ]
-                Ina = In[a]
-                t1 = 0.0
-                @inbounds @simd for s = 1:length(epsn)
-                    t1 += df[s] * C[Ina,s] * C[Ina,s]
-                end
-                frc[:,n] -= dH_nn_0[:, a, a] * t1
- 	    end
+            ## dH_nn should be 3 x norbitals x norbitals x nneigs
+            #dH_nn = @D tbm.onsite(r, R)
+            ## derivative w.r.t. centre site
+            #dH_nn_0 = - sum(dH_nn, 4)
+            #for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            #    # [ frc[i,n] -= dH_nn[i, a, b] * dot(df, slice(C, In[a],:).^2) ]
+            #    Ina = In[a]
+            #    t1 = 0.0
+            #    @inbounds @simd for s = 1:length(epsn)
+            #        t1 += df[s] * C[Ina,s] * C[Ina,s]
+            #    end
+            #    frc[:,n] -= dH_nn_0[:, a, a] * t1
+ 	    #end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]
             for i_n = 1:length(neigs)
                 m = neigs[i_n]
                 Im = indexblock(m, tbm)
-                # compute ∂H_nm/∂y_m (hopping terms) and ∂M_nm/∂y_m
-                dH_nm = @D tbm.hop(r[i_n], R[:, i_n])
-                dM_nm = @D tbm.overlap(r[i,n], R[:, i_n])
-
-                # compute ∂H_nn/∂y_m (onsite terms)   >>>> DICUSS WITH HUAJIE
-                #   (WE ALREADY HAVE THIS IN SOME FORM?!)
-                #  get_dos!(-r, tbm, dH_nn, ρ)
+                # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+                dH_nm = @D tbm.hop(-r[i_n], -R[:, i_n])
+                dM_nm = @D tbm.overlap(-r[i,n], -R[:, i_n])
+                # compute ∂H_mm/∂y_n (onsite terms)  
+                dH_nn = @D tbm.onsite(-r[i_n], -R[:,i_n])
+                dM_nn = @D tbm.overlap(0.0)
                 
                 # the following is a hack to put the on-site assembly into the
                 # innermost loop
@@ -492,22 +486,43 @@ function forces(atm::AbstractAtoms, tbm::TCTBM)
                 #  F_n = ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     t1 = 0.0; t2 = 0.0; t3 = 0.0
-                    ima = Im[a]; inb = In[b]
+                    t4 = 0.0; t5 = 0.0; t6 = 0.0
+                    t7 = 0.0; t8 = 0.0; t9 = 0.0
+                    ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
                     @inbounds @simd for s = 1:length(epsn)
                         t3 = df[s] * C[ima,s] * C[inb,s]
                         t1 += t3
                         t2 += t3 * epsn[s]
+                        t6 = df[s] * C[ima,s] * C[imb,s]
+                        t4 += t6
+                        t5 += t6 * epsn[s]
+                        t9 = df[s] * C[ina,s] * C[inb,s]
+                        t7 += t9
+                        t8 += t9 * epsn[s]
                     end
-                    frc[:,n] -= 2.0 * (t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b])
+                    frc[:,n] -= 2.0 * ( t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b]
+                                        + t4 * dH_nn[:,a,b,i_n] - t5 * dM_nn[:,a,b]
+                                        - t7 * dH_nn[:,a,b,i_n] + t8 * dM_nn[:,a,b] )
                 end
-                for a = 1:tbm.norbitals
-                    t1 = 0.0
-                    ina = In[a]
-                    @inbounds @simd for s = 1:length(epsn)
-                        t1 += df[s] * C[ina,s] * C[ina,s]
-                    end
-                    frc[:,m] -= dH_nn[:, a] * t1
-                end
+                # OLD:
+		#for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                #    t1 = 0.0; t2 = 0.0; t3 = 0.0
+                #    ima = Im[a]; inb = In[b]
+                #    @inbounds @simd for s = 1:length(epsn)
+                #        t3 = df[s] * C[ima,s] * C[inb,s]
+                #        t1 += t3
+                #        t2 += t3 * epsn[s]
+                #    end
+                #    frc[:,n] -= 2.0 * (t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b])
+                #end
+                #for a = 1:tbm.norbitals
+                #    t1 = 0.0
+                #    ina = In[a]
+                #    @inbounds @simd for s = 1:length(epsn)
+                #        t1 += df[s] * C[ina,s] * C[ina,s]
+                #    end
+                #    frc[:,m] -= dH_nn[:, a] * t1
+                #end
                 
             end  # m in neigs-loop
         end  #  sites-loop
