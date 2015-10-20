@@ -504,7 +504,7 @@ function forces(atm::AbstractAtoms, tbm::TBModel)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
                 ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
                 dH_nm = @GRAD tbm.hop(-r[i_n], -R[:, i_n])
-                dM_nm = @GRAD tbm.overlap(-r[i,n], -R[:, i_n])
+                dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
                 # compute ∂H_mm/∂y_n (onsite terms)  
                 dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
                 # dM_nn = . . . # (M_nn = const to dM_nn = 0)

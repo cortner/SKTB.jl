@@ -1,5 +1,6 @@
 
 push!(LOAD_PATH, "..")
-using TightBinding
+
+import TightBinding
 
 println("test")
