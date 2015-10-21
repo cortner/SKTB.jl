@@ -452,7 +452,7 @@ end
 
 
 # compute all forces on all the atoms
-function forces(atm::AbstractAtoms, tbm::TBModel)
+function forces(atm::ASEAtoms, tbm::TBModel)
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
     
