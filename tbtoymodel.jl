@@ -39,6 +39,7 @@ function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
                     eF = 0.0, hfd=1e-6)
     
     hop = SWCutoff(MorsePotential(1.0, alpha, r0), rcut, 1.0)
+    #hop = MorsePotential(1.0, alpha, r0)
     return TBModel(hop = hop,
                    overlap = ToyTBOverlap(),
                    smearing = FermiDiracSmearing(beta),
@@ -50,8 +51,6 @@ function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
 end
 
 
-
-end
 
 
 
@@ -91,3 +90,5 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     return frc
 end 
 
+
+end

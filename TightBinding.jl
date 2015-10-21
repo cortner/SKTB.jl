@@ -351,7 +351,8 @@ binding model.
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
 
     # create a neighbourlist
-    nlist = NeighbourList(cutoff(tbm), atm)
+    #nlist = NeighbourList(cutoff(tbm), atm)
+    nlist = NeighbourList(4.0, atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
     # >> ask nlist how much storage we roughly need!
     nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
@@ -361,7 +362,7 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     # OLD: H_nm = zeros(tbm.norbitals, tbm.norbitals)
     # OLD: M_nm = zeros(tbm.norbitals, tbm.norbitals)
     
-	X = positions(atm)
+    X = positions(atm)
     # loop through all atoms
     for (n, neigs, r, R) in Sites(nlist)
         # index-block for atom index n
@@ -371,16 +372,13 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
-# HJ----------------------------------------------------------------------------
-            # DISCUSS: check that MatSciPy takes care of multiple cell repetitions
-            # YES
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
-            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
+            H_nm = exp(-r[m]) 
+            #H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
             M[In, Im] += M_nm * exp(im * kR)   
-# ------------------------------------------------------------------------------
         end
         # now compute the on-site terms
         H_nn = tbm.onsite(r, R)               #  OLD: get_os!(R, tbm, H_nm)
@@ -419,7 +417,8 @@ function densitymatrix(at::ASEAtoms, tbm::TBModel)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
         C_k = get_k_array(tbm, :C, k)
-        f = tbm.smearing(epsn_k, tbm.eF)       # TODO: should eF be passed or should it be sotred in SmearingFunction?
+        f = tbm.smearing(epsn_k, tbm.eF)     
+        # TODO: should eF be passed or should it be sotred in SmearingFunction?
         for m = 1:length(epsn_k)
             rho += weight[n] * f[m] * C_k[:,m]*C_k[:,m]'
         end
@@ -461,7 +460,8 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     frc = zeros(3, Natm)
 
     # precompute neighbourlist
-    nlist = NeighbourList(cutoff(tbm), atm)
+    #nlist = NeighbourList(cutoff(tbm), atm)
+    nlist = NeighbourList(4.0, atm)
 
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
@@ -469,7 +469,8 @@ function forces(atm::ASEAtoms, tbm::TBModel)
         k = K[:, iK]
         epsn = get_k_array(tbm, :epsn, k)
         C = get_k_array(tbm, :C, k)
-        df = @D tbm.smearing(epsn, tbm.eF)    ##### TODO: HOW DOES SMEARING KNOW eF ????
+        df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+        ##### TODO: HOW DOES SMEARING KNOW eF ????
     
         # loop through all atoms, to compute the force on atm[n]
         for (n, neigs, r, R) in Sites(nlist)
@@ -495,7 +496,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
             #        t1 += df[s] * C[Ina,s] * C[Ina,s]
             #    end
             #    frc[:,n] -= dH_nn_0[:, a, a] * t1
- 	    #end
+ 	        #end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]
@@ -504,7 +505,9 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 Im = indexblock(m, tbm)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
                 ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
-                dH_nm = @GRAD tbm.hop(-r[i_n], -R[:, i_n])
+                #dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
+                #dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) /r[i_n]
+                dH_nm = -exp(-r[i_n]) * (-R[:, i_n]) ./ r[i_n]
                 #dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
                 # compute ∂H_mm/∂y_n (onsite terms)  
                 #dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
@@ -514,11 +517,11 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 # innermost loop
                 
                 # add contributions to the force
-                #  F_n = ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+                #  F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     t1 = 0.0; t2 = 0.0; t4 = 0.0; t7 = 0.0; 
                     ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
-                    @inbounds @simd for s = 1:length(epsn)
+					@inbounds @simd for s = 1:length(epsn)
                         t1 += df[s] * C[ima,s] * C[inb,s]
                         t2 += df[s] * C[ima,s] * C[inb,s] * epsn[s]
                         t4 += df[s] * C[ima,s] * C[imb,s]
@@ -529,7 +532,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                                       #  - t7 * dH_nn[:,a,b,i_n]  )
                 end
                 # OLD:
-		#for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                #for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                 #    t1 = 0.0; t2 = 0.0; t3 = 0.0
                 #    ima = Im[a]; inb = In[b]
                 #    @inbounds @simd for s = 1:length(epsn)
