@@ -373,6 +373,7 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             # compute hamiltonian block and add to sparse matrix
 # HJ----------------------------------------------------------------------------
             # DISCUSS: check that MatSciPy takes care of multiple cell repetitions
+            # YES
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
             H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
@@ -466,9 +467,9 @@ function forces(atm::AbstractAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
     for iK = 1:size(K,2)
         k = K[:, iK]
-        epsn_k = get_k_array(tbm, :epsn, k)
-        C_k = get_k_array(tbm, :C, k)
-        df = @D tbm.smearing(epsn_k, tbm.eF)    ##### TODO: HOW DOES SMEARING KNOW eF ????
+        epsn = get_k_array(tbm, :epsn, k)
+        C = get_k_array(tbm, :C, k)
+        df = @D tbm.smearing(epsn, tbm.eF)    ##### TODO: HOW DOES SMEARING KNOW eF ????
     
         # loop through all atoms, to compute the force on atm[n]
         for (n, neigs, r, R) in Sites(nlist)
@@ -504,9 +505,9 @@ function forces(atm::AbstractAtoms, tbm::TBModel)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
                 ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
                 dH_nm = @GRAD tbm.hop(-r[i_n], -R[:, i_n])
-                dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
+                #dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
                 # compute ∂H_mm/∂y_n (onsite terms)  
-                dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
+                #dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
                 # dM_nn = . . . # (M_nn = const to dM_nn = 0)
                 
                 # the following is a hack to put the on-site assembly into the
@@ -523,9 +524,9 @@ function forces(atm::AbstractAtoms, tbm::TBModel)
                         t4 += df[s] * C[ima,s] * C[imb,s]
                         t7 += df[s] * C[ina,s] * C[inb,s]
                     end
-                    frc[:,n] -= 2.0 * ( t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b]
-                                        + t4 * dH_nn[:,a,b,i_n] 
-                                        - t7 * dH_nn[:,a,b,i_n]  )
+                    frc[:,n] -= weight[iK] * 2.0 *  t1 * dH_nm[:,a,b] #- t2 * dM_nm[:,a,b]
+                                      #  + t4 * dH_nn[:,a,b,i_n] 
+                                      #  - t7 * dH_nn[:,a,b,i_n]  )
                 end
                 # OLD:
 		#for a = 1:tbm.norbitals, b = 1:tbm.norbitals
