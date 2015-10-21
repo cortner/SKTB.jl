@@ -82,7 +82,7 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     frc = zeros(3, Natm)
     for a = 1:3
         # dH = sparse(i, j, dhop .* (R[a,j] - R[a,i])' ./ r, Natm, Natm)
-        dH = sparse(i, j, dhop .* R[:,a] ./ r, Natm, Natm)
+        dH = sparse(i, j, dhop .* (-R[:,a]) ./ r, Natm, Natm)
         dH_x_C = dH * C
         for s = 1:Natm 
             frc[a,:] += 2.0 * df[s] .* C[:,s]' .* dH_x_C[:,s]'
