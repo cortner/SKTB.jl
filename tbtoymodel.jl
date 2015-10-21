@@ -7,7 +7,7 @@ module ToyTB
 
 export ToyTBModel
 
-using Potentials, TightBinding
+using Potentials, TightBinding, MathSciPy
 import Potentials.evaluate, Potentials.evaluate_d
 export evaluate, evaluate_d
 
@@ -49,4 +49,39 @@ function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
                    hfd=hfd)
 end
 
+
+
+function potential_energy_(atm::ASEAtoms, tbm::TBModel)
+    Natm = length(atm)
+    i, j, r = MatsciPy.neighbour_list(atm, "ijd", cutoff(tbm))
+    h = tbm.hop(r)
+    H = sparse(i, j, h, Natm, Natm)
+    epsn, C = sorted_eig(H, speye(Natm))
+    f = tbm.smearing(epsn, tbm.eF)
+    E = r_sum(f .* epsn)
+end
+
+
+function forces_(atm::AbstractAtoms, tbm::TBModel)
+
+    Natm = length(atm)
+    i, j, r = MatsciPy.neighbour_list(atm, "ijdD", cutoff(tbm))
+
+    # recompute hamiltonian and spectral decomposition
+    h = tbm.hop(r)
+    H = sparse(i, j, h, Natm, Natm)
+    epsn, C = sorted_eig(H, speye(Natm))
+    
+    # compute derivatives of hopping
+    dhop = @D tbm.hop(r)
+
+    frc = zeros(3, Natm)
+    for a = 1:3
+        dH = sparse(i, j, dhop .* (R[a,j] - R[a,i])' ./ r, Natm, Natm)
+        dH = sparse(i, j, dhop .* (R[a,i] - R[a,j])' ./ r, Natm, Natm)
+        dH_x_C = dH * C
+        for s = 1:Natm
+            frc[a,:] += 2 * 
+        end
+    end
 end
