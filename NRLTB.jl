@@ -3,11 +3,14 @@
 
 module NRLTB
 
-using Potentials
-
 #######################################################################
 ###      The NRL tight-binding model                                ###
 #######################################################################
+
+using Potentials, TightBinding, ASE, MatSciPy
+import Potentials.evaluate, Potentials.evaluate_d
+export NRLTBModel
+
 
 
 """`NRLParams`: collects all the parameters for NRL tight-binding model.
@@ -49,8 +52,8 @@ end
 type NRLos <: SitePotential
     elem :: NRLParams
 end
-evaluate(p::NRLos, r, R) = get_os(r, elem)
-evaluate_d(p::NRLos, r, R) = get_dos(r, R, elem)
+evaluate(p::NRLos, r, R) = get_os(r, p.elem)
+evaluate_d(p::NRLos, r, R) = get_dos(r, R, p.elem)
 
 
 type NRLhop <: PairPotential
@@ -91,7 +94,7 @@ function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0,
 
     onsite = NRLos(elem)
     hop  = NRLhop(elem)
-    overlpa = NRLoverlap(elem)
+    overlap = NRLoverlap(elem)
 
     return TBModel(onsite = onsite,
 		   hop = hop,
@@ -112,16 +115,16 @@ end
 ### TODO: at some point apply the nice `Potentials` abstractions!
 # type NRLCutoff <: CutoffPotential
 #     pp::PairPotential
-#     Lc::Float64
+#     lc::Float64
 #     Rc::Float64
 #     Mc::Float64   # NRL wants 5.0, but we take 10.0 to be on the "safe side"
 # end
 # evaluate(p::NRLCutoff, r) =
-#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
+#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
 #       .* (r .<= p.Rc) )
 
 # nrlcutoff_d(r) = 
-#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.Lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
+#     ( (1.0 ./ (1.0 + exp( (r-p.Rc) / p.lc + p.Mc )) - 1.0 ./ (1.0 + exp(p.Mc)))
 #       .* (r .<= p.Rc) )
 
 
@@ -136,7 +139,7 @@ end
 #    Mc : change NRL's 5.0 to 10.0
 
 function cutoff_NRL(r, Rc, lc; Mc=10.0)
-    fcut = (1.0 ./ (1.0 + exp( (r-Rc) / Lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc) 
+    fcut = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc) 
     return fcut
 end
 
@@ -334,7 +337,7 @@ end
 function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams, task)
     # r = norm(R)
     u = R/r
-    dim == 3
+    dim = 3
     l,m,n = u[:]
     Norb = elem.Norbital
     Nb = elem.Nbond
@@ -490,7 +493,7 @@ end
 function d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task)
     #r = norm(RR)
     u = RR/r
-    dim == 3
+    dim = 3
     l,m,n = u[:]
     Norb = elem.Norbital
     Nb = elem.Nbond

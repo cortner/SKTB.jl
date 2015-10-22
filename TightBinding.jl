@@ -381,8 +381,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             # H_nm = evaluate(p, r[m])
             
             # H_nm = exp(-r[m] / 2.5) # (WORKING)
-              ### H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
-            H_nm = tbm.hop(r[m])
+            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
+            #H_nm = tbm.hop(r[m])
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
