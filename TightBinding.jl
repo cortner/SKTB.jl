@@ -16,7 +16,7 @@ importall AtomsInterface
 
 using Potentials, ASE, MatSciPy, Prototypes, SparseTools
 import MatSciPy.potential_energy
-import Potentials: evaluate, evaluate_d
+import Potentials.evaluate, Potentials.evaluate_d
 
 export AbstractTBModel, SimpleFunction
 export TBModel, FermiDiracSmearing,
@@ -333,6 +333,8 @@ end
 ############################################################
 ### Hamiltonian Evaluation
 
+
+
 """`hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
 binding model.
 
@@ -346,7 +348,6 @@ binding model.
 
 * `H` : hamiltoian in CSC format
 * `M` : overlap matrix in CSC format
-
 """
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
 
@@ -373,8 +374,15 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             Im = indexblock(neigs[m], tbm)
             # compute hamiltonian block and add to sparse matrix
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
-            H_nm = exp(-r[m]) 
-            #H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
+
+            # H_nm = exp(- 4.0 * (r[m] / 2.5 - 1.0) )  - 2.0 * exp(- 2.0 * (r[m] / 2.5 - 1.0) )
+            # p = ToyHop(2.0, 2.5)
+            # p = MorsePotential(1.0, 2.0, 2.5)
+            # H_nm = evaluate(p, r[m])
+            
+            # H_nm = exp(-r[m] / 2.5) # (WORKING)
+              ### H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
+            H_nm = tbm.hop(r[m])
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
@@ -507,11 +515,22 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
                 #dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
                 #dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) /r[i_n]
-                dH_nm = -exp(-r[i_n]) * (-R[:, i_n]) ./ r[i_n]
                 #dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
                 # compute ∂H_mm/∂y_n (onsite terms)  
                 #dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
                 # dM_nn = . . . # (M_nn = const to dM_nn = 0)
+
+                
+                # dH_nm = ( -4.0/2.5 * ( exp(- 4.0 * (r[i_n] / 2.5 - 1.0) )
+                #                        - exp(- 2.0 * (r[i_n] / 2.5 - 1.0) ) )
+                #           * (-R[:, i_n]) / r[i_n] )
+                # p = ToyHop(2.0, 2.5)
+                # p = MorsePotential(1.0, 2.0, 2.5)
+                # dH_nm = evaluate_d(p, r[i_n]) * (-R[:, i_n]) / r[i_n] 
+                
+                # dH_nm = -exp(- r[i_n]/2.5 ) * (-R[:, i_n]) ./ r[i_n] / 2.5  # (WORKING)
+                # dH_nm = (@D tbm.hop.pp(r[i_n])) * (-R[:, i_n]) ./ r[i_n]
+                dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) ./ r[i_n]
                 
                 # the following is a hack to put the on-site assembly into the
                 # innermost loop
@@ -521,7 +540,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     t1 = 0.0; t2 = 0.0; t4 = 0.0; t7 = 0.0; 
                     ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
-					@inbounds @simd for s = 1:length(epsn)
+		    @inbounds @simd for s = 1:length(epsn)
                         t1 += df[s] * C[ima,s] * C[inb,s]
                         t2 += df[s] * C[ima,s] * C[inb,s] * epsn[s]
                         t4 += df[s] * C[ima,s] * C[imb,s]
