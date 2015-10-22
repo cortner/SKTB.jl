@@ -3,6 +3,8 @@
 
 module NRLTB
 
+BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
+
 #######################################################################
 ###      The NRL tight-binding model                                ###
 #######################################################################
@@ -10,6 +12,8 @@ module NRLTB
 using Potentials, TightBinding, ASE, MatSciPy
 import Potentials.evaluate, Potentials.evaluate_d
 export NRLTBModel
+export evaluate, evaluate_d, cutoff
+
 
 
 
@@ -52,19 +56,21 @@ end
 type NRLos <: SitePotential
     elem :: NRLParams
 end
-evaluate(p::NRLos, r, R) = get_os(r, p.elem)
-evaluate_d(p::NRLos, r, R) = get_dos(r, R, p.elem)
+evaluate(p::NRLos, r, R) = get_os(r/BOHR, p.elem)
+evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
+# cutoff(p::NRLos) = p.elem.Rc
 
 
 type NRLhop <: PairPotential
-	elem :: NRLParams
+    elem :: NRLParams
 end
-evaluate(p::NRLhop, r, R) = mat_local(r, R, p.elem, "H")
-evaluate_d(p::NRLhop, r, R) = d_mat_local(r, R, p.elem, "dH")
+evaluate(p::NRLhop, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "H")
+evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+# cutoff(p::NRLhop) = p.elem.Rc
 
 
 type NRLoverlap <: PairPotential
-	elem :: NRLParams
+    elem :: NRLParams
 end
 # return 1.0 for diagonal (when r = 0)
 evaluate(p::NRLoverlap, r) = (r == 0.0 ? 
@@ -72,9 +78,9 @@ evaluate(p::NRLoverlap, r) = (r == 0.0 ?
 evaluate_d(p::NRLoverlap, r, R) = 
 		zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
-evaluate(p::NRLoverlap, r, R) = mat_local(r, R, p.elem, "M")
-evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r, R, p.elem, "dM")
-
+evaluate(p::NRLoverlap, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "M")
+evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
+# cutoff(p::NRLoverlap) = p.elem.Rc
 
 
 
@@ -95,10 +101,12 @@ function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0,
     onsite = NRLos(elem)
     hop  = NRLhop(elem)
     overlap = NRLoverlap(elem)
+    rcut = elem.Rc
 
     return TBModel(onsite = onsite,
 		   hop = hop,
                    overlap = overlap,
+                   Rcut = rcut,
                    smearing = FermiDiracSmearing(beta),
                    norbitals = elem.Norbital,
                    fixed_eF = fixed_eF,

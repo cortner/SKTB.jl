@@ -20,17 +20,17 @@ evaluate_d(p::ToyTBOverlap, r, R) = 0.0
 evaluate(p::ToyTBOverlap, r) = (r == 0.0 ? 1.0 : error("ToyTBOverlap(r) : r must be 0.0"))
 
 
-type ToyHop <: PairPotential
-    A
-    r0
-end
-@inline morse_exp(p::ToyHop, r) = exp(-p.A * (r/p.r0 - 1.0))
-@inline function evaluate(p::ToyHop, r) 
-    e = morse_exp(p, r); return e .* (e - 2.0)
-end
-@inline function  evaluate_d(p::ToyHop, r)
-    e = morse_exp(p, r);  return (-2.0 * p.A / p.r0) * e .* (e - 1.0)
-end
+#type ToyHop <: PairPotential
+#    A
+#    r0
+#end
+#@inline morse_exp(p::ToyHop, r) = exp(-p.A * (r/p.r0 - 1.0))
+#@inline function evaluate(p::ToyHop, r) 
+#    e = morse_exp(p, r); return e .* (e - 2.0)
+#end
+#@inline function  evaluate_d(p::ToyHop, r)
+#    e = morse_exp(p, r);  return (-2.0 * p.A / p.r0) * e .* (e - 1.0)
+#end
 
 
 
@@ -59,6 +59,7 @@ function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
                    overlap = ToyTBOverlap(),
                    smearing = FermiDiracSmearing(beta),
                    norbitals = 1,
+                   Rcut = rcut,
                    fixed_eF = fixed_eF,
                    eF = eF,
                    nkpoints = (0,0,0),
@@ -68,7 +69,7 @@ end
 
 
 
-
+###################### TEST (ENERGY/FORCE) FUNCTIONS OF TOYTB ###############
 function potential_energy_(atm::ASEAtoms, tbm::TBModel)
     Natm = length(atm)
     i, j, r = MatSciPy.neighbour_list(atm, "ijd", cutoff(tbm))
@@ -79,7 +80,6 @@ function potential_energy_(atm::ASEAtoms, tbm::TBModel)
     E = r_sum(f .* epsn)
     return E
 end
-
 
 function forces_(atm::ASEAtoms, tbm::TBModel)
     Natm = length(atm)

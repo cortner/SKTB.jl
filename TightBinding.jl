@@ -19,8 +19,7 @@ import MatSciPy.potential_energy
 import Potentials.evaluate, Potentials.evaluate_d
 
 export AbstractTBModel, SimpleFunction
-export TBModel, FermiDiracSmearing,
-potential_energy, forces, evaluate
+export TBModel, FermiDiracSmearing, potential_energy, forces, evaluate
 
 
 abstract AbstractTBModel <: AbstractCalculator
@@ -46,6 +45,10 @@ type TBModel <: AbstractTBModel
     overlap::PairPotential
     
     pair::PairPotential
+
+	# HJ: add a parameter Rcut
+	# since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
+	Rcut::Float64
     
     # remaining model parameters
     smearing::SmearingFunction
@@ -74,6 +77,7 @@ TBModel(;onsite = ZeroSitePotential(),
         hop = ZeroPairPotential(),
         overlap = ZeroPairPotential(),
         pair = ZeroPairPotential(),
+		Rcut = 0.0,
         smearing = ZeroTemperature(),
         norbitals = 0,
         fixed_eF = true,
@@ -82,7 +86,7 @@ TBModel(;onsite = ZeroSitePotential(),
         hfd = 0.0,
         needupdate = true,
         arrays = Dict()) =
-            TBModel(onsite, hop, overlap, pair, smearing, norbitals,
+            TBModel(onsite, hop, overlap, pair, Rcut, smearing, norbitals,
                     fixed_eF, eF, nkpoints, hfd, needupdate, arrays)
 
 
@@ -90,9 +94,10 @@ TBModel(;onsite = ZeroSitePotential(),
 #### UTILITY FUNCTIONS
 
 # HJ: not sure this returns right Rcut for NRL ----------------------------------
-import Potentials.cutoff
-cutoff(tbm::TBModel) = max(cutoff(tbm.hop), cutoff(tbm.onsite),
-                           cutoff(tbm.pair))
+cutoff(tbm::TBModel) = tbm.Rcut
+# import Potentials.cutoff
+# max(cutoff(tbm.hop), cutoff(tbm.onsite), cutoff(tbm.pair))
+# -------------------------------------------- ----------------------------------
 
 
 """`indexblock`:
@@ -352,8 +357,7 @@ binding model.
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
 
     # create a neighbourlist
-    #nlist = NeighbourList(cutoff(tbm), atm)
-    nlist = NeighbourList(4.0, atm)
+    nlist = NeighbourList(cutoff(tbm), atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
     # >> ask nlist how much storage we roughly need!
     nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
@@ -372,24 +376,24 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
         for m = 1:length(neigs)
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
-            # compute hamiltonian block and add to sparse matrix
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
 
             # H_nm = exp(- 4.0 * (r[m] / 2.5 - 1.0) )  - 2.0 * exp(- 2.0 * (r[m] / 2.5 - 1.0) )
             # p = ToyHop(2.0, 2.5)
             # p = MorsePotential(1.0, 2.0, 2.5)
             # H_nm = evaluate(p, r[m])
-            
             # H_nm = exp(-r[m] / 2.5) # (WORKING)
-            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             #H_nm = tbm.hop(r[m])
+            
+            # compute hamiltonian block and add to sparse matrix
+            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
             M[In, Im] += M_nm * exp(im * kR)   
         end
         # now compute the on-site terms
-        H_nn = tbm.onsite(r, R)               #  OLD: get_os!(R, tbm, H_nm)
+        H_nn = tbm.onsite(r, R)                  # OLD: get_os!(R, tbm, H_nm)
         H[In, In] += H_nn
         # overlap diagonal block
         M_nn = tbm.overlap(0.0)
@@ -449,7 +453,8 @@ function potential_energy(at::ASEAtoms, tbm::TBModel)
     for n = 1:size(K, 2)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
-        E += weight[n] * r_sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)   # TODO: pass eF?
+        E += weight[n] * r_sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)   
+        # TODO: pass eF?
     end
     
     return E
@@ -468,8 +473,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     frc = zeros(3, Natm)
 
     # precompute neighbourlist
-    #nlist = NeighbourList(cutoff(tbm), atm)
-    nlist = NeighbourList(4.0, atm)
+    nlist = NeighbourList(cutoff(tbm), atm)
 
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
@@ -504,7 +508,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
             #        t1 += df[s] * C[Ina,s] * C[Ina,s]
             #    end
             #    frc[:,n] -= dH_nn_0[:, a, a] * t1
- 	        #end
+            #end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]
@@ -512,43 +516,42 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 m = neigs[i_n]
                 Im = indexblock(m, tbm)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-                ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
-                #dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
-                #dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) /r[i_n]
-                #dM_nm = @GRAD tbm.overlap(-r[i_n], -R[:, i_n])
-                # compute ∂H_mm/∂y_n (onsite terms)  
-                #dH_nn = @GRAD tbm.onsite(-r[i_n], -R[:,i_n])
-                # dM_nn = . . . # (M_nn = const to dM_nn = 0)
-
+                dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
+                dM_nm = @GRAD tbm.overlap(r[i_n], -R[:,i_n])
+                # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+                dH_nn = @GRAD tbm.onsite(r, R)
                 
+                ############  DERIVATIVES WITH RESPECT TO exp(ikR)!! ################
+                
+                ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
+                # dM_nm = (@D tbm.overlap(r[i_n], -R[:,i_n]) ) * (-R[:, i_n]) / r[i_n]
+                # dM_nm = @GRAD tbm.overlap(r[i_n], -R[:, i_n])
+                # dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) /r[i_n]
                 # dH_nm = ( -4.0/2.5 * ( exp(- 4.0 * (r[i_n] / 2.5 - 1.0) )
-                #                        - exp(- 2.0 * (r[i_n] / 2.5 - 1.0) ) )
-                #           * (-R[:, i_n]) / r[i_n] )
+                #       - exp(- 2.0 * (r[i_n] / 2.5 - 1.0) ) ) * (-R[:, i_n]) / r[i_n] )
                 # p = ToyHop(2.0, 2.5)
                 # p = MorsePotential(1.0, 2.0, 2.5)
                 # dH_nm = evaluate_d(p, r[i_n]) * (-R[:, i_n]) / r[i_n] 
-                
                 # dH_nm = -exp(- r[i_n]/2.5 ) * (-R[:, i_n]) ./ r[i_n] / 2.5  # (WORKING)
                 # dH_nm = (@D tbm.hop.pp(r[i_n])) * (-R[:, i_n]) ./ r[i_n]
-                dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) ./ r[i_n]
+                # dH_nm = (@D tbm.hop(r[i_n], -R[:, i_n])) * (-R[:, i_n]) ./ r[i_n]
                 
                 # the following is a hack to put the on-site assembly into the
-                # innermost loop
-                
-                # add contributions to the force
+                # innermost loop                
                 #  F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+                # add contributions to the force
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     t1 = 0.0; t2 = 0.0; t4 = 0.0; t7 = 0.0; 
                     ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
-		    @inbounds @simd for s = 1:length(epsn)
+                    @inbounds @simd for s = 1:length(epsn)
                         t1 += df[s] * C[ima,s] * C[inb,s]
                         t2 += df[s] * C[ima,s] * C[inb,s] * epsn[s]
                         t4 += df[s] * C[ima,s] * C[imb,s]
                         t7 += df[s] * C[ina,s] * C[inb,s]
                     end
-                    frc[:,n] -= weight[iK] * 2.0 *  t1 * dH_nm[:,a,b] #- t2 * dM_nm[:,a,b]
-                                      #  + t4 * dH_nn[:,a,b,i_n] 
-                                      #  - t7 * dH_nn[:,a,b,i_n]  )
+                    frc[:,n] -= weight[iK] * 2.0 * ( t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b] 
+                                        + t4 * dH_nn[:,a,b,i_n] 
+                                        - t7 * dH_nn[:,a,b,i_n]  )
                 end
                 # OLD:
                 #for a = 1:tbm.norbitals, b = 1:tbm.norbitals
