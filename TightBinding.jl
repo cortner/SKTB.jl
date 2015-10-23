@@ -339,7 +339,6 @@ end
 ### Hamiltonian Evaluation
 
 
-
 """`hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
 binding model.
 
@@ -364,8 +363,6 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     # allocate space for hamiltonian and overlap matrix
     H = sparse_flexible(nnz_est)
     M = sparse_flexible(nnz_est)
-    # OLD: H_nm = zeros(tbm.norbitals, tbm.norbitals)
-    # OLD: M_nm = zeros(tbm.norbitals, tbm.norbitals)
     
     X = positions(atm)
     # loop through all atoms
@@ -377,14 +374,6 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
-
-            # H_nm = exp(- 4.0 * (r[m] / 2.5 - 1.0) )  - 2.0 * exp(- 2.0 * (r[m] / 2.5 - 1.0) )
-            # p = ToyHop(2.0, 2.5)
-            # p = MorsePotential(1.0, 2.0, 2.5)
-            # H_nm = evaluate(p, r[m])
-            # H_nm = exp(-r[m] / 2.5) # (WORKING)
-            #H_nm = tbm.hop(r[m])
-            
             # compute hamiltonian block and add to sparse matrix
             H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
             H[In, Im] += H_nm * exp(im * kR)
@@ -399,7 +388,6 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
         M_nn = tbm.overlap(0.0)
         M[In, In] += M_nn
     end
-    
     # convert M, H and return
     return sparse_static(H), sparse_static(M)
 end
@@ -489,26 +477,11 @@ function forces(atm::ASEAtoms, tbm::TBModel)
             # compute the block of indices for the orbitals belonging to n
             In = indexblock(n, tbm)
 
-            # ONSITE TERMS
-            # compute ∂H_nn/∂y_n (onsite terms)   >>> DISCUSS WITH HUAJIE
+            # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+            # dH_nn should be 3 x norbitals x norbitals x nneigs
+            dH_nn = @D tbm.onsite(r, R)
             # IN THE NEW FRAMEWORK THIS SHOULD RETURN A 3-DIMENSIONAL
             # ARRAY WITH ALL THE DERIVATIVES W.R.T. ALL THE SITES!!!
-            #  WHY DOES IT LOOK AS IF dH_nn is only norbitals instead of
-            #    norbitals x norbitals ????
-            
-            ## dH_nn should be 3 x norbitals x norbitals x nneigs
-            #dH_nn = @D tbm.onsite(r, R)
-            ## derivative w.r.t. centre site
-            #dH_nn_0 = - sum(dH_nn, 4)
-            #for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            #    # [ frc[i,n] -= dH_nn[i, a, b] * dot(df, slice(C, In[a],:).^2) ]
-            #    Ina = In[a]
-            #    t1 = 0.0
-            #    @inbounds @simd for s = 1:length(epsn)
-            #        t1 += df[s] * C[Ina,s] * C[Ina,s]
-            #    end
-            #    frc[:,n] -= dH_nn_0[:, a, a] * t1
-            #end
             
             # HOPPING TERMS
             # loop through neighbours of atm[n]
@@ -516,62 +489,28 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 m = neigs[i_n]
                 Im = indexblock(m, tbm)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-                dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
-                dM_nm = @GRAD tbm.overlap(r[i_n], -R[:,i_n])
-                # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
-                dH_nn = @GRAD tbm.onsite(r, R)
+                dH_nm = @D tbm.hop(r[i_n], -R[:, i_n])
+                dM_nm = @D tbm.overlap(r[i_n], -R[:,i_n])
                 
                 ############  DERIVATIVES WITH RESPECT TO exp(ikR)!! ################
-                
-                ###### NOTE HUAJIE: @GRAD hop(r, R) = grad(tbm, r, R)
-                # dM_nm = (@D tbm.overlap(r[i_n], -R[:,i_n]) ) * (-R[:, i_n]) / r[i_n]
-                # dM_nm = @GRAD tbm.overlap(r[i_n], -R[:, i_n])
-                # dH_nm = (@D tbm.hop(r[i_n])) * (-R[:, i_n]) /r[i_n]
-                # dH_nm = ( -4.0/2.5 * ( exp(- 4.0 * (r[i_n] / 2.5 - 1.0) )
-                #       - exp(- 2.0 * (r[i_n] / 2.5 - 1.0) ) ) * (-R[:, i_n]) / r[i_n] )
-                # p = ToyHop(2.0, 2.5)
-                # p = MorsePotential(1.0, 2.0, 2.5)
-                # dH_nm = evaluate_d(p, r[i_n]) * (-R[:, i_n]) / r[i_n] 
-                # dH_nm = -exp(- r[i_n]/2.5 ) * (-R[:, i_n]) ./ r[i_n] / 2.5  # (WORKING)
-                # dH_nm = (@D tbm.hop.pp(r[i_n])) * (-R[:, i_n]) ./ r[i_n]
-                # dH_nm = (@D tbm.hop(r[i_n], -R[:, i_n])) * (-R[:, i_n]) ./ r[i_n]
                 
                 # the following is a hack to put the on-site assembly into the
                 # innermost loop                
                 #  F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-                # add contributions to the force
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                    t1 = 0.0; t2 = 0.0; t4 = 0.0; t7 = 0.0; 
+                    t1 = 0.0; t2 = 0.0; t3 = 0.0 
                     ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
                     @inbounds @simd for s = 1:length(epsn)
                         t1 += df[s] * C[ima,s] * C[inb,s]
                         t2 += df[s] * C[ima,s] * C[inb,s] * epsn[s]
-                        t4 += df[s] * C[ima,s] * C[imb,s]
-                        t7 += df[s] * C[ina,s] * C[inb,s]
+                        t3 += df[s] * C[ina,s] * C[inb,s]
                     end
-                    frc[:,n] -= weight[iK] * 2.0 * ( t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b] 
-                                        + t4 * dH_nn[:,a,b,i_n] 
-                                        - t7 * dH_nn[:,a,b,i_n]  )
+                	# add contributions to the force
+                    frc[:,n] -= weight[iK] * ( 2.0 * t1 * dH_nm[:,a,b] 
+                                        - 2.0 * t2 * dM_nm[:,a,b] 
+                                        - t3 * dH_nn[:,a,b,i_n]  )
+                    frc[:,m] -= weight[iK] * t3 * dH_nn[:,a,b,i_n] 
                 end
-                # OLD:
-                #for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                #    t1 = 0.0; t2 = 0.0; t3 = 0.0
-                #    ima = Im[a]; inb = In[b]
-                #    @inbounds @simd for s = 1:length(epsn)
-                #        t3 = df[s] * C[ima,s] * C[inb,s]
-                #        t1 += t3
-                #        t2 += t3 * epsn[s]
-                #    end
-                #    frc[:,n] -= 2.0 * (t1 * dH_nm[:,a,b] - t2 * dM_nm[:,a,b])
-                #end
-                #for a = 1:tbm.norbitals
-                #    t1 = 0.0
-                #    ina = In[a]
-                #    @inbounds @simd for s = 1:length(epsn)
-                #        t1 += df[s] * C[ina,s] * C[ina,s]
-                #    end
-                #    frc[:,m] -= dH_nn[:, a] * t1
-                #end
                 
             end  # m in neigs-loop
         end  #  sites-loop
@@ -593,8 +532,10 @@ end
 ##################################################
 ### MODELS
 
+
+
+
 include("NRLTB.jl")
 include("tbtoymodel.jl")
-
 
 end
