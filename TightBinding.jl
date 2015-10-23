@@ -224,8 +224,8 @@ function monkhorstpackgrid(cell::Matrix{Float64},
     	v3 = cell[3,:][:]
     	c12 = cross(v1,v2)
     	b3 = 2 * π * c12 / dot(v3,c12)
-	# K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
-	# so we can exploit the symmetry of the brillouin zone 
+	## MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
+	#  We can exploit the symmetry of the brillouin zone 
 	nk = Int(kz/2) + 1
 	K = zeros(nk, 3)
 	weight = zeros(nk)
@@ -457,8 +457,9 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     update!(atm, tbm)
     
     # allocate output
+	dim = 3
     Natm = length(atm)
-    frc = zeros(3, Natm)
+    frc = zeros(dim, Natm)
 
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
@@ -472,6 +473,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
         df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
         ##### TODO: HOW DOES SMEARING KNOW eF ????
     
+    	X = positions(atm)
         # loop through all atoms, to compute the force on atm[n]
         for (n, neigs, r, R) in Sites(nlist)
             # compute the block of indices for the orbitals belonging to n
@@ -492,7 +494,19 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 dH_nm = @D tbm.hop(r[i_n], -R[:, i_n])
                 dM_nm = @D tbm.overlap(r[i_n], -R[:,i_n])
                 
-                ############  DERIVATIVES WITH RESPECT TO exp(ikR)!! ################
+   				# NOTE: there is still DERIVATIVE WITH RESPECT TO exp(ikR)
+            	kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+				eikr = exp(im * kR)
+	            # compute hamiltonian block and add to sparse matrix
+    	        H_nm = tbm.hop(r[i_n], R[:, i_n]) 
+            	# compute overlap block and add to sparse matrix
+	            M_nm = tbm.overlap(r[i_n], R[:,i_n])    
+				# H = exp(ikR) * h  ⇒  dH = exp(ikR) * (dh + ik*h)
+				for d = 1:dim
+					# NOT SURE whether the following lines are well written ...
+					dH_nm[d,:][:] = eikr * ( dH_nm[d,:][:] + im * k[d] * H_nm[:] )
+					dM_nm[d,:][:] = eikr * ( dM_nm[d,:][:] + im * k[d] * M_nm[:] )
+				end
                 
                 # the following is a hack to put the on-site assembly into the
                 # innermost loop                
