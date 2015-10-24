@@ -10,9 +10,10 @@ BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
 #######################################################################
 
 using Potentials, TightBinding, ASE, MatSciPy
-import Potentials.evaluate, Potentials.evaluate_d
+import Potentials.evaluate, Potentials.evaluate_d, Potentials.grad
 export NRLTBModel
-export evaluate, evaluate_d, cutoff
+export evaluate, evaluate_d
+# export grad, cutoff 
 
 
 
@@ -58,6 +59,7 @@ type NRLos <: SitePotential
 end
 evaluate(p::NRLos, r, R) = get_os(r/BOHR, p.elem)
 evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
+# grad(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
 # cutoff(p::NRLos) = p.elem.Rc
 
 
@@ -66,6 +68,7 @@ type NRLhop <: PairPotential
 end
 evaluate(p::NRLhop, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "H")
 evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+# grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
 # cutoff(p::NRLhop) = p.elem.Rc
 
 
@@ -75,11 +78,12 @@ end
 # return 1.0 for diagonal (when r = 0)
 evaluate(p::NRLoverlap, r) = (r == 0.0 ? 
 	eye(p.elem.Norbital) : error("NRLoverlap(r) may only be called with r = 0.0") )
-evaluate_d(p::NRLoverlap, r, R) = 
-		zeros(3, p.elem.Norbital, p.elem.Norbital)
+# evaluate_d(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
+# grad(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
 evaluate(p::NRLoverlap, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "M")
 evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
+# grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
 # cutoff(p::NRLoverlap) = p.elem.Rc
 
 
@@ -112,7 +116,7 @@ function NRLTBModel(; elem = C_sp, beta=1.0, fixed_eF=true, eF = 0.0,
                    fixed_eF = fixed_eF,
                    eF = eF,
                    nkpoints = nkpoints,
-                   hfd=hfd)
+                   hfd = hfd)
 end
 
 
@@ -170,13 +174,11 @@ function pseudoDensity(r::Vector{Float64}, elem::NRLParams)
     λ = elem.λ
     Rc = elem.Rc
     lc = elem.lc
-    # dX = Float64[ norm(r[:,k])  for k = 1:size(r,2) ]
     dX = Float64[ r[k]  for k = 1:length(r) ]
     eX = exp(-(λ^2) * dX)
     fX = cutoff_NRL(dX, Rc, lc)
     # note that the NRL pseudo density has ignored the self-distance
     ρ = sum( eX .* fX ) 
-
     return ρ
 end
 
@@ -236,29 +238,30 @@ end
 
 # get the onsite terms
 function get_os(r::Vector{Float64}, elem::NRLParams)
-	n = elem.Norbital
+    n = elem.Norbital
     H = zeros(n, n)
     ρ = pseudoDensity(r, elem)
     h = os_NRL(elem, ρ)
     for i = 1:n
         H[i,i] = h[i]
     end
-	return H
+    return H
 end
 
 # first order derivative
 function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
-	dim = 3
+    dim = 3
+    ρ = pseudoDensity(r, elem)
 	nneig = length(r) 
 	norbitals = elem.Norbital 	
-        dH = zeros(dim, norbitals, norbitals, nneig)
+    dH = zeros(dim, norbitals, norbitals, nneig)
 	# compute ∂H_nn/∂y_m ;
 	for m = 1:nneig
-            dρ = dR_pseudoDensity(r[m], elem)
-            dh = dρ_os_NRL(elem, ρ)
-            for d = 1:dim, i = 1:norbitals
-                dH[d, m+1, i, i] = dρ * dh[i] * R[d,m]/r[m]
-            end
+        dρ = dR_pseudoDensity(r[m], elem)
+        dh = dρ_os_NRL(elem, ρ)
+        for d = 1:dim, i = 1:norbitals
+            dH[d, i, i, m] = dρ * dh[i] * R[d,m]/r[m]
+        end
 	end
 	return dH
 end
@@ -294,7 +297,8 @@ function dR_h_hop(R, bond_type, elem::NRLParams)
     cR = cutoff_NRL(R, Rc, lc)
     dcR = d_cutoff_NRL(R, Rc, lc)
     hαβγ = exp(-h^2*R) * ( (f + 2*g*R) * cR - 
-		h^2 * (e + f*R + g*R^2) * cR + (e + f*R + g*R^2) * dcR )
+            h^2 * (e + f*R + g*R^2) * cR + 
+            (e + f*R + g*R^2) * dcR )
     return hαβγ
 end
 

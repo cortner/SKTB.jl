@@ -27,18 +27,22 @@ At[m, n] += a                # add to the entries of A
 A = sparse(At)               # convert to CCS format
 ```
 """
-type SparseTriplet
+type SparseTriplet{T}
     I::Array{Int32,1}
     J::Array{Int32,1}
-    V::Array{Float64,1}
+    #V::Array{Float64,1}
+    V::Array{T,1}
     idx::Int32
 end
 
-#   default constructor for the SparseTriplet type
-#   returns an empty SparseTriplet matrix with
-#   N possible triplet entries
+#  default constructor for the SparseTriplet type
+#  returns an empty SparseTriplet matrix with
+#  N possible triplet entries
 # (doc is included in doc for SparseTriplet type)
 SparseTriplet(N) = SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(Float64,N), 0)
+# Further add a constructor
+SparseTriplet(N, T::DataType) =
+    SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(T,N), 0)
 
 
 """
@@ -56,6 +60,19 @@ function grow!(A::SparseTriplet)
     A.V = zeros(Float64,Nnew)
     A.V[1:N] = Vold
 end
+function grow!(A::SparseTriplet, T::DataType)
+    N = length(A.I)
+    Nnew = 2 * N
+    Iold = A.I; Jold = A.J; Vold = A.V
+    A.I = zeros(Int32,Nnew)
+    A.I[1:N] = Iold
+    A.J = zeros(Int32,Nnew)
+    A.J[1:N] = Jold
+    A.V = zeros(T,Nnew)
+    A.V[1:N] = Vold
+end
+
+
 
 
 # This setindex is designed so that
@@ -98,7 +115,7 @@ Creates an empty sparse matrix, suitable for assembly.
 The current version uses the SparseTriplet type.
 """
 sparse_flexible(N) = SparseTriplet(N)
-
+sparse_flexible(N, T) = SparseTriplet(N, T)
 
 # . . . and a generic function to convert it to CCS
 """
