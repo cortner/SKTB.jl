@@ -361,8 +361,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     # >> ask nlist how much storage we roughly need!
     nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
     # allocate space for hamiltonian and overlap matrix
-    H = sparse_flexible(nnz_est)
-    M = sparse_flexible(nnz_est)
+    H = sparse_flexible(nnz_est, Complex64)
+    M = sparse_flexible(nnz_est, Complex64)
     
     X = positions(atm)
     # loop through all atoms
