@@ -30,16 +30,15 @@ A = sparse(At)               # convert to CCS format
 type SparseTriplet{T}
     I::Array{Int32,1}
     J::Array{Int32,1}
-    #V::Array{Float64,1}
     V::Array{T,1}
-    idx::Int32
+    idx
 end
 
 #  default constructor for the SparseTriplet type
 #  returns an empty SparseTriplet matrix with
 #  N possible triplet entries
 # (doc is included in doc for SparseTriplet type)
-SparseTriplet(N) = SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(Float64,N), 0)
+SparseTriplet(N) = SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(N), 0)
 # Further add a constructor
 SparseTriplet(N, T::DataType) =
     SparseTriplet(zeros(Int32,N), zeros(Int32,N), zeros(T,N), 0)
@@ -48,8 +47,11 @@ SparseTriplet(N, T::DataType) =
 """
 function to automatically grow the storage for the triplet format,
 called from setindex!, if not enough storage is left
+
+TODO: this should not be needed, since Julia automatically grows arrays
+provided that we use push! instead of [].
 """
-function grow!(A::SparseTriplet)
+function grow!{T}(A::SparseTriplet{T})
     N = length(A.I)
     Nnew = 2 * N
     Iold = A.I; Jold = A.J; Vold = A.V
@@ -57,22 +59,9 @@ function grow!(A::SparseTriplet)
     A.I[1:N] = Iold
     A.J = zeros(Int32,Nnew)
     A.J[1:N] = Jold
-    A.V = zeros(Float64,Nnew)
+    A.V = zeros(T, Nnew)
     A.V[1:N] = Vold
 end
-function grow!(A::SparseTriplet, T::DataType)
-    N = length(A.I)
-    Nnew = 2 * N
-    Iold = A.I; Jold = A.J; Vold = A.V
-    A.I = zeros(Int32,Nnew)
-    A.I[1:N] = Iold
-    A.J = zeros(Int32,Nnew)
-    A.J[1:N] = Jold
-    A.V = zeros(T,Nnew)
-    A.V[1:N] = Vold
-end
-
-
 
 
 # This setindex is designed so that
@@ -124,36 +113,6 @@ used for fast algebra.
 """
 sparse_static(A::SparseTriplet) = sparse(A)
 
-
-# some multigrid functionality
-# include("multigrid.jl")
-
-# conjugate gradients
-#  TODO: have Julia wrappers for a PCG solver
-
-
-
-
-####### The next few functions were used to optimise the NRLTB module.
-####### They could probably be removed soon since we are not using
-####### these datastructures anymore
-
-# it turns out that it is useful to have a bilinear form implemented in
-# SparseTripletFormat:
-"""`bilinear_form(A::SparseTriplet, x, y)` :
-# returns x' * A * y
-# """
-function bilinear_form(A::SparseTriplet, x::Vector{Float64}, y::Vector{Float64})
-    ljerror("""the function `LjSparse.bilinear_form` has been removed; add 
-            from a previous commit""")
-end
-
-
-
-function N_quad_forms(A::SparseTriplet, C::Array{Float64, 2}, f::Vector{Float64})
-    ljerror("""the function `LjSparse.N_quad_forms` has been removed; add
-            from a previous commit""" )
-end
 
 
 end
