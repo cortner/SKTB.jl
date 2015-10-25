@@ -158,7 +158,12 @@ end
 """`sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well."""
 function sorted_eig(H, M)
-    epsn, C = eig(Hermitian(full(H)), Hermitian(full(M)))
+    #epsn, C = eig(Hermitian(full(H)), Hermitian(full(M)))
+    HH = full(H)
+    MM = full(M)
+    HS = (HH + HH') / 2.0
+    MS = (MM + MM') / 2.0
+    epsn, C = eig(HS, MS)   
     Isort = sortperm(epsn)
     return epsn[Isort], C[:, Isort]
 end
@@ -361,8 +366,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     # >> ask nlist how much storage we roughly need!
     nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
     # allocate space for hamiltonian and overlap matrix
-    H = sparse_flexible(nnz_est, Complex64)
-    M = sparse_flexible(nnz_est, Complex64)
+    H = sparse_flexible(nnz_est, Complex{Float64})
+    M = sparse_flexible(nnz_est, Complex{Float64})
     
     X = positions(atm)
     # loop through all atoms
@@ -420,7 +425,7 @@ function densitymatrix(at::ASEAtoms, tbm::TBModel)
         f = tbm.smearing(epsn_k, tbm.eF)     
         # TODO: should eF be passed or should it be sotred in SmearingFunction?
         for m = 1:length(epsn_k)
-            rho += weight[n] * f[m] * C_k[:,m]*C_k[:,m]'
+            rho += weight[n] * f[m] * C_k[:,m] * C_k[:,m]'
         end
     end
     return rho
@@ -459,7 +464,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     # allocate output
 	dim = 3
     Natm = length(atm)
-    frc = zeros(dim, Natm)
+    frc = zeros(Complex{Float64}, dim, Natm)
 
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
@@ -488,41 +493,45 @@ function forces(atm::ASEAtoms, tbm::TBModel)
             # HOPPING TERMS
             # loop through neighbours of atm[n]
             for i_n = 1:length(neigs)
+             	kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+				eikr = exp(im * kR)
+
                 m = neigs[i_n]
-                Im = indexblock(m, tbm)
+	            Im = indexblock(m, tbm)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
                 dH_nm = @D tbm.hop(r[i_n], -R[:, i_n])
-                dM_nm = @D tbm.overlap(r[i_n], -R[:,i_n])
+                dM_nm =  @D tbm.overlap(r[i_n], -R[:,i_n]) 
                 
    				# NOTE: there is still DERIVATIVE WITH RESPECT TO exp(ikR)
-            	kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
-				eikr = exp(im * kR)
-	            # compute hamiltonian block and add to sparse matrix
-    	        H_nm = tbm.hop(r[i_n], R[:, i_n]) 
+                # compute hamiltonian block and add to sparse matrix
+    	        #H_nm = tbm.hop(r[i_n], R[:, i_n])
+    	        #H_nm = tbm.hop(r[i_n], R[:, i_n]) * exp(0.0*im) 
             	# compute overlap block and add to sparse matrix
-	            M_nm = tbm.overlap(r[i_n], R[:,i_n])    
+	            #M_nm = tbm.overlap(r[i_n], R[:,i_n])
+	            #M_nm = tbm.overlap(r[i_n], R[:,i_n]) * exp(0.0*im)    
 				# H = exp(ikR) * h  ⇒  dH = exp(ikR) * (dh + ik*h)
-				for d = 1:dim
-					# NOT SURE whether the following lines are well written ...
-					dH_nm[d,:][:] = eikr * ( dH_nm[d,:][:] + im * k[d] * H_nm[:] )
-					dM_nm[d,:][:] = eikr * ( dM_nm[d,:][:] + im * k[d] * M_nm[:] )
-				end
+				#for d = 1:dim
+				#	# NOT SURE whether the following lines are well written ...
+				#	dH_nm[d,:][:] = eikr * ( dH_nm[d,:][:] + im * k[d] * H_nm[:] )
+				#	dM_nm[d,:][:] = eikr * ( dM_nm[d,:][:] + im * k[d] * M_nm[:] )
+				#end
                 
                 # the following is a hack to put the on-site assembly into the
                 # innermost loop                
-                #  F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+                # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
                 for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     t1 = 0.0; t2 = 0.0; t3 = 0.0 
                     ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
                     @inbounds @simd for s = 1:length(epsn)
-                        t1 += df[s] * C[ima,s] * C[inb,s]
-                        t2 += df[s] * C[ima,s] * C[inb,s] * epsn[s]
-                        t3 += df[s] * C[ina,s] * C[inb,s]
+                        t1 += df[s] * C[ima,s] * C[inb,s]'
+                        t2 += df[s] * C[ima,s] * C[inb,s]' * epsn[s]
+                        t3 += df[s] * C[ina,s] * C[inb,s]'
                     end
                 	# add contributions to the force
-                    frc[:,n] -= weight[iK] * ( 2.0 * t1 * dH_nm[:,a,b] 
-                                        - 2.0 * t2 * dM_nm[:,a,b] 
-                                        - t3 * dH_nn[:,a,b,i_n]  )
+                    frc[:,n] -= weight[iK] * ( dH_nm[:,a,b] * (t1 * eikr + t1' * eikr') 
+                                  - dM_nm[:,a,b] * (t2 * eikr + t2' * eikr') 
+                                  # 2.0 * t1 * dH_nm[:,a,b] - 2.0 * t2 * dM_nm[:,a,b] 
+                                  - t3 * dH_nn[:,a,b,i_n] )
                     frc[:,m] -= weight[iK] * t3 * dH_nn[:,a,b,i_n] 
                 end
                 
@@ -530,7 +539,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
         end  #  sites-loop
     end # k-loop
     
-    return frc
+    return real(frc)
 end
 
 
