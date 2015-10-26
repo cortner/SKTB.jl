@@ -155,16 +155,22 @@ end
 # TODO: need a function that determines the Fermi Level!
 
 
+function full_hermitian(A)
+    A = 0.5 * (A + A')
+    A[diagind(A)] = real(A[diagind(A)])
+    return Hermitian(full(A))
+end
+
 
 """`sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well."""
 function sorted_eig(H, M)
-    #epsn, C = eig(Hermitian(full(H)), Hermitian(full(M)))
-    HH = full(H)
-    MM = full(M)
-    HS = (HH + HH') / 2.0
-    MS = (MM + MM') / 2.0
-    epsn, C = eig(HS, MS)   
+    epsn, C = eig(full_hermitian(H), full_hermitian(M))   # Hermitian(full(H)), Hermitian(full(M)))
+    # HH = full(H)
+    # MM = full(M)
+    # HS = (HH + HH') / 2.0
+    # MS = (MM + MM') / 2.0
+    # epsn, C = eig(HS, MS)   
     Isort = sortperm(epsn)
     return epsn[Isort], C[:, Isort]
 end
