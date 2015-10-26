@@ -19,7 +19,8 @@ import MatSciPy.potential_energy
 import Potentials.evaluate, Potentials.evaluate_d
 
 export AbstractTBModel, SimpleFunction
-export TBModel, FermiDiracSmearing, potential_energy, forces, evaluate
+export TBModel, FermiDiracSmearing, potential_energy, forces, evaluate,
+potential_energy_d
 
 
 abstract AbstractTBModel <: AbstractCalculator
@@ -499,8 +500,8 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                 m = neigs[i_n]
 	            Im = indexblock(m, tbm)
                 # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-                dH_nm = @D tbm.hop(r[i_n], -R[:, i_n])
-                dM_nm =  @D tbm.overlap(r[i_n], -R[:,i_n]) 
+                dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
+                dM_nm =  @GRAD tbm.overlap(r[i_n], -R[:,i_n])
                 
    				# NOTE: there is still DERIVATIVE WITH RESPECT TO exp(ikR)
                 # compute hamiltonian block and add to sparse matrix
@@ -527,7 +528,7 @@ function forces(atm::ASEAtoms, tbm::TBModel)
                         t2 += df[s] * C[ima,s] * C[inb,s]' * epsn[s]
                         t3 += df[s] * C[ina,s] * C[inb,s]'
                     end
-                	# add contributions to the force
+                    # add contributions to the force
                     frc[:,n] -= weight[iK] * ( dH_nm[:,a,b] * (t1 * eikr + t1' * eikr') 
                                   - dM_nm[:,a,b] * (t2 * eikr + t2' * eikr') 
                                   # 2.0 * t1 * dH_nm[:,a,b] - 2.0 * t2 * dM_nm[:,a,b] 
@@ -543,6 +544,8 @@ function forces(atm::ASEAtoms, tbm::TBModel)
 end
 
 
+
+potential_energy_d(atm::ASEAtoms, tbm::TBModel) = -forces(atm, tbm)
 
 
 

@@ -12,7 +12,7 @@ BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
 using Potentials, TightBinding, ASE, MatSciPy
 import Potentials.evaluate, Potentials.evaluate_d, Potentials.grad
 export NRLTBModel
-export evaluate, evaluate_d
+export evaluate, evaluate_d, grad
 # export grad, cutoff 
 
 
@@ -67,8 +67,8 @@ type NRLhop <: PairPotential
     elem :: NRLParams
 end
 evaluate(p::NRLhop, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "H")
-evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
-# grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+# evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
 # cutoff(p::NRLhop) = p.elem.Rc
 
 
@@ -82,8 +82,8 @@ evaluate(p::NRLoverlap, r) = (r == 0.0 ?
 # grad(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
 evaluate(p::NRLoverlap, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "M")
-evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
-# grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
+# evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
+grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
 # cutoff(p::NRLoverlap) = p.elem.Rc
 
 
