@@ -29,13 +29,13 @@ abstract SmearingFunction <: SimpleFunction
 
 
 
-"""`TBModel`: basic non-self consistent tight binding calculator. This 
+"""`TBModel`: basic non-self consistent tight binding calculator. This
 type admits TB models where the Hamiltonian is of the form
 
     H_ij = f_hop(r_ij)   if i ≠ j
-    H_ii = f_os( {r_ij}_j ) 
+    H_ii = f_os( {r_ij}_j )
 
-i.e. the hopping terms is a pair potential while the on-site terms are 
+i.e. the hopping terms is a pair potential while the on-site terms are
 more general; this is consistent in particular with the NRL TB model.
 This model can only descibe a single species of atoms.
 """
@@ -44,28 +44,28 @@ type TBModel <: AbstractTBModel
     onsite::SitePotential
     hop::PairPotential
     overlap::PairPotential
-    
+
     pair::PairPotential
 
 	# HJ: add a parameter Rcut
 	# since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
-	Rcut::Float64
-    
+	 Rcut::Float64
+
     # remaining model parameters
     smearing::SmearingFunction
-    norbitals::Integer
+    norbitals::Int
 
     #  WHERE DOES THIS GO?
     fixed_eF::Bool
     eF::Float64
     # beta::Float64
     # eF::Float64
-    
+
     # k-point sampling information:
     #    0 = open boundary
     #    1 = Gamma point
     nkpoints::Tuple{Int, Int, Int}
-    
+
     # internals
     hfd::Float64           # step used for finite-difference approximations
     needupdate::Bool       # tells whether hamiltonian and spectrum are up-to-date
@@ -78,7 +78,7 @@ TBModel(;onsite = ZeroSitePotential(),
         hop = ZeroPairPotential(),
         overlap = ZeroPairPotential(),
         pair = ZeroPairPotential(),
-		Rcut = 0.0,
+	Rcut = 0.0,
         smearing = ZeroTemperature(),
         norbitals = 0,
         fixed_eF = true,
@@ -104,15 +104,14 @@ cutoff(tbm::TBModel) = tbm.Rcut
 """`indexblock`:
 a little auxiliary function to compute indices for several orbitals
 """
-indexblock(n::Union{Integer, Vector}, tbm::TBModel) =
-    (n-1) * tbm.norbitals .+ [1:tbm.norbitals;]'
+# indexblock(n::Vector, tbm::TBModel) =
+#     (n-1) * tbm.norbitals .+ [1:tbm.norbitals;]'
+indexblock(n::Integer, tbm::TBModel) =
+    Int[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals]
 
 
 
-
-
-
-"""`FermiDiracSmearing`: 
+"""`FermiDiracSmearing`:
 
 f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
@@ -143,7 +142,7 @@ end
 
 
 
-"""`ZeroTemperature`: 
+"""`ZeroTemperature`:
 
 TODO
 """
@@ -165,12 +164,7 @@ end
 """`sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well."""
 function sorted_eig(H, M)
-    epsn, C = eig(full_hermitian(H), full_hermitian(M))   # Hermitian(full(H)), Hermitian(full(M)))
-    # HH = full(H)
-    # MM = full(M)
-    # HS = (HH + HH') / 2.0
-    # MS = (MM + MM') / 2.0
-    # epsn, C = eig(HS, MS)   
+    epsn, C = eig(full_hermitian(H), full_hermitian(M))
     Isort = sortperm(epsn)
     return epsn[Isort], C[:, Isort]
 end
@@ -201,15 +195,14 @@ set_k_array!(tbm, q, symbol, k) =  set_array!(tbm, (symbol, k), q)
 get_k_array(tbm, symbol, k) = get_array(tbm, (symbol, k))
 
 
-
-"""`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the 
-computational cell defined by `cell` and `nkpoints`. Returns 
+ """`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the
+computational cell defined by `cell` and `nkpoints`. Returns
 
 ### Parameters
 
 * 'cell' : 3 × 1 array of lattice vector for (super)cell
 * 'nkpoints' : 3 × 1 array of number of k-points in each direction. Now
-it can only be (0, 0, kz::Int). 
+it can only be (0, 0, kz::Int).
 
 ### Output
 
@@ -220,12 +213,12 @@ function monkhorstpackgrid(cell::Matrix{Float64},
                            nkpoints::Tuple{Int64, Int64, Int64})
     kx, ky, kz = nkpoints
     if kx != 0 || ky != 0
-	error("This boundary condition has not been implemented yet!")
+        error("This boundary condition has not been implemented yet!")
     end
     # open boundarycondition OR Γ-point sampling
     if kz == 0 || kz == 1
-	K = [0.;0.;0.]
-	weight = 1.0
+        K = [0.;0.;0.]
+        weight = 1.0
     else
 	if mod(kz,2) == 1
 	    error("k should be an even number in Monkhorst-Pack grid!")
@@ -237,7 +230,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
     	c12 = cross(v1,v2)
     	b3 = 2 * π * c12 / dot(v3,c12)
 	## MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
-	#  We can exploit the symmetry of the brillouin zone 
+	#  We can exploit the symmetry of the brillouin zone
 	nk = Int(kz/2) + 1
 	K = zeros(nk, 3)
 	weight = zeros(nk)
@@ -247,8 +240,8 @@ function monkhorstpackgrid(cell::Matrix{Float64},
             K[k,:] = (k-1) * k_step
 	    if k == 1 || k == nk
 		weight[k] = w_step
-	    else 
-	        weight[k] = w_step * 2.0 
+	    else
+	        weight[k] = w_step * 2.0
 	    end
     	end
     end
@@ -257,7 +250,7 @@ end
 
 
 
-"""`monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel)` : extracts cell and grid 
+"""`monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel)` : extracts cell and grid
     information and returns an MP grid.
 """
 monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) =
@@ -286,7 +279,7 @@ function update_eig!(atm::ASEAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
     for n = 1:size(K, 2)
         update_eig!(atm, tbm, K[:, n])
-    end    
+    end
 end
 
 """`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
@@ -315,11 +308,11 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
     if tbm.fixed_eF
         set_eF!(tbm.smearing, tbm.eF)
         return
-    end    
+    end
     # the following algorithm works for Fermi-Dirac, not general Smearing
     K, weight = monkhorstpackgrid(atm, tbm)
-    Ne = tbm.norbitals * length(atm) 
-	nf = ceil( Ne / 2 ) 
+    Ne = tbm.norbitals * length(atm)
+	nf = ceil( Ne / 2 )
 	# update_eig!(atm, tbm)
 	# set an initial eF
 	μ = 0.0
@@ -371,11 +364,11 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     nlist = NeighbourList(cutoff(tbm), atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
     # >> ask nlist how much storage we roughly need!
-    nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2 
+    nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2
     # allocate space for hamiltonian and overlap matrix
     H = sparse_flexible(nnz_est, Complex{Float64})
     M = sparse_flexible(nnz_est, Complex{Float64})
-    
+
     X = positions(atm)
     # loop through all atoms
     for (n, neigs, r, R) in Sites(nlist)
@@ -388,17 +381,22 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
             # compute hamiltonian block and add to sparse matrix
             H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
-            H[In, Im] += H_nm * exp(im * kR)
+
+            # v = H_nm * exp(im * kR)
+            # @code_warntype setindex!(H, v, In, Im)
+            # sleep(0.5)
+            # error("stop here")            
+            H[In, Im] += complex(H_nm * exp(im * kR))
             # compute overlap block and add to sparse matrix
             M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
-            M[In, Im] += M_nm * exp(im * kR)   
+            M[In, Im] += complex(M_nm * exp(im * kR))
         end
         # now compute the on-site terms
         H_nn = tbm.onsite(r, R)                  # OLD: get_os!(R, tbm, H_nm)
-        H[In, In] += H_nn
+        H[In, In] += complex(H_nn)
         # overlap diagonal block
         M_nn = tbm.overlap(0.0)
-        M[In, In] += M_nn
+        M[In, In] += complex(M_nn)
     end
     # convert M, H and return
     return sparse_static(H), sparse_static(M)
@@ -407,16 +405,16 @@ end
 
 hamiltonian(atm::ASEAtoms, tbm::TBModel) =
     hamiltonian(atm::ASEAtoms, tbm::TBModel, [0.;0.;0.])
-                     
+
 
 """`densitymatrix(at::ASEAtoms, tbm::TBModel) -> rho`:
 
-### Input 
+### Input
 * `at::ASEAtoms` : configuration
 * `tbm::TBModel` : calculator
 
 ### Output
-* `rho::Matrix{Float64}`: density matrix, 
+* `rho::Matrix{Float64}`: density matrix,
     ρ = ∑_s f(ϵ_s) ψ_s ⊗ ψ_s
 where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
     ρ = ∑_k w^k ∑_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
@@ -429,7 +427,7 @@ function densitymatrix(at::ASEAtoms, tbm::TBModel)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
         C_k = get_k_array(tbm, :C, k)
-        f = tbm.smearing(epsn_k, tbm.eF)     
+        f = tbm.smearing(epsn_k, tbm.eF)
         # TODO: should eF be passed or should it be sotred in SmearingFunction?
         for m = 1:length(epsn_k)
             rho += weight[n] * f[m] * C_k[:,m] * C_k[:,m]'
@@ -445,109 +443,129 @@ end
 
 
 function potential_energy(at::ASEAtoms, tbm::TBModel)
-    
+
     update!(at, tbm)
-    
+
     K, weight = monkhorstpackgrid(at, tbm)
     E = 0.0
     for n = 1:size(K, 2)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
-        E += weight[n] * r_sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)   
+        E += weight[n] * r_sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
         # TODO: pass eF?
     end
-    
+
     return E
+end
+
+
+
+function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
+
+    # obtain the precomputed arrays
+    epsn = get_k_array(tbm, :epsn, k)
+    C = get_k_array(tbm, :C, k)
+    df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+
+    # precompute some products
+    const C_df_Ct = (C * (df' .* C)')::Matrix{Complex{Float64}}
+    const C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')::Matrix{Complex{Float64}}
+
+    # allocate forces
+    const frc = zeros(Complex{Float64}, 3, size(X,2))
+
+    # pre-allocate dH, with a (dumb) initial guess for the size
+    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
+    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+    
+    # loop through all atoms, to compute the force on atm[n]
+    for (n, neigs, r, R) in Sites(nlist)
+        neigs::Vector{Int}
+        R::Matrix{Float64}
+        # compute the block of indices for the orbitals belonging to n
+        In = indexblock(n, tbm)
+
+        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+        # dH_nn should be 3 x norbitals x norbitals x nneigs
+        # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
+        # in-place version
+        if length(neigs) > size(dH_nn, 4)
+            dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
+                          ceil(Int, 1.5*length(neigs)))
+        end
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
+
+        for i_n = 1:length(neigs)
+            m = neigs[i_n]
+	    Im = indexblock(m, tbm)
+            kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+	    eikr = exp(im * kR)::Complex{Float64}
+            # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+            dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
+            dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
+            # grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            # grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            
+            # the following is a hack to put the on-site assembly into the
+            # innermost loop
+            # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+            for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+                t2 = 2.0 * real(C_dfepsn_Ct[Im[a],In[b]] * eikr)
+                t3 = C_df_Ct[In[a],In[b]]
+                # add contributions to the force
+                for j = 1:3
+                    frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
+                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+                    frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
+                end
+            end
+
+        end  # m in neigs-loop
+    end  #  sites-loop
+
+    return frc
+
+end
+
+
+function forces(atm::ASEAtoms, tbm::TBModel)
+    # tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    # allocate output
+    frc = zeros(3, length(atm))
+
+    # precompute neighbourlist
+    nlist = NeighbourList(cutoff(tbm), atm)
+    X = positions(atm)
+    # BZ integration loop
+    K, weight = monkhorstpackgrid(atm, tbm)
+    for iK = 1:size(K,2)
+        frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
+    end
+    return frc
 end
 
 
 
 
 # compute all forces on all the atoms
-function forces(atm::ASEAtoms, tbm::TBModel)
+function forces_debug(atm::ASEAtoms, tbm)
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
-    
     # allocate output
-	dim = 3
-    Natm = length(atm)
-    frc = zeros(Complex{Float64}, dim, Natm)
-
+    frc = zeros(3, length(atm))
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
+    X = positions(atm)
 
-    # BZ integration loop
-    K, weight = monkhorstpackgrid(atm, tbm)
-    for iK = 1:size(K,2)
-        k = K[:, iK]
-        epsn = get_k_array(tbm, :epsn, k)
-        C = get_k_array(tbm, :C, k)
-        df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-        ##### TODO: HOW DOES SMEARING KNOW eF ????
-    
-    	X = positions(atm)
-        # loop through all atoms, to compute the force on atm[n]
-        for (n, neigs, r, R) in Sites(nlist)
-            # compute the block of indices for the orbitals belonging to n
-            In = indexblock(n, tbm)
 
-            # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
-            # dH_nn should be 3 x norbitals x norbitals x nneigs
-            dH_nn = @D tbm.onsite(r, R)
-            # IN THE NEW FRAMEWORK THIS SHOULD RETURN A 3-DIMENSIONAL
-            # ARRAY WITH ALL THE DERIVATIVES W.R.T. ALL THE SITES!!!
-            
-            # HOPPING TERMS
-            # loop through neighbours of atm[n]
-            for i_n = 1:length(neigs)
-             	kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
-				eikr = exp(im * kR)
-
-                m = neigs[i_n]
-	            Im = indexblock(m, tbm)
-                # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-                dH_nm = @GRAD tbm.hop(r[i_n], -R[:, i_n])
-                dM_nm =  @GRAD tbm.overlap(r[i_n], -R[:,i_n])
-                
-   				# NOTE: there is still DERIVATIVE WITH RESPECT TO exp(ikR)
-                # compute hamiltonian block and add to sparse matrix
-    	        #H_nm = tbm.hop(r[i_n], R[:, i_n])
-    	        #H_nm = tbm.hop(r[i_n], R[:, i_n]) * exp(0.0*im) 
-            	# compute overlap block and add to sparse matrix
-	            #M_nm = tbm.overlap(r[i_n], R[:,i_n])
-	            #M_nm = tbm.overlap(r[i_n], R[:,i_n]) * exp(0.0*im)    
-				# H = exp(ikR) * h  ⇒  dH = exp(ikR) * (dh + ik*h)
-				#for d = 1:dim
-				#	# NOT SURE whether the following lines are well written ...
-				#	dH_nm[d,:][:] = eikr * ( dH_nm[d,:][:] + im * k[d] * H_nm[:] )
-				#	dM_nm[d,:][:] = eikr * ( dM_nm[d,:][:] + im * k[d] * M_nm[:] )
-				#end
-                
-                # the following is a hack to put the on-site assembly into the
-                # innermost loop                
-                # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-                for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                    t1 = 0.0; t2 = 0.0; t3 = 0.0 
-                    ina = In[a]; ima = Im[a]; inb = In[b]; imb = Im[b]
-                    @inbounds @simd for s = 1:length(epsn)
-                        t1 += df[s] * C[ima,s] * C[inb,s]'
-                        t2 += df[s] * C[ima,s] * C[inb,s]' * epsn[s]
-                        t3 += df[s] * C[ina,s] * C[inb,s]'
-                    end
-                    # add contributions to the force
-                    frc[:,n] -= weight[iK] * ( dH_nm[:,a,b] * (t1 * eikr + t1' * eikr') 
-                                  - dM_nm[:,a,b] * (t2 * eikr + t2' * eikr') 
-                                  # 2.0 * t1 * dH_nm[:,a,b] - 2.0 * t2 * dM_nm[:,a,b] 
-                                  - t3 * dH_nn[:,a,b,i_n] )
-                    frc[:,m] -= weight[iK] * t3 * dH_nn[:,a,b,i_n] 
-                end
-                
-            end  # m in neigs-loop
-        end  #  sites-loop
-    end # k-loop
-    
-    return real(frc)
+    @code_warntype forces_k(X, tbm, nlist, zeros(3))
 end
+
+
+
 
 
 

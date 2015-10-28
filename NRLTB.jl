@@ -10,9 +10,10 @@ BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
 #######################################################################
 
 using Potentials, TightBinding, ASE, MatSciPy
-import Potentials.evaluate, Potentials.evaluate_d, Potentials.grad
+import Potentials.evaluate, Potentials.evaluate_d, Potentials.grad,
+       Potentials.evaluate_d!
 export NRLTBModel
-export evaluate, evaluate_d, grad
+export evaluate, evaluate_d, grad, evaluate_d!, grad!
 # export grad, cutoff 
 
 
@@ -58,9 +59,19 @@ type NRLos <: SitePotential
     elem :: NRLParams
 end
 evaluate(p::NRLos, r, R) = get_os(r/BOHR, p.elem)
-evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
+evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)/BOHR
 # grad(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
 # cutoff(p::NRLos) = p.elem.Rc
+
+# CO : added an in-place operation for experimenting
+function evaluate_d!(p::NRLos, r, R, dH_nn::Array{Float64, 4}) 
+    get_dos!(r/BOHR, R/BOHR, p.elem, dH_nn)
+    dH_nn[:] /= BOHR
+    # @inbounds @simd for i = 1:length(dH_nn)
+    #     dH_nn[i] = dH_nn[i] / BOHR
+    # end
+end
+
 
 
 type NRLhop <: PairPotential
@@ -68,7 +79,13 @@ type NRLhop <: PairPotential
 end
 evaluate(p::NRLhop, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "H")
 # evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
-grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dH)/BOHR
+function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
+    d_mat_local!(r/BOHR, R/BOHR, p.elem, :dH, dH)
+    @inbounds for i = 1:length(dH)
+        dH[i] = dH[i] / BOHR
+    end
+end
 # cutoff(p::NRLhop) = p.elem.Rc
 
 
@@ -83,8 +100,14 @@ evaluate(p::NRLoverlap, r) = (r == 0.0 ?
 # off-diagonal terms
 evaluate(p::NRLoverlap, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "M")
 # evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
-grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
+grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
+function grad!(p::NRLhop, r, R, dM::Array{Float64, 3})
+    d_mat_local!(r/BOHR, R/BOHR, p.elem, :dM, dM)
+    @inbounds for i = 1:length(dH)
+        dH[i] = dH[i] / BOHR
+    end
+end
 
 
 
@@ -266,6 +289,24 @@ function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
 	return dH
 end
 
+# first order derivative
+function get_dos!(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams,
+                  dH::Array{Float64, 4})
+    dim = 3
+    ρ = pseudoDensity(r, elem)
+    nneig = length(r) 
+    norbitals = elem.Norbital 	
+    # dH = zeros(dim, norbitals, norbitals, nneig)
+    # compute ∂H_nn/∂y_m ;
+    for m = 1:nneig
+        dρ = dR_pseudoDensity(r[m], elem)
+        dh = dρ_os_NRL(elem, ρ)
+        for d = 1:dim, i = 1:norbitals
+            dH[d, i, i, m] = dρ * dh[i] * R[d,m]/r[m]
+        end
+    end
+    return dH
+end
 
 
 
@@ -502,17 +543,25 @@ end
 
 # generates local matrix for dH and dM
 
-function d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task)
+d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task) =
+    d_mat_local!(r::Float64, RR::Vector{Float64}, elem::NRLParams, task::Symbol,
+                 zeros(3, elem.Norbital, elem.Norbital) )
+
+function d_mat_local!(r::Float64, RR::Vector{Float64}, elem::NRLParams,
+                      task::Symbol,
+                      dh::Array{Float64, 3})
     #r = norm(RR)
     u = RR/r
     dim = 3
     l,m,n = u[:]
     Norb = elem.Norbital
     Nb = elem.Nbond
-    dh = zeros(dim, Norb, Norb)
+    # dh = zeros(dim, Norb, Norb)
+    
     # dR/dx = x/R = l, dR/dy = y/R = m, dR/dz = z/R = n
     # u = [l,m,n], l = x/R, m = y/R, n = z/R
     # dl/dx = 1/R - x^2/R^3 = 1/R - l^2/R, dl/dy = -xy/R^3 = -lm/R, dl/dz = -xz/R^3 = -ln/R
+    
     R = r
     dR = [l, m, n]  
     dl = [1/R - l*l/R , - l*m/R , - l*n/R]
@@ -520,10 +569,10 @@ function d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task)
     dn = [- l*n/R , - m*n/R , 1/R - n*n/R]
 
     # use different functions for different tasks
-    if task == "dH"
+    if task == :dH
         hh = Float64[ h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
         dhh = Float64[ dR_h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-    elseif task == "dM"
+    elseif task == :dM
         hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
         dhh = Float64[ dR_m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
     else
@@ -738,9 +787,6 @@ function d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task)
     end
     return dh
 end
-
-
-
 
 
 
