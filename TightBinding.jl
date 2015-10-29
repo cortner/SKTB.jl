@@ -364,14 +364,32 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     nlist = NeighbourList(cutoff(tbm), atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
     # >> ask nlist how much storage we roughly need!
-    nnz_est = 2 * length(nlist.Q['i']) * tbm.norbitals^2
+    nnz_est = (2 * length(nlist.Q['i']) * tbm.norbitals^2)::Integer
     # allocate space for hamiltonian and overlap matrix
-    H = sparse_flexible(nnz_est, Complex{Float64})
-    M = sparse_flexible(nnz_est, Complex{Float64})
+    # H = sparse_flexible(nnz_est, Complex{Float64})
+    # M = sparse_flexible(nnz_est, Complex{Float64})
 
-    X = positions(atm)
+    It = zeros(Int32, nnz_est)
+    Jt = zeros(Int32, nnz_est)
+    Ht = zeros(Complex{Float64}, nnz_est)
+    Mt = zeros(Complex{Float64}, nnz_est)
+    idx = 0
+    norbsq = tbm.norbitals^2
+    
+    # It = Int32[]
+    # Jt = Int32[]
+    # Ht = Complex{Float64}[]
+    # Mt = Complex{Float64}[]
+    
+    o = ones(Int32, tbm.norbitals)
+    ot = o'
+    
+    X = positions(atm)::Matrix{Float64}
     # loop through all atoms
     for (n, neigs, r, R) in Sites(nlist)
+        neigs::Vector{Int32}
+        r::Vector{Float64}
+        R::Matrix{Float64}
         # index-block for atom index n
         In = indexblock(n, tbm)
         # loop through the neighbours of the current atom
@@ -379,27 +397,49 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             # get the block of indices for atom m
             Im = indexblock(neigs[m], tbm)
             kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
+            exp_i_kR = exp(im * kR)
             # compute hamiltonian block and add to sparse matrix
-            H_nm = tbm.hop(r[m], R[:, m])        # OLD: get_h!(R[:,m], tbm, H_nm)
-
-            # v = H_nm * exp(im * kR)
-            # @code_warntype setindex!(H, v, In, Im)
-            # sleep(0.5)
-            # error("stop here")            
-            H[In, Im] += complex(H_nm * exp(im * kR))
+            H_nm = (tbm.hop(r[m], R[:, m]))::Matrix{Float64}
+            H_nm *= exp_i_kR   
+            
             # compute overlap block and add to sparse matrix
-            M_nm = tbm.overlap(r[m], R[:,m])     # OLD: get_m!(R[:.m], tbm, M_nm)
-            M[In, Im] += complex(M_nm * exp(im * kR))
+            M_nm = (tbm.overlap(r[m], R[:,m]))::Matrix{Float64}
+            M_nm *= exp_i_kR    # OLD: get_m!(R[:.m], tbm, M_nm)
+            # M[In, Im] += complex(M_nm * exp(im * kR))
+            
+            
+            @inbounds for i = 1:tbm.norbitals, j = 1:tbm.norbitals
+                idx += 1
+                It[idx] = In[i]
+                Jt[idx] = Im[j]
+                Ht[idx] = H_nm[i,j]
+                Mt[idx] = M_nm[i,j]
+            end
+                
+            # @show typeof((In .* ot)[:])
+            # push!(It, (In .* ot)[:])
+            # push!(Jt, (o .* Im')[:])
+            # push!(Ht, H_nm[:] * exp(im * kR))
+            # push!(Mt, M_nm[:] * exp(im * kR))
         end
         # now compute the on-site terms
-        H_nn = tbm.onsite(r, R)                  # OLD: get_os!(R, tbm, H_nm)
-        H[In, In] += complex(H_nn)
+        H_nn = tbm.onsite(r, R)::Matrix{Float64}   # OLD: get_os!(R, tbm, H_nm)
+        # H[In, In] += complex(H_nn)
         # overlap diagonal block
-        M_nn = tbm.overlap(0.0)
-        M[In, In] += complex(M_nn)
+        M_nn = tbm.overlap(0.0)::Matrix{Float64}
+        # M[In, In] += complex(M_nn)
+
+        for i = 1:tbm.norbitals, j = 1:tbm.norbitals
+            idx += 1
+            It[idx] = In[i]
+            Jt[idx] = In[j]
+            Ht[idx] = H_nn[i,j]
+            Mt[idx] = M_nn[i,j]
+        end
     end
     # convert M, H and return
-    return sparse_static(H), sparse_static(M)
+    # return sparse_static(H), sparse_static(M)
+    return sparse(It[1:idx], Jt[1:idx], Ht[1:idx]), sparse(It[1:idx], Jt[1:idx], Mt[1:idx])
 end
 
 

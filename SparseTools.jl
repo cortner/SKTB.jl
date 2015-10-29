@@ -82,12 +82,6 @@ function setindex!{T}(A::SparseTriplet{T}, v::Matrix{T},
         A.J[A.idx] = iCol[j]
         A.V[A.idx] = v[i,j]
     end
-    # @inbounds for i=1:length(iRow), j = 1:length(iCol)
-    #     A.idx += 1
-    #     push!(A.I, iRow[i])
-    #     push!(A.J, iCol[j])
-    #     push!(A.V, v[i,j])
-    # end
 end
 
 function setindex!{T}(A::SparseTriplet{T}, v::T, iRow::Integer, iCol::Integer)
