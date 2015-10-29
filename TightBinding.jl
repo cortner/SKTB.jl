@@ -612,6 +612,95 @@ end
 
 
 
+# pull the k-loop inside the site-loop
+function forces_(atm::ASEAtoms, tbm::TBModel)
+
+	K, weight = monkhorstpackgrid(atm, tbm)    
+	# tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    # allocate output
+    frc = zeros(3, length(atm))
+
+    # precompute neighbourlist
+    nlist = NeighbourList(cutoff(tbm), atm)
+    X = positions(atm)
+
+    # obtain the precomputed arrays
+	df = zeros(length(atm)*tbm.norbitals, size(K,2))
+	dfe = zeros(length(atm)*tbm.norbitals, size(K,2))
+    for iK = 1:size(K,2)
+    	epsn = get_k_array(tbm, :epsn, K[:,iK])
+    	df[:,iK] = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+    	dfe[:,iK] = df[:,iK] .* epsn
+	end
+
+    # pre-allocate dH, with a (dumb) initial guess for the size
+    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
+    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+    
+    # loop through all atoms, to compute the force on atm[n]
+    for (n, neigs, r, R) in Sites(nlist)
+        neigs::Vector{Int}
+        R::Matrix{Float64}
+        # compute the block of indices for the orbitals belonging to n
+        In = indexblock(n, tbm)
+
+        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+        # dH_nn should be 3 x norbitals x norbitals x nneigs
+        # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
+        # in-place version
+        if length(neigs) > size(dH_nn, 4)
+            dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
+                          ceil(Int, 1.5*length(neigs)))
+        end
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
+
+        for i_n = 1:length(neigs)
+            m = neigs[i_n]
+	    	Im = indexblock(m, tbm)
+            # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+            dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
+            dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
+            # grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            # grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+
+			rrn = R[:,i_n] - (X[:,neigs[i_n]] - X[:,n])
+		    # BZ integration loop
+		    for iK = 1:size(K,2)
+				k = K[:,iK]
+	            kR = dot(rrn, k)
+			    eikr = exp(im * kR)::Complex{Float64}
+     		
+				C = get_k_array(tbm, :C, k)
+			    # precompute some products
+			    C_df_Ct = (C * (df[:,iK]' .* C)')::Matrix{Complex{Float64}}
+			    C_dfepsn_Ct = (C * (dfe[:,iK]' .* C)')::Matrix{Complex{Float64}}
+
+    	        # the following is a hack to put the on-site assembly into the
+        	    # innermost loop
+            	# F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+	            for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+    	            t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+        	        t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
+            	    t3 = C_df_Ct[In[a],In[b]]
+                	# add contributions to the force
+	                for j = 1:3
+    	                frc[j,n] = frc[j,n] - weight[iK] * ( dH_nm[j,a,b] * t1 +
+        	                          dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3 )
+            	        frc[j,m] = frc[j,m] - weight[iK] * t3 * dH_nn[j,a,b,i_n]
+                	end
+	            end
+
+		    end  # k-point-loop 
+        end  # m in neigs-loop
+    end  # sites-loop
+
+   return frc
+end
+
+
+
 
 # compute all forces on all the atoms
 function forces_debug(atm::ASEAtoms, tbm)
@@ -623,11 +712,8 @@ function forces_debug(atm::ASEAtoms, tbm)
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
 
-
     @code_warntype forces_k(X, tbm, nlist, zeros(3))
 end
-
-
 
 
 
