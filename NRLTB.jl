@@ -3,7 +3,8 @@
 
 module NRLTB
 
-BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
+const BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
+bohr() = 0.52917721092
 
 #######################################################################
 ###      The NRL tight-binding model                                ###
@@ -77,7 +78,8 @@ end
 type NRLhop <: PairPotential
     elem :: NRLParams
 end
-evaluate(p::NRLhop, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "H")
+evaluate(p::NRLhop, r::Float64, R::Vector{Float64}) =
+    mat_local_h(r/bohr(), R/bohr(), p.elem)
 # evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
 grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dH)/BOHR
 function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
@@ -98,7 +100,7 @@ evaluate(p::NRLoverlap, r) = (r == 0.0 ?
 # evaluate_d(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # grad(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
-evaluate(p::NRLoverlap, r, R) = mat_local(r/BOHR, R/BOHR, p.elem, "M")
+evaluate(p::NRLoverlap, r, R) = mat_local_m(r/BOHR, R/BOHR, p.elem)
 # evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
 grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
@@ -375,19 +377,31 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
 end
 
 
+mat_local_h(r::Float64, R::Vector{Float64}, elem::NRLParams) =
+    mat_local(r, R, elem,
+              Float64[h_hop(r, bond_type, elem) for bond_type = 1:elem.Nbond])
 
-## generates local hamiltonian and overlap for hopping terms or overlap.
-# The size of returnned local matrices are  Norbit x Norbit,
-# for example, 4x4 for s&p orbitals and 9x9 for s&p&d orbitals.
-# INPUT
-# r: distance
-# R: displacement
-# elem::NRLParams
-# task: may be { "H", "M" }
-# OUTPUT
-# h : R^{norb x norb}
+mat_local_m(r::Float64, R::Vector{Float64}, elem::NRLParams) =
+    mat_local(r, R, elem,
+              Float64[m_hop(r, bond_type, elem) for bond_type = 1:elem.Nbond])
 
-function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams, task)
+
+"""
+generates local hamiltonian and overlap for hopping terms or overlap.
+The size of returnned local matrices are  Norbit x Norbit,
+for example, 4x4 for s&p orbitals and 9x9 for s&p&d orbitals.
+
+**Input**  
+r: distance  
+R: displacement  
+elem::NRLParams  
+hh : constructed via mat_local_h or mat_local_m
+
+**Output**  
+h : R^{norb x norb}
+"""
+function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams,
+                   hh::Vector{Float64})
     # r = norm(R)
     u = R/r
     dim = 3
@@ -396,14 +410,14 @@ function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams, task)
     Nb = elem.Nbond
     h = zeros(Norb, Norb)
 
-    # use different functions for different tasks
-    if task == "H"
-        hh = Float64[ h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-    elseif task == "M"
-        hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-    else
-        throw(ArgumentError("this task has not been implemented yet"))
-    end
+    # # use different functions for different tasks
+    # if task == "H"
+    #     hh = Float64[ h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
+    # elseif task == "M"
+    #     hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
+    # else
+    #     throw(ArgumentError("this task has not been implemented yet"))
+    # end
 	
     if Norb == 4 && Nb == 4
     # 4 orbitals are s,px,py,pz; 4 bond types are : ssσ,spσ,ppσ,ppπ

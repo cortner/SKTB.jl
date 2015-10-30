@@ -39,17 +39,17 @@ i.e. the hopping terms is a pair potential while the on-site terms are
 more general; this is consistent in particular with the NRL TB model.
 This model can only descibe a single species of atoms.
 """
-type TBModel <: AbstractTBModel
+type TBModel{P_os, P_hop, P_ol, P_p} <: AbstractTBModel
     # Hamiltonian parameters
-    onsite::SitePotential
-    hop::PairPotential
-    overlap::PairPotential
-
-    pair::PairPotential
-
-	# HJ: add a parameter Rcut
-	# since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
-	 Rcut::Float64
+    onsite::P_os
+    hop::P_hop
+    overlap::P_ol
+    # repulsive potential
+    pair::P_p
+    
+    # HJ: add a parameter Rcut
+    # since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
+    Rcut::Float64
 
     # remaining model parameters
     smearing::SmearingFunction

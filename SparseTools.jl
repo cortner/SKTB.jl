@@ -71,8 +71,7 @@ end
 # (hidden so no doc needed)
 import Base.setindex!
 "`setindex!(A::SparseTriplet, v, iRow, iCol)`: see documentation for `SparseTriplet`"
-function setindex!{T}(A::SparseTriplet{T}, v::Matrix{T},
-                      iRow::Vector{Int}, iCol::Vector{Int})
+function setindex!{T}(A::SparseTriplet{T}, v::Matrix{T}, iRow, iCol)
     if A.idx == length(A.I)
         grow!(A)
     end
@@ -84,12 +83,12 @@ function setindex!{T}(A::SparseTriplet{T}, v::Matrix{T},
     end
 end
 
-function setindex!{T}(A::SparseTriplet{T}, v::T, iRow::Integer, iCol::Integer)
-    A.idx += 1
-    push!(A.I, iRow)
-    push!(A.J, iCol)
-    push!(A.V, v)
-end
+# function setindex!{T}(A::SparseTriplet{T}, v::T, iRow::Integer, iCol::Integer)
+#     A.idx += 1
+#     push!(A.I, iRow)
+#     push!(A.J, iCol)
+#     push!(A.V, v)
+# end
 
 
 # this works together with setindex! above to make += work
