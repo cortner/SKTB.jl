@@ -364,7 +364,7 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     nlist = NeighbourList(cutoff(tbm), atm)
     # setup a huge sparse matrix, we need a rough estimate for the number of
     # >> ask nlist how much storage we roughly need!
-    nnz_est = (2 * length(nlist.Q['i']) * tbm.norbitals^2)::Integer
+    nnz_est = (2 * length(nlist.i) * tbm.norbitals^2)::Integer
     # allocate space for hamiltonian and overlap matrix
     # H = sparse_flexible(nnz_est, Complex{Float64})
     # M = sparse_flexible(nnz_est, Complex{Float64})
@@ -386,7 +386,7 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
     
     X = positions(atm)::Matrix{Float64}
     # loop through all atoms
-    for (n, neigs, r, R) in Sites(nlist)
+    for (n, neigs, r, R, _) in Sites(nlist)
         neigs::Vector{Int32}
         r::Vector{Float64}
         R::Matrix{Float64}

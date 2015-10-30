@@ -318,16 +318,10 @@ end
 # bond_type : αβγ
 # elem	    : NRLParams
 
-function h_hop(R, bond_type, elem::NRLParams)
-    Rc = elem.Rc
-    lc = elem.lc
-    e = elem.e[bond_type]
-    f = elem.f[bond_type]
-    g = elem.g[bond_type]
-    h = elem.h[bond_type]
-    hαβγ = (e + f*R + g*R^2) * exp(-h^2*R) * cutoff_NRL(R, Rc, lc)
-    return hαβγ
-end
+@inline h_hop(R::Float64, bond_type::Integer, elem::NRLParams) =
+    ( (elem.e[bond_type] + (elem.f[bond_type] + elem.g[bond_type]*R)*R)
+      * exp( - elem.h[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+
 
 # first order derivative
 function dR_h_hop(R, bond_type, elem::NRLParams)
