@@ -385,15 +385,14 @@ binding model.
 * `M` : overlap matrix in CSC format
     """
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
-    nlist = NeighbourList(cutoff(tbm), at)
-    nnz_est = length(nlist) * tbm.norbitals^2 + length(at) * tbm.norbitals^2
+    nlist = NeighbourList(cutoff(tbm), atm)
+    nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
     It = zeros(Int32, nnz_est)
     Jt = zeros(Int32, nnz_est)
     Ht = zeros(Complex{Float64}, nnz_est)
     Mt = zeros(Complex{Float64}, nnz_est)
     X = positions(atm)
-    return hamiltonian!( atm, tbm, k,
-                         It, Jt, Ht, Mt, nlist, X)
+    return hamiltonian!( tbm, k, It, Jt, Ht, Mt, nlist, X)
 end
 
 hamiltonian(atm::ASEAtoms, tbm::TBModel) =
@@ -590,46 +589,50 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     X = positions(atm)
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
+    ctr = 0
     for iK = 1:size(K,2)
+        ctr += 2 * size(get_k_array(tbm, :C, K[:,iK]), 1)^2
         frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
     end
+    @show ctr
     return frc
 end
 
 
-
 # pull the k-loop inside the site-loop
 function forces_(atm::ASEAtoms, tbm::TBModel)
-
-	# tell tbm to update the spectral decompositions
+    
+    # tell tbm to update the spectral decompositions
     update!(atm, tbm)
     # allocate output
-    frc = zeros(3, length(atm))
-
+    const frc = zeros(3, length(atm))
+    
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
-    X = positions(atm)
-	K, weight = monkhorstpackgrid(atm, tbm)    
-
+    X = positions(atm)::Matrix{Float64}
+    K, weight = monkhorstpackgrid(atm, tbm)    
+    
     # obtain the precomputed arrays
-	df = zeros(length(atm)*tbm.norbitals, size(K,2))
-	dfe = zeros(length(atm)*tbm.norbitals, size(K,2))
+    df = zeros(length(atm)*tbm.norbitals, size(K,2))::Matrix{Float64}
+    dfe = zeros(length(atm)*tbm.norbitals, size(K,2))::Matrix{Float64}
     for iK = 1:size(K,2)
-     	epsn = get_k_array(tbm, :epsn, K[:,iK])
+     	epsn = get_k_array(tbm, :epsn, K[:,iK])::Vector{Float64}
      	df[:,iK] = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-     	#dfe[:,iK] = ( tbm.smearing(epsn, tbm.eF) + epsn .*
+     	# dfe[:,iK] = ( tbm.smearing(epsn, tbm.eF) + epsn .*
         #                  (@D tbm.smearing(epsn, tbm.eF)) ) .* epsn
      	dfe[:,iK] = df[:,iK] .* epsn
-	end
-
+    end
+    df::Matrix{Float64}
+    dfe::Matrix{Float64}
+    
+    ctr = 0
+    
     # pre-allocate dH, with a (dumb) initial guess for the size
     const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
     const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
     const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
 
-    for (n, neigs, r, R) in Sites(nlist)
-	    neigs::Vector{Int}
-        R::Matrix{Float64}
+    for (n, neigs, r, R, _) in Sites(nlist)
         # compute the block of indices for the orbitals belonging to n
         In = indexblock(n, tbm)
 
@@ -645,42 +648,55 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
 
         for i_n = 1:length(neigs)
      	    m = neigs[i_n]
-	    	Im = indexblock(m, tbm)
+	    Im = indexblock(m, tbm)
             # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-            dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
-            dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
-            # grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-            # grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
-       
-  			for iK = 1:size(K,2)
-		   		k=K[:,iK]
-	            kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
-			    eikr = exp(im * kR)::Complex{Float64}
-
-			    C = get_k_array(tbm, :C, k)
-			    C_df_Ct = (C * (df[:,iK]' .* C)')::Matrix{Complex{Float64}}
-			    C_dfepsn_Ct = (C * (dfe[:,iK]' .* C)')::Matrix{Complex{Float64}}
-           
-          		# the following is a hack to put the on-site assembly into the
-	            # innermost loop
+            # dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
+            # dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
+            grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            
+  	    for iK = 1:size(K,2)
+		k=K[:,iK]
+	        kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+		eikr = exp(im * kR) # ::Complex{Float64}
+                
+		C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
+		# C_df_Ct = (C * (df[:,iK]' .* C)')
+		# C_dfepsn_Ct = (C * (dfe[:,iK]' .* C)')
+                
+          	# the following is a hack to put the on-site assembly into the
+	        # innermost loop
     	        # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-        	    for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            	    t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
-                	t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
-	                t3 = real(C_df_Ct[In[a],In[b]])
+        	for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+                    Ima = Im[a]; Ina = In[a]; Inb = In[b]
+                    t1 = t2 = t3 = im*0.0;\
+                    ctr += 3
+                    @inbounds @simd for s = 1:size(C,1)
+                        t1 += df[s,iK] * C[Ima,s] * C[Inb,s]' # C_df_Ct[Im[a], In[b]]
+                        t2 += dfe[s,iK] * C[Ima,s] * C[Inb,s]' # C_dfepsn_Ct[Im[a], In[b]]
+                        t3 += C[Ina,s] * C[Inb,s]' # C_df_Ct[In[a],In[b]]
+                    end
+                    s1 = 2.0 * real(t1 * eikr)
+                    s2 = 2.0 * real(t2 * eikr)
+                    s3 = real(t3)
+            	    # t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+                    # t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
+	            # t3 = real(C_df_Ct[In[a],In[b]])
     	            # add contributions to the force
-        	        for j = 1:3
-            	        frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
-                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
-                	    frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
-	                end
-    	        end
-
-			end  # BZ integal k-loop
+                    @inbounds for j = 1:3
+                        frc[j,n] = (frc[j,n] - dH_nm[j,a,b] * s1 +
+                                    dM_nm[j,a,b] * s2 + dH_nn[j,a,b,i_n] * s3)
+                        frc[j,m] = frc[j,m] - s3 * dH_nn[j,a,b,i_n]
+                    end
+                end
+                
+	    end  # BZ integal k-loop
        	end  # m in neigs-loop
-	end  # sites-loop
+    end  # sites-loop
 
-   return frc
+    @show ctr
+    
+    return frc
 end
 
 
