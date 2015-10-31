@@ -4,7 +4,8 @@
 module NRLTB
 
 const BOHR = 0.52917721092 # atomic unit of length 1 Bohr = 0.52917721092 Å
-bohr() = 0.52917721092
+# bohr() = 0.52917721092
+const _hh_ = zeros(10)
 
 #######################################################################
 ###      The NRL tight-binding model                                ###
@@ -12,9 +13,9 @@ bohr() = 0.52917721092
 
 using Potentials, TightBinding, ASE, MatSciPy
 import Potentials.evaluate, Potentials.evaluate_d, Potentials.grad,
-       Potentials.evaluate_d!
+       Potentials.evaluate_d!, Potentials.evaluate!
 export NRLTBModel
-export evaluate, evaluate_d, grad, evaluate_d!, grad!
+export evaluate, evaluate_d, grad, evaluate_d!, grad!, evaluate!
 # export grad, cutoff 
 
 
@@ -78,8 +79,11 @@ end
 type NRLhop <: PairPotential
     elem :: NRLParams
 end
+evaluate!(p::NRLhop, r::Float64, R::Vector{Float64}, H, temp) =
+    mat_local_h!(r/BOHR, R/BOHR, p.elem, H, temp)
 evaluate(p::NRLhop, r::Float64, R::Vector{Float64}) =
-    mat_local_h(r/bohr(), R/bohr(), p.elem)
+    mat_local_h!(r/BOHR, R/BOHR, p.elem,
+                 zeros(p.elem.Norbital, p.elem.Norbital), zeros(10))
 # evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
 grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dH)/BOHR
 function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
@@ -100,7 +104,11 @@ evaluate(p::NRLoverlap, r) = (r == 0.0 ?
 # evaluate_d(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # grad(p::NRLoverlap, r, R) = zeros(3, p.elem.Norbital, p.elem.Norbital)
 # off-diagonal terms
-evaluate(p::NRLoverlap, r, R) = mat_local_m(r/BOHR, R/BOHR, p.elem)
+evaluate!(p::NRLoverlap, r, R, M, temp) =
+    mat_local_m!(r/BOHR, R/BOHR, p.elem, M, temp)
+evaluate(p::NRLoverlap, r, R) =
+    mat_local_m!(r/BOHR, R/BOHR, p.elem,
+                 zeros(p.elem.Norbital, p.elem.Norbital), zeros(10))
 # evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
 grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
@@ -318,13 +326,21 @@ end
 # bond_type : αβγ
 # elem	    : NRLParams
 
-@inline h_hop(R::Float64, bond_type::Integer, elem::NRLParams) =
+@inline h_hop(R::Float64, bond_type, elem::NRLParams) =
     ( (elem.e[bond_type] + (elem.f[bond_type] + elem.g[bond_type]*R)*R)
       * exp( - elem.h[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
 
 
+function h_hop!(R::Float64, elem::NRLParams, temp)
+    @inbounds for bond_type = 1:elem.Nbond
+        temp[bond_type] = h_hop(R, bond_type, elem)
+    end
+    return temp
+end
+
+
 # first order derivative
-function dR_h_hop(R, bond_type, elem::NRLParams)
+function dR_h_hop(R::Float64, bond_type, elem::NRLParams)
     Rc = elem.Rc
     lc = elem.lc
     e = elem.e[bond_type]
@@ -343,16 +359,19 @@ end
 
 ## hopping terms in M(OVERLAP)
 
-function m_hop(R, bond_type, elem::NRLParams)
-    Rc = elem.Rc
-    lc = elem.lc
-    p = elem.p[bond_type]
-    q = elem.q[bond_type]
-    r = elem.r[bond_type]
-    s = elem.s[bond_type]
-    mαβγ = (p + q*R + r*R^2) * exp(-s^2*R) * cutoff_NRL(R, Rc, lc)
-    return mαβγ
+@inline m_hop(R, bond_type, elem::NRLParams) =
+    ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R)
+      * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+
+
+function m_hop!(R::Float64, elem::NRLParams, temp)
+    @inbounds for bond_type = 1:elem.Nbond
+        temp[bond_type] = m_hop(R, bond_type, elem)
+    end
+    return temp
 end
+
+
 
 # first order derivative
 function dR_m_hop(R, bond_type, elem::NRLParams)
@@ -371,13 +390,11 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
 end
 
 
-mat_local_h(r::Float64, R::Vector{Float64}, elem::NRLParams) =
-    mat_local(r, R, elem,
-              Float64[h_hop(r, bond_type, elem) for bond_type = 1:elem.Nbond])
+@inline mat_local_h!(r::Float64, R::Vector{Float64}, elem::NRLParams, h, temp) =
+    mat_local!(r, R, elem, h_hop!(r, elem, temp), h)
 
-mat_local_m(r::Float64, R::Vector{Float64}, elem::NRLParams) =
-    mat_local(r, R, elem,
-              Float64[m_hop(r, bond_type, elem) for bond_type = 1:elem.Nbond])
+@inline mat_local_m!(r::Float64, R::Vector{Float64}, elem::NRLParams, h, temp) =
+    mat_local!(r, R, elem, m_hop!(r, elem, temp), h)
 
 
 """
@@ -394,25 +411,16 @@ hh : constructed via mat_local_h or mat_local_m
 **Output**  
 h : R^{norb x norb}
 """
-function mat_local(r::Float64, R::Vector{Float64}, elem::NRLParams,
-                   hh::Vector{Float64})
+function mat_local!(r::Float64, R::Vector{Float64}, elem::NRLParams,
+                   hh::Vector{Float64}, h::Matrix{Float64})
     # r = norm(R)
     u = R/r
     dim = 3
     l,m,n = u[:]
     Norb = elem.Norbital
     Nb = elem.Nbond
-    h = zeros(Norb, Norb)
-
-    # # use different functions for different tasks
-    # if task == "H"
-    #     hh = Float64[ h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-    # elseif task == "M"
-    #     hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-    # else
-    #     throw(ArgumentError("this task has not been implemented yet"))
-    # end
-	
+    # h = zeros(Norb, Norb)
+    
     if Norb == 4 && Nb == 4
     # 4 orbitals are s,px,py,pz; 4 bond types are : ssσ,spσ,ppσ,ppπ
         h[1,1] = hh[1]

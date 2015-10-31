@@ -261,15 +261,6 @@ monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) =
 ############################################################
 ##### update functions
 
-"""`update_eig!(atm::ASEAtoms, tbm::TBModel, k)` : computes hamiltonian for
- k-point `k`, diagonalises and stores the  diagonalisation in `tbm.arrays`
-"""
-function update_eig!(atm::ASEAtoms, tbm::TBModel, k)
-    H, M = hamiltonian(atm, tbm, k)
-    epsn, C = sorted_eig(H, M)
-    set_k_array!(tbm, epsn, :epsn, k)
-    set_k_array!(tbm, C, :C, k)
-end
 
 
 """`update_eig!(atm::ASEAtoms, tbm::TBModel)` : updates the hamiltonians
@@ -277,10 +268,22 @@ and spectral decompositions on the MP grid.
 """
 function update_eig!(atm::ASEAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
+    nlist = NeighbourList(cutoff(tbm), atm)
+    nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
+    It = zeros(Int32, nnz_est)
+    Jt = zeros(Int32, nnz_est)
+    Ht = zeros(Complex{Float64}, nnz_est)
+    Mt = zeros(Complex{Float64}, nnz_est)
+    X = positions(atm)
     for n = 1:size(K, 2)
-        update_eig!(atm, tbm, K[:, n])
+        k = K[:,n]
+        H, M = hamiltonian!(tbm, k, It, Jt, Ht, Mt, nlist, X)
+        epsn, C = sorted_eig(H, M)
+        set_k_array!(tbm, epsn, :epsn, k)
+        set_k_array!(tbm, C, :C, k)
     end
 end
+
 
 """`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
 data stored in `tbm` needs to be updated (by comparing atom positions) and
@@ -357,78 +360,55 @@ binding model.
 
 * `H` : hamiltoian in CSC format
 * `M` : overlap matrix in CSC format
-"""
+    """
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
-
-    # create a neighbourlist
-    nlist = NeighbourList(cutoff(tbm), atm)
-    # setup a huge sparse matrix, we need a rough estimate for the number of
-    # >> ask nlist how much storage we roughly need!
-    nnz_est = (2 * length(nlist.i) * tbm.norbitals^2)::Integer
-    # allocate space for hamiltonian and overlap matrix
-    # H = sparse_flexible(nnz_est, Complex{Float64})
-    # M = sparse_flexible(nnz_est, Complex{Float64})
-
+    nlist = NeighbourList(cutoff(tbm), at)
+    nnz_est = length(nlist) * tbm.norbitals^2 + length(at) * tbm.norbitals^2
     It = zeros(Int32, nnz_est)
     Jt = zeros(Int32, nnz_est)
     Ht = zeros(Complex{Float64}, nnz_est)
     Mt = zeros(Complex{Float64}, nnz_est)
-    idx = 0
-    norbsq = tbm.norbitals^2
+    X = positions(atm)
+    return hamiltonian!( atm, tbm, k,
+                         It, Jt, Ht, Mt, nlist, X)
+end
+
+hamiltonian(atm::ASEAtoms, tbm::TBModel) =
+    hamiltonian(atm::ASEAtoms, tbm::TBModel, [0.;0.;0.])
+
+
+function hamiltonian!(tbm::TBModel, k,
+                      It, Jt, Ht, Mt, nlist, X)
     
-    # It = Int32[]
-    # Jt = Int32[]
-    # Ht = Complex{Float64}[]
-    # Mt = Complex{Float64}[]
+    idx = 0                     # index ito triplet format
+    H_nm = zeros(tbm.norbitals, tbm.norbitals) # temporary arrays
+    M_nm = zeros(tbm.norbitals, tbm.norbitals)
+    temp = zeros(10)
     
-    o = ones(Int32, tbm.norbitals)
-    ot = o'
-    
-    X = positions(atm)::Matrix{Float64}
-    # loop through all atoms
+    # loop through sites
     for (n, neigs, r, R, _) in Sites(nlist)
-        neigs::Vector{Int32}
-        r::Vector{Float64}
-        R::Matrix{Float64}
-        # index-block for atom index n
-        In = indexblock(n, tbm)
+        In = indexblock(n, tbm)   # index-block for atom index n
+        exp_i_kR = exp(im * (k' * (R - (X[:,neigs] .- X[:,n]))))
         # loop through the neighbours of the current atom
         for m = 1:length(neigs)
-            # get the block of indices for atom m
-            Im = indexblock(neigs[m], tbm)
-            kR = dot(R[:,m] - (X[:,neigs[m]] - X[:,n]), k)
-            exp_i_kR = exp(im * kR)
-            # compute hamiltonian block and add to sparse matrix
-            H_nm = (tbm.hop(r[m], R[:, m]))::Matrix{Float64}
-            H_nm *= exp_i_kR   
-            
-            # compute overlap block and add to sparse matrix
-            M_nm = (tbm.overlap(r[m], R[:,m]))::Matrix{Float64}
-            M_nm *= exp_i_kR    # OLD: get_m!(R[:.m], tbm, M_nm)
-            # M[In, Im] += complex(M_nm * exp(im * kR))
-            
-            
+            Im = TightBinding.indexblock(neigs[m], tbm)
+            # compute hamiltonian block
+            H_nm = evaluate!(tbm.hop, r[m], R[:, m], H_nm)
+            # compute overlap block
+            M_nm = evaluate!(tbm.overlap, r[m], R[:, m], M_nm)
+            # add new indices into the sparse matrix
             @inbounds for i = 1:tbm.norbitals, j = 1:tbm.norbitals
                 idx += 1
                 It[idx] = In[i]
                 Jt[idx] = Im[j]
-                Ht[idx] = H_nm[i,j]
-                Mt[idx] = M_nm[i,j]
+                Ht[idx] = H_nm[i,j]*exp_i_kR[m]
+                Mt[idx] = M_nm[i,j]*exp_i_kR[m]
             end
-                
-            # @show typeof((In .* ot)[:])
-            # push!(It, (In .* ot)[:])
-            # push!(Jt, (o .* Im')[:])
-            # push!(Ht, H_nm[:] * exp(im * kR))
-            # push!(Mt, M_nm[:] * exp(im * kR))
         end
-        # now compute the on-site terms
-        H_nn = tbm.onsite(r, R)::Matrix{Float64}   # OLD: get_os!(R, tbm, H_nm)
-        # H[In, In] += complex(H_nn)
-        # overlap diagonal block
-        M_nn = tbm.overlap(0.0)::Matrix{Float64}
-        # M[In, In] += complex(M_nn)
-
+        # now compute the on-site terms (we could move these to be done in-place)
+        H_nn = tbm.onsite(r, R)
+        M_nn = tbm.overlap(0.0)
+        # add into sparse matrix
         for i = 1:tbm.norbitals, j = 1:tbm.norbitals
             idx += 1
             It[idx] = In[i]
@@ -437,14 +417,20 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
             Mt[idx] = M_nn[i,j]
         end
     end
-    # convert M, H and return
-    # return sparse_static(H), sparse_static(M)
-    return sparse(It[1:idx], Jt[1:idx], Ht[1:idx]), sparse(It[1:idx], Jt[1:idx], Mt[1:idx])
+    
+    # convert M, H into Sparse CCS and return
+    #   TODO: The conversion to sparse format accounts for about 1/2 of the
+    #         total cost. Since It, Jt are in an ordered format, it should be
+    #         possible to write a specialised code that converts it to
+    #         CCS much faster, possibly with less additional allocation?
+    #         another option would be to store a single It, Jt somewhere
+    #         for ALL the hamiltonians, and store multiple Ht, Mt and convert
+    #         these "on-the-fly", depending on whether full or sparse is needed.
+    #         but at the moment, eigfact cost MUCH more than the assembly,
+    #         so we could choose to stop here.
+    return sparse(It, Jt, Ht), sparse(It, Jt, Mt)
 end
 
-
-hamiltonian(atm::ASEAtoms, tbm::TBModel) =
-    hamiltonian(atm::ASEAtoms, tbm::TBModel, [0.;0.;0.])
 
 
 """`densitymatrix(at::ASEAtoms, tbm::TBModel) -> rho`:
@@ -542,10 +528,10 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
             kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
 	    eikr = exp(im * kR)::Complex{Float64}
             # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-            dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
-            dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
-            # grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-            # grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            # dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
+            # dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
+            grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
             
             # the following is a hack to put the on-site assembly into the
             # innermost loop
