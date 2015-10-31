@@ -94,9 +94,9 @@ TBModel(;onsite = ZeroSitePotential(),
 ############################################################
 #### UTILITY FUNCTIONS
 
-# HJ: not sure this returns right Rcut for NRL ----------------------------------
-cutoff(tbm::TBModel) = tbm.Rcut
 # import Potentials.cutoff
+cutoff(tbm::TBModel) = tbm.Rcut
+# HJ: not sure this returns right Rcut for NRL ----------------------------------
 # max(cutoff(tbm.hop), cutoff(tbm.onsite), cutoff(tbm.pair))
 # -------------------------------------------- ----------------------------------
 
@@ -212,39 +212,60 @@ it can only be (0, 0, kz::Int).
 function monkhorstpackgrid(cell::Matrix{Float64},
                            nkpoints::Tuple{Int64, Int64, Int64})
     kx, ky, kz = nkpoints
-    if kx != 0 || ky != 0
-        error("This boundary condition has not been implemented yet!")
-    end
-    # open boundarycondition OR Γ-point sampling
-    if kz == 0 || kz == 1
-        K = [0.;0.;0.]
-        weight = 1.0
-    else
-	if mod(kz,2) == 1
-	    error("k should be an even number in Monkhorst-Pack grid!")
+    ## We need to check somewhere that 'nkpoints' and 'pbc' are compatable,
+	## e.g., if pbc[1]==false, then kx!=0 should return an error.
+	# if kx != 0 || ky != 0
+    #    error("This boundary condition has not been implemented yet!")
+    # end
+	## We want to sample the Γ-point (which is not really necessary?)
+	if mod(kx,2) == 1 || mod(ky,2) == 1 || mod(kz,2) == 1
+	     throw(ArgumentError("k should be an even number in Monkhorst-Pack
+                grid so that the Γ-point can be sampled!"))
 	end
    	# compute the lattice vector of reciprocal space
 	v1 = cell[1,:][:]
-    	v2 = cell[2,:][:]
-    	v3 = cell[3,:][:]
-    	c12 = cross(v1,v2)
-    	b3 = 2 * π * c12 / dot(v3,c12)
-	## MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0
-	#  We can exploit the symmetry of the brillouin zone
-	nk = Int(kz/2) + 1
-	K = zeros(nk, 3)
-	weight = zeros(nk)
-	k_step = b3 / kz
-    	w_step = norm(b3) / kz+1
-    	for k = 1:nk
-            K[k,:] = (k-1) * k_step
-	    if k == 1 || k == nk
-		weight[k] = w_step
-	    else
-	        weight[k] = w_step * 2.0
-	    end
-    	end
+    v2 = cell[2,:][:]
+    v3 = cell[3,:][:]
+    c12 = cross(v1,v2)
+	c23 = cross(v2,v3)
+	c31 = cross(v3,v1)
+	b1 = 2 * π * c23 / dot(v1,c23)
+	b2 = 2 * π * c31 / dot(v2,c31)
+	b3 = 2 * π * c12 / dot(v3,c12)
+	## MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2}
+	# with shift = 0.0.
+	# We can exploit the symmetry of the BZ.
+	## NOTE THAT this is not necessarily first BZ and
+    # THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
+	nx = Int(kx/2) + 1
+	ny = Int(ky/2) + 1
+	nz = Int(kz/2) + 1
+	N = nx * ny * nz
+	K = zeros(3, N)
+	weight = zeros(N)
+
+	kx_step = b1 / (kx==0? 1:kx)
+	ky_step = b2 / (ky==0? 1:ky)
+	kz_step = b3 / (kz==0? 1:kz)
+    w_step = 1.0 / ( (kx==0? 1:kx) * (ky==0? 1:ky) * (kz==0? 1:kz) )
+	# evaluate K and weight 
+   	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
+		k = k1 + (k2-1) * nx + (k3-1) * nx * ny
+        K[:,k] = (k1-1) * kx_step + (k2-1) * ky_step + (k3-1) * kz_step
+		# adjust weight by symmetry
+		weight[k] = w_step * 8.0
+    	if k1 == 1 || k1 == nx
+			weight[k] = weight[k] / 2.0
+		end
+      	if k2 == 1 || k2 == ny
+			weight[k] = weight[k] / 2.0
+		end
+    	if k3 == 1 || k3 == nz
+			weight[k] = weight[k] / 2.0
+		end
     end
+	#print(K); println("\n"); print(weight); println("\n")
+	#println("sum_weight = "); print(sum(weight))
     return K, weight
 end
 
@@ -315,7 +336,7 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
     # the following algorithm works for Fermi-Dirac, not general Smearing
     K, weight = monkhorstpackgrid(atm, tbm)
     Ne = tbm.norbitals * length(atm)
-	nf = ceil( Ne / 2 )
+	nf = round(Int, ceil(Ne/2))
 	# update_eig!(atm, tbm)
 	# set an initial eF
 	μ = 0.0
@@ -323,19 +344,21 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
 		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
-        end
+    end
 	# iteration by Newton algorithm
 	err = 1.0
 	while abs(err) > 1.0e-8
 		Ni = 0.0
 		gi = 0.0
 		for n = 1:size(K,2)
-			Ni += weight[n] * r_sum( fermi_dirac(μ, tbm.beta, epsn_k) )
-			gi += weight[n] * r_sum( fermi_dirac_d(μ, tbm.beta, epsn_k) )
+	        k = K[:, n]
+    	    epsn_k = get_k_array(tbm, :epsn, k)
+			Ni += weight[n] * r_sum( tbm.smearing(epsn_k, μ) )
+			gi += weight[n] * r_sum( @D tbm.smearing(epsn_k, μ) )
 		end
-	    μ = μ - err / gi
 	    err = Ne - Ni
-	    # println(err)
+		#println("\n err=");  print(err)
+	    μ = μ - err / gi
 	end
     tbm.eF = μ
     set_eF!(tbm.smearing, tbm.eF)
@@ -538,7 +561,7 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
             # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
             for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                 t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
-                t2 = 2.0 * real(C_dfepsn_Ct[Im[a],In[b]] * eikr)
+                t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
                 t3 = C_df_Ct[In[a],In[b]]
                 # add contributions to the force
                 for j = 1:3
@@ -575,6 +598,93 @@ end
 
 
 
+# pull the k-loop inside the site-loop
+function forces_(atm::ASEAtoms, tbm::TBModel)
+
+	# tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    # allocate output
+    frc = zeros(3, length(atm))
+
+    # precompute neighbourlist
+    nlist = NeighbourList(cutoff(tbm), atm)
+    X = positions(atm)
+	K, weight = monkhorstpackgrid(atm, tbm)    
+
+    # obtain the precomputed arrays
+	df = zeros(length(atm)*tbm.norbitals, size(K,2))
+	dfe = zeros(length(atm)*tbm.norbitals, size(K,2))
+    for iK = 1:size(K,2)
+     	epsn = get_k_array(tbm, :epsn, K[:,iK])
+     	df[:,iK] = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+     	#dfe[:,iK] = ( tbm.smearing(epsn, tbm.eF) + epsn .*
+        #                  (@D tbm.smearing(epsn, tbm.eF)) ) .* epsn
+     	dfe[:,iK] = df[:,iK] .* epsn
+	end
+
+    # pre-allocate dH, with a (dumb) initial guess for the size
+    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
+    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+
+    for (n, neigs, r, R) in Sites(nlist)
+	    neigs::Vector{Int}
+        R::Matrix{Float64}
+        # compute the block of indices for the orbitals belonging to n
+        In = indexblock(n, tbm)
+
+        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+        # dH_nn should be 3 x norbitals x norbitals x nneigs
+        # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
+        # in-place version
+        if length(neigs) > size(dH_nn, 4)
+            dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
+                          ceil(Int, 1.5*length(neigs)))
+        end
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
+
+        for i_n = 1:length(neigs)
+     	    m = neigs[i_n]
+	    	Im = indexblock(m, tbm)
+            # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+            dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
+            dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
+            # grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            # grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+       
+  			for iK = 1:size(K,2)
+		   		k=K[:,iK]
+	            kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+			    eikr = exp(im * kR)::Complex{Float64}
+
+			    C = get_k_array(tbm, :C, k)
+			    C_df_Ct = (C * (df[:,iK]' .* C)')::Matrix{Complex{Float64}}
+			    C_dfepsn_Ct = (C * (dfe[:,iK]' .* C)')::Matrix{Complex{Float64}}
+           
+          		# the following is a hack to put the on-site assembly into the
+	            # innermost loop
+    	        # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+        	    for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            	    t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+                	t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
+	                t3 = real(C_df_Ct[In[a],In[b]])
+    	            # add contributions to the force
+        	        for j = 1:3
+            	        frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
+                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+                	    frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
+	                end
+    	        end
+
+			end  # BZ integal k-loop
+       	end  # m in neigs-loop
+	end  # sites-loop
+
+   return frc
+end
+
+
+
 
 # compute all forces on all the atoms
 function forces_debug(atm::ASEAtoms, tbm)
@@ -586,11 +696,8 @@ function forces_debug(atm::ASEAtoms, tbm)
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
 
-
     @code_warntype forces_k(X, tbm, nlist, zeros(3))
 end
-
-
 
 
 
