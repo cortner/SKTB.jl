@@ -618,8 +618,6 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     for iK = 1:size(K,2)
      	epsn = get_k_array(tbm, :epsn, K[:,iK])::Vector{Float64}
      	df[:,iK] = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-     	# dfe[:,iK] = ( tbm.smearing(epsn, tbm.eF) + epsn .*
-        #                  (@D tbm.smearing(epsn, tbm.eF)) ) .* epsn
      	dfe[:,iK] = df[:,iK] .* epsn
     end
     df::Matrix{Float64}
@@ -656,7 +654,7 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
             grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
             
   	    for iK = 1:size(K,2)
-		k=K[:,iK]
+		k = K[:,iK]
 	        kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
 		eikr = exp(im * kR) # ::Complex{Float64}
                 
@@ -669,12 +667,12 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     	        # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
         	for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     Ima = Im[a]; Ina = In[a]; Inb = In[b]
-                    t1 = t2 = t3 = im*0.0;\
+                    t1 = t2 = t3 = im*0.0
                     ctr += 3
-                    @inbounds @simd for s = 1:size(C,1)
+                    @inbounds @simd for s = 1:size(C,2)
                         t1 += df[s,iK] * C[Ima,s] * C[Inb,s]' # C_df_Ct[Im[a], In[b]]
                         t2 += dfe[s,iK] * C[Ima,s] * C[Inb,s]' # C_dfepsn_Ct[Im[a], In[b]]
-                        t3 += C[Ina,s] * C[Inb,s]' # C_df_Ct[In[a],In[b]]
+                        t3 += df[s,iK] * C[Ina,s] * C[Inb,s]' # C_df_Ct[In[a],In[b]]
                     end
                     s1 = 2.0 * real(t1 * eikr)
                     s2 = 2.0 * real(t2 * eikr)
@@ -684,9 +682,9 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
 	            # t3 = real(C_df_Ct[In[a],In[b]])
     	            # add contributions to the force
                     @inbounds for j = 1:3
-                        frc[j,n] = (frc[j,n] - dH_nm[j,a,b] * s1 +
-                                    dM_nm[j,a,b] * s2 + dH_nn[j,a,b,i_n] * s3)
-                        frc[j,m] = frc[j,m] - s3 * dH_nn[j,a,b,i_n]
+                        frc[j,n] = frc[j,n] - weight[iK] * ( dH_nm[j,a,b] * s1 -
+                                    dM_nm[j,a,b] * s2 - dH_nn[j,a,b,i_n] * s3 )
+                        frc[j,m] = frc[j,m] - weight[iK] * s3 * dH_nn[j,a,b,i_n]
                     end
                 end
                 
