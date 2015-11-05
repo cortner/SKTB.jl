@@ -403,7 +403,7 @@ function hamiltonian!(tbm::TBModel, k,
                       It, Jt, Ht, Mt, nlist, X)
     
     idx = 0                     # index ito triplet format
-    H_nm = zeros(tbm.norbitals, tbm.norbitals) # temporary arrays
+    H_nm = zeros(tbm.norbitals, tbm.norbitals)    # temporary arrays
     M_nm = zeros(tbm.norbitals, tbm.norbitals)
     temp = zeros(10)
     
@@ -589,12 +589,9 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     X = positions(atm)
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
-    ctr = 0
     for iK = 1:size(K,2)
-        ctr += 2 * size(get_k_array(tbm, :C, K[:,iK]), 1)^2
         frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
     end
-    @show ctr
     return frc
 end
 
@@ -622,8 +619,6 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     end
     df::Matrix{Float64}
     dfe::Matrix{Float64}
-    
-    ctr = 0
     
     # pre-allocate dH, with a (dumb) initial guess for the size
     const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
@@ -668,7 +663,6 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
         	for a = 1:tbm.norbitals, b = 1:tbm.norbitals
                     Ima = Im[a]; Ina = In[a]; Inb = In[b]
                     t1 = t2 = t3 = im*0.0
-                    ctr += 3
                     @inbounds @simd for s = 1:size(C,2)
                         t1 += df[s,iK] * C[Ima,s] * C[Inb,s]' # C_df_Ct[Im[a], In[b]]
                         t2 += dfe[s,iK] * C[Ima,s] * C[Inb,s]' # C_dfepsn_Ct[Im[a], In[b]]
@@ -691,8 +685,6 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
 	    end  # BZ integal k-loop
        	end  # m in neigs-loop
     end  # sites-loop
-
-    @show ctr
     
     return frc
 end
