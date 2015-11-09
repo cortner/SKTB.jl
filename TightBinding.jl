@@ -753,10 +753,11 @@ function site_energy(l::Integer, atm::ASEAtoms, tbm::TBModel)
 
 		I = indexblock(l, tbm)
 		for j = 1:tbm.norbitals
-			Es += weight[n] * r_sum(f .* slice(C, I[j], :)' * slice(MC, I[j], :))
+			Es += weight[n] * r_sum(real(f .* slice(C, I[j], :)' .* slice(MC, I[j], :)))
 			# Es += weight[n] * r_sum( f .* (slice(C, I[j], :) .* slice(MC, I[j], :)) )
 		end
 	end
+
     return Es
 end
 
@@ -777,7 +778,7 @@ function site_forces(idx::Array{Int,1}, atm::ASEAtoms, tbm::TBModel)
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
     # BZ integration loop
-    K, weight = monkhorstpackgrid(at, tbm)
+    K, weight = monkhorstpackgrid(atm, tbm)
 
     # allocate output
     sfrc = zeros(Float64, 3, length(atm))
@@ -785,10 +786,9 @@ function site_forces(idx::Array{Int,1}, atm::ASEAtoms, tbm::TBModel)
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
-
     for iK = 1:size(K,2)
-        sfrc +=  weight[iK] * real(site_forces_k(idx::Array{Int,1},
-                               X, tbm, nlist, K[:,iK]))
+        sfrc +=  weight[iK] * 
+            real(site_forces_k(idx, X, tbm, nlist, K[:,iK]))
     end
 
     return sfrc
@@ -804,8 +804,7 @@ site_forces(n::Int, atm::ASEAtoms, tbm::TBModel) = site_forces([n;], atm, tbm)
 
 function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
                        tbm::TBModel, nlist, k::Vector{Float64};
-                       beta = ones(length(atm)))
-
+                       beta = ones(size(X,2)))
     # obtain the precomputed arrays
     epsn = get_k_array(tbm, :epsn, k)
     C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
@@ -843,7 +842,7 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
         In = indexblock(n, tbm)
         exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
 
-        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+        # compute ∂H_nn/∂y_m (onsite terms) M_nn = const ⇒ dM_nn = 0
         if length(neigs) > size(dH_nn, 4)
             dH_nn = zeros(3, Norb, Norb, ceil(Int, 1.5*length(neigs)))
             dH_n = zeros(3, Norb, Norb, ceil(Int, 1.5*length(neigs)))
@@ -913,7 +912,7 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
             MC_s_n = MC * g
 
             # now we can assemble the contribution to the site forces
-            for i in idx, a = 1:dim
+            for i in idx, a = 1:3
                 # in this iteration of the loop we compute the contributions
                 # that come from the site i. hence multiply everything with beta[i]
                 Ii = indexblock(i, tbm)
@@ -932,8 +931,8 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
            	for i_n = 1:length(neigs)
                	m = neigs[i_n]
                 g = hg[:, :, i_n]
-                epsn_s_m = C[:,s]' * g[:, :, i_n]
-                g = - C' * g[:, :, i_n]
+                epsn_s_m = C[:,s]' * g
+                g = - C' * g
                 for t = 1:Nelc
                     if abs(epsn[t]-epsn[s]) > 1e-10
                         g[t,:] ./= (epsn[t]-epsn[s])
@@ -941,7 +940,7 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
                 end
                 C_s_m = C * g
                 MC_s_m = MC * g
-                for i in idx, a = 1:dim
+                for i in idx, a = 1:3
                     Ii = indexblock(i, tbm)
                     dEs[a,m] += beta[i] * df[s] * epsn_s_m[a] * sum( C[Ii, s] .* MC[Ii, s] )
                     dEs[a,m] += beta[i] * f[s] * sum( MC[Ii, s] .* C_s_m[Ii,a] )
