@@ -565,7 +565,7 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
                 # add contributions to the force
                 for j = 1:3
                     frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
-                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+                                       dM_nm[j,a,b] * t2  + dH_nn[j,a,b,i_n] * t3
                     frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
                 end
             end
@@ -753,7 +753,8 @@ function site_energy(l::Integer, atm::ASEAtoms, tbm::TBModel)
 
 		I = indexblock(l, tbm)
 		for j = 1:tbm.norbitals
-			Es += weight[n] * r_sum(real(f .* slice(C, I[j], :)' .* slice(MC, I[j], :)))
+			# the first component of the following line should be conjugate 
+			Es += weight[n] * r_sum(real(f .* slice(C, I[j], :) .* slice(MC, I[j], :)))
 			# Es += weight[n] * r_sum( f .* (slice(C, I[j], :) .* slice(MC, I[j], :)) )
 		end
 	end
@@ -877,13 +878,13 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
                 eikr = exp_i_kR[i_n]
               	for a = 1:3
 					g[In, a] -= slice(dH_nn, a, :, :, i_n) * C[In, s]
-                    g[In, a] += slice(dH_n, a, :, :, i_n)' * C[Im, s] * eikr'
-           	        g[Im, a] += slice(dH_n, a, :, :, i_n) * C[In, s] * eikr
+                    g[In, a] += slice(dH_n, a, :, :, i_n)' * C[Im, s] # * eikr'
+           	        g[Im, a] += slice(dH_n, a, :, :, i_n) * C[In, s] # * eikr
 					# Note that g is not complete now. The original version has :
 					# g[Im, a] += slice(dH_m,a,:,:,i_n) .* C[Im,s] * eikr, which
 					# can not be done since ∂H_mm/∂y_n is not calculated in the loop
-	                gm[In, a] += slice(dM_n, a, :, :, i_n)' * C[Im, s] * eikr'
-    	            gm[Im, a] += slice(dM_n, a, :, :, i_n) * C[In, s] * eikr
+	                gm[In, a] += slice(dM_n, a, :, :, i_n)' * C[Im, s] # * eikr'
+    	            gm[Im, a] += slice(dM_n, a, :, :, i_n) * C[In, s] # * eikr
 
                     hg[In, a, i_n] += slice(dH_nn, a, :, :, i_n) * C[In, s]
                 end
@@ -912,18 +913,18 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
             MC_s_n = MC * g
 
             # now we can assemble the contribution to the site forces
-            for i in idx, a = 1:3
+            for id in idx, a = 1:3
                 # in this iteration of the loop we compute the contributions
                 # that come from the site i. hence multiply everything with beta[i]
-                Ii = indexblock(i, tbm)
+                Ii = indexblock(id, tbm)
                 # Part 1:  \sum_s \sum_b f'(ϵ_s) ϵ_{s,na} [ψ_s]_{ib}*[M*ψ_s]_{ib}
-                dEs[a,n] += beta[i] * df[s] * epsn_s_n[a] * sum( C[Ii, s] .* MC[Ii, s] )
+                dEs[a,n] += beta[id] * df[s] * epsn_s_n[a] * sum( C[Ii, s] .* MC[Ii, s] )
                 # Part 2a: \sum_s \sum_b f(ϵ_s) [ψ_{s,na}]_{ib} [M*ψ_s]_{ib}
                 # Part 2b: \sum_s \sum_b f(ϵ_s) [ψ_s]_{ib} [M_{,n}*ψ_s]_{ib}
                 # Part 2c: \sum_s \sum_b f(ϵ_s) [ψ_s]_{ib} [M*ψ_{s,na}]_{ib}
-                dEs[a,n] += beta[i] * f[s] * sum( MC[Ii, s] .* C_s_n[Ii,a] )
-                dEs[a,n] += beta[i] * f[s] * sum( C[Ii, s] .* gm[Ii,a] )
-                dEs[a,n] += beta[i] * f[s] * sum( C[Ii, s] .* MC_s_n[Ii,a] )
+                dEs[a,n] += beta[id] * f[s] * sum( MC[Ii, s] .* C_s_n[Ii,a] )
+                dEs[a,n] += beta[id] * f[s] * sum( C[Ii, s] .* gm[Ii,a] )
+                dEs[a,n] += beta[id] * f[s] * sum( C[Ii, s] .* MC_s_n[Ii,a] )
             end
 
             # perform the same above calculations for ϵ_{s,m} and ψ_{s,m}
@@ -936,15 +937,17 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
                 for t = 1:Nelc
                     if abs(epsn[t]-epsn[s]) > 1e-10
                         g[t,:] ./= (epsn[t]-epsn[s])
+					else
+                    	g[t,:] = 0.0
                     end
                 end
                 C_s_m = C * g
                 MC_s_m = MC * g
-                for i in idx, a = 1:3
-                    Ii = indexblock(i, tbm)
-                    dEs[a,m] += beta[i] * df[s] * epsn_s_m[a] * sum( C[Ii, s] .* MC[Ii, s] )
-                    dEs[a,m] += beta[i] * f[s] * sum( MC[Ii, s] .* C_s_m[Ii,a] )
-                    dEs[a,m] += beta[i] * f[s] * sum( C[Ii, s] .* MC_s_m[Ii,a] )
+                for id in idx, a = 1:3
+                    Ii = indexblock(id, tbm)
+                    dEs[a,m] += beta[id] * df[s] * epsn_s_m[a] * sum( C[Ii, s] .* MC[Ii, s] )
+                    dEs[a,m] += beta[id] * f[s] * sum( MC[Ii, s] .* C_s_m[Ii,a] )
+                    dEs[a,m] += beta[id] * f[s] * sum( C[Ii, s] .* MC_s_m[Ii,a] )
                 end
             end
 
