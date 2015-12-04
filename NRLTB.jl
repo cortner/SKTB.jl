@@ -94,7 +94,7 @@ function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
         dH[i] = dH[i] / BOHR
     end
 end
-grad_fd(p::NRLhop, R::Vector{Float64}, dH) = mat_local_dh!(R/BOHR, p.elem, dH)
+grad_fd(p::NRLhop, R::Vector{Float64}, dH) = mat_local_dh!(R/BOHR, p.elem, dH)/BOHR
 
 
 
