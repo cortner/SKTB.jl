@@ -916,7 +916,7 @@ function mat_local_dh!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,3}
     if Norb == 4 && Nb == 4
     # 4 orbitals are s,px,py,pz; 4 bond types are : ssσ,spσ,ppσ,ppπ
 		h11(x) = h_hop_fd(x, 1, elem)
-				#( (elem.e[1] + (elem.f[1] + elem.g[1] * norm(x)) * norm(x))
+				# ( (elem.e[1] + (elem.f[1] + elem.g[1] * norm(x)) * norm(x))
                 # * exp( - elem.h[1]^2 * norm(x)) * cutoff_NRL_fd(norm(x), elem.Rc, elem.lc) )
 		g = ForwardDiff.gradient(h11)
         dh[:,1,1] = g(R)
@@ -952,9 +952,9 @@ function mat_local_dh!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,3}
     	h34(x) = m(x) * n(x) * ( h_hop_fd(r(x), 3, elem) - h_hop_fd(r(x), 4, elem) )
 		g = ForwardDiff.gradient(h34)
         dh[:,3,4] = g(R)
-        dh[:,3,2] = dh[2,3]
-        dh[:,4,2] = dh[2,4]
-        dh[:,4,3] = dh[3,4]
+        dh[:,3,2] = dh[:,2,3]
+        dh[:,4,2] = dh[:,2,4]
+        dh[:,4,3] = dh[:,3,4]
 
     elseif Norb == 9 && Nb == 10
     # 9 orbitals : s, px, py, pz, dxy, dyz, dzx, dx2-y2, d3z2-r2

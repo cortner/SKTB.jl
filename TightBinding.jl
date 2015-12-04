@@ -20,7 +20,7 @@ import Potentials.evaluate, Potentials.evaluate_d
 
 export AbstractTBModel, SimpleFunction
 export TBModel, FermiDiracSmearing, potential_energy, forces, evaluate,
-potential_energy_d, site_energy
+potential_energy_d, site_energy, band_structure
 
 
 abstract AbstractTBModel <: AbstractCalculator
@@ -508,6 +508,30 @@ end
 
 
 
+function band_structure(at::ASEAtoms, tbm::TBModel)
+
+    update!(at, tbm)
+    # tbm.fixed_eF = false
+    # TightBinding.update_eF!(at, tbm)
+
+    K, weight = monkhorstpackgrid(at, tbm)
+    E = zeros(3, size(K,2))
+        Ne = tbm.norbitals * length(at)
+        nf = round(Int, ceil(Ne/2))
+
+    for n = 1:size(K, 2)
+        k = K[:, n]
+        epsn_k = get_k_array(tbm, :epsn, k)
+        E[1,n] = epsn_k[nf-1]
+        E[2,n] = epsn_k[nf]
+        E[3,n] = epsn_k[nf+1]
+    end
+
+    return K, E
+end
+
+
+
 function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
 
     # obtain the precomputed arrays
@@ -952,6 +976,196 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
 
     return -dEs # , [1:Natm;]
 end
+
+
+
+
+############## Hessian and Higher-oerder derivatives for site energy #################
+
+# site_hessian always returns a complete hessian, i.e. dEs = ( d × Natm )^2
+# comparing with site_force,  idx is a number rather than an array
+
+function site_hessian(idx::Int, atm::ASEAtoms, tbm::TBModel)
+
+    # tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    # BZ integration loop
+    K, weight = monkhorstpackgrid(atm, tbm)
+
+    # allocate output
+    shes = zeros(Float64, 3*length(atm), 3*length(atm))
+
+    # precompute neighbourlist
+    nlist = NeighbourList(cutoff(tbm), atm)
+    X = positions(atm)
+    for iK = 1:size(K,2)
+        shes +=  weight[iK] * 
+            real(site_hessian_k(idx, X, tbm, nlist, K[:,iK]))
+    end
+
+    return sfrc
+end
+
+
+
+function site_hessian_k(idx::Int, X::Matrix{Float64},
+                       tbm::TBModel, nlist, k::Vector{Float64};
+                       beta = ones(size(X,2)))
+    # obtain the precomputed arrays
+    epsn = get_k_array(tbm, :epsn, k)
+    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
+	# some constant parameters
+    Nelc = length(epsn)
+    Natm = size(X,2)
+    Norb = tbm.norbitals
+
+    # allocate output
+    const dEs = zeros(Complex{Float64}, 3, Natm)
+    # pre-allocate dH, with a (dumb) initial guess for the size
+    const dH_nn = zeros(3, Norb, Norb, 6)
+    const dH_nm = zeros(3, Norb, Norb)
+    const dM_nm = zeros(3, Norb, Norb)
+	const dH_n = zeros(3, Norb, Norb, 6)
+    const dM_n = zeros(3, Norb, Norb, 6)
+
+	# precompute electron distribution function
+	f = tbm.smearing(epsn, tbm.eF) .* epsn
+    df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+
+  	# overlap matrix is needed in this calculation
+	# use the following parameters as those in update_eig!
+    nnz_est = length(nlist) * Norb^2 + Natm * Norb^2
+    It = zeros(Int32, nnz_est)
+    Jt = zeros(Int32, nnz_est)
+    Ht = zeros(Complex{Float64}, nnz_est)
+    Mt = zeros(Complex{Float64}, nnz_est)
+    H, M = hamiltonian!(tbm, k, It, Jt, Ht, Mt, nlist, X)
+	MC = M * C::Matrix{Complex{Float64}}
+
+    # loop through all atoms, to compute the force on atm[n]
+    for (n, neigs, r, R) in Sites(nlist)
+        # compute the block of indices for the orbitals belonging to n
+        In = indexblock(n, tbm)
+        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
+
+        # compute ∂H_nn/∂y_m (onsite terms) M_nn = const ⇒ dM_nn = 0
+        if length(neigs) > size(dH_nn, 4)
+            dH_nn = zeros(3, Norb, Norb, ceil(Int, 1.5*length(neigs)))
+            dH_n = zeros(3, Norb, Norb, ceil(Int, 1.5*length(neigs)))
+            dM_n = zeros(3, Norb, Norb, ceil(Int, 1.5*length(neigs)))
+        end
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
+
+		# precompute and store dH and dM
+        for i_n = 1:length(neigs)
+            # compute and store ∂H_mn/∂y_n (hopping terms) and ∂M_mn/∂y_n
+            grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            dH_n[:,:,:,i_n] = dH_nm
+            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            dM_n[:,:,:,i_n] = dM_nm
+		end
+
+        # loop over orbitals
+	    for s = 1:Nelc
+    	    # compute g = H_{,n} * ψ_s  where H_{,n} does not contain H_{mm,n}
+            #        gm = M_{,n} * ψ_s
+            #        hg = H_{,m} * ψ_s  where H_{,m} only contains H_{nn,m}
+        	# for now this is pretty dumb as it turns an O(1) vector
+            # into an O(Nelc) vector - but best to just make it work for now
+            g = zeros(Complex{Float64}, Nelc, 3)
+            gm = zeros(Complex{Float64}, Nelc, 3)
+            hg = zeros(Complex{Float64}, Nelc, 3, length(neigs))
+
+           	for i_n = 1:length(neigs)
+               	m = neigs[i_n]
+	            Im = indexblock(m, tbm)
+ 			    # kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k);  eikr = exp(im * kR)
+                eikr = exp_i_kR[i_n]
+              	for a = 1:3
+					g[In, a] -= slice(dH_nn, a, :, :, i_n) * C[In, s]
+                    g[In, a] += slice(dH_n, a, :, :, i_n)' * C[Im, s] # * eikr'
+           	        g[Im, a] += slice(dH_n, a, :, :, i_n) * C[In, s] # * eikr
+					# Note that g is not complete now. The original version has :
+					# g[Im, a] += slice(dH_m,a,:,:,i_n) .* C[Im,s] * eikr, which
+					# can not be done since ∂H_mm/∂y_n is not calculated in the loop
+	                gm[In, a] += slice(dM_n, a, :, :, i_n)' * C[Im, s] # * eikr'
+    	            gm[Im, a] += slice(dM_n, a, :, :, i_n) * C[In, s] # * eikr
+
+                    hg[In, a, i_n] += slice(dH_nn, a, :, :, i_n) * C[In, s]
+                end
+           	end
+
+            # from g we can now get ϵ_{s,n} and ψ_{s,n}
+            # ϵ_{s,n} = < ψ_s | H_{,n} - ϵ_s ⋅ M_{,n} | ψ_s >  = ψ_s ⋅ g - ϵ_s ⋅ ψ_s ⋅ gm
+            epsn_s_n = C[:,s]' * g - epsn[s] * C[:,s]' * gm
+            # now ψ_{s,n} : given by  [ Ψ' ψ_{s,n} ]_t = - <ψ_t | H_{,n} | ψ_s > / (ϵ_t - ϵ_s)
+            # we first compute  g_t = - <ψ_t | H_{,n} | ψ_s > = - [C' * g]_t
+            g = C' * ( epsn[s] * gm - g )
+            # now we divide through by (ϵ_t - ϵ_s), but need to be careful about
+            # division by zero. If ϵ_t = ϵ_s and M!=constant matrix, then
+			# < ψ_s | M | ψ_{s,n} > = -0.5 * < ψ_s | M_{,n} | ψ_s >
+            for t = 1:Nelc
+                if abs(epsn[t]-epsn[s]) > 1e-10
+                    g[t,:] ./= (epsn[t]-epsn[s])
+                else
+                    g[t,:] = -0.5 * C[:,s]' * gm
+                end
+            end
+
+            # we can obtain ψ_{s,n} by inverting the equation C' ψ_{s,n} = g
+            # in fact we only need [ψ_{s,n}](required indices) but we can fix that later
+            C_s_n = C * g
+            MC_s_n = MC * g
+
+            # now we can assemble the contribution to the site forces
+            for id in idx, a = 1:3
+                # in this iteration of the loop we compute the contributions
+                # that come from the site i. hence multiply everything with beta[i]
+                Ii = indexblock(id, tbm)
+                # Part 1:  \sum_s \sum_b f'(ϵ_s) ϵ_{s,na} [ψ_s]_{ib}*[M*ψ_s]_{ib}
+                dEs[a,n] += beta[id] * df[s] * epsn_s_n[a] * sum( C[Ii, s] .* MC[Ii, s] )
+                # Part 2a: \sum_s \sum_b f(ϵ_s) [ψ_{s,na}]_{ib} [M*ψ_s]_{ib}
+                # Part 2b: \sum_s \sum_b f(ϵ_s) [ψ_s]_{ib} [M_{,n}*ψ_s]_{ib}
+                # Part 2c: \sum_s \sum_b f(ϵ_s) [ψ_s]_{ib} [M*ψ_{s,na}]_{ib}
+                dEs[a,n] += beta[id] * f[s] * sum( MC[Ii, s] .* C_s_n[Ii,a] )
+                dEs[a,n] += beta[id] * f[s] * sum( C[Ii, s] .* gm[Ii,a] )
+                dEs[a,n] += beta[id] * f[s] * sum( C[Ii, s] .* MC_s_n[Ii,a] )
+            end
+
+            # perform the same above calculations for ϵ_{s,m} and ψ_{s,m}
+            # that are related to the derivatives in H_{nn,m}
+           	for i_n = 1:length(neigs)
+               	m = neigs[i_n]
+                g = hg[:, :, i_n]
+                epsn_s_m = C[:,s]' * g
+                g = - C' * g
+                for t = 1:Nelc
+                    if abs(epsn[t]-epsn[s]) > 1e-10
+                        g[t,:] ./= (epsn[t]-epsn[s])
+					else
+                    	g[t,:] = 0.0
+                    end
+                end
+                C_s_m = C * g
+                MC_s_m = MC * g
+                for id in idx, a = 1:3
+                    Ii = indexblock(id, tbm)
+                    dEs[a,m] += beta[id] * df[s] * epsn_s_m[a] * sum( C[Ii, s] .* MC[Ii, s] )
+                    dEs[a,m] += beta[id] * f[s] * sum( MC[Ii, s] .* C_s_m[Ii,a] )
+                    dEs[a,m] += beta[id] * f[s] * sum( C[Ii, s] .* MC_s_m[Ii,a] )
+                end
+            end
+
+        end  # loop for s, eigenpairs
+    end  # loop for n, atomic sites
+
+    return -dEs # , [1:Natm;]
+end
+
+
+
+
+
 
 
 
