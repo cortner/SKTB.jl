@@ -830,8 +830,9 @@ end
 
 # CARBON
 # 'C' : carbon with s&p orbitals
+# reduce Rc = 10.5 to 6.0
 C_sp  =  NRLParams( 4, 4,				# norbital, nbond
-                    10.5, 0.5,			# Rc, lc
+                    6.0, 0.5,			# Rc, lc 
                     1.59901905594,		# λ
                     [-0.102789972814  0.542619178314  0.542619178314  0.542619178314],  	#a
                     [-1.62604640052   2.73454062799   2.73454062799   2.73454062799],   	#b
@@ -850,8 +851,9 @@ C_sp  =  NRLParams( 4, 4,				# norbital, nbond
 
 # ALUMINIUM
 # 'Al' : Aluminum with s&p&d orbitals
+# reduce Rc = 16.5 to 9.5
 Al_spd  =  NRLParams(9, 10,					# norbital, nbond
-                     16.5, 0.5,				# Rc, lc
+                     9.5, 0.5,				# Rc, lc
                      1.108515601511,		# λ
                      [-0.0368090795665,  0.394060871550,  0.394060871550,  0.394060871550,
                       1.03732517161,  1.03732517161,  1.03732517161, 1.03732517161, 1.03732517161],         	#a
@@ -916,8 +918,6 @@ function mat_local_dh!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,3}
     if Norb == 4 && Nb == 4
     # 4 orbitals are s,px,py,pz; 4 bond types are : ssσ,spσ,ppσ,ppπ
 		h11(x) = h_hop_fd(x, 1, elem)
-				# ( (elem.e[1] + (elem.f[1] + elem.g[1] * norm(x)) * norm(x))
-                # * exp( - elem.h[1]^2 * norm(x)) * cutoff_NRL_fd(norm(x), elem.Rc, elem.lc) )
 		g = ForwardDiff.gradient(h11)
         dh[:,1,1] = g(R)
 		h22(x) = l(x) * l(x) * h_hop_fd(r(x), 3, elem) + (1.0 - l(x) * l(x)) * h_hop_fd(r(x), 4, elem)
@@ -959,73 +959,102 @@ function mat_local_dh!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,3}
     elseif Norb == 9 && Nb == 10
     # 9 orbitals : s, px, py, pz, dxy, dyz, dzx, dx2-y2, d3z2-r2
     # 10 bond types are : 1ssσ, 2spσ, 3ppσ, 4ppπ, 5sdσ, 6pdσ, 7pdπ, 8ddσ, 9ddπ, 10ddδ
-        
-		#=
+		
         # ss
-        h[1,1] = hh[1]
+        h11(x) = h_hop_fd(x, 1, elem)
+		g = ForwardDiff.gradient(h11)
+        dh[:,1,1] = g(R)
 
         # sp
-        h[1,2] = l * hh[2]
-        h[1,3] = m * hh[2]
-        h[1,4] = n * hh[2]
-        h[2,1] = - h[1,2]
-        h[3,1] = - h[1,3]
-        h[4,1] = - h[1,4]
+		h12(x) = l(x) * h_hop_fd(x, 2, elem)
+		g = ForwardDiff.gradient(h12)
+        dh[:,1,2] = g(R)
+		h13(x) = m(x) * h_hop_fd(x, 2, elem)
+		g = ForwardDiff.gradient(h13)
+        dh[:,1,3] = g(R)
+		h14(x) = n(x) * h_hop_fd(x, 2, elem)
+		g = ForwardDiff.gradient(h14)
+        dh[:,1,4] = g(R)
+        dh[:,2,1] = - dh[:,1,2]
+        dh[:,3,1] = - dh[:,1,3]
+        dh[:,4,1] = - dh[:,1,4]
 
         # pp
-        h[2,2] = l^2 * hh[3] + (1-l^2) * hh[4]
-        h[3,3] = m^2 * hh[3] + (1-m^2) * hh[4]
-        h[4,4] = n^2 * hh[3] + (1-n^2) * hh[4]
-        h[2,3] = l * m * (hh[3] - hh[4])
-        h[2,4] = l * n * (hh[3] - hh[4])
-        h[3,4] = m * n * (hh[3] - hh[4])
-        h[3,2] =  h[2,3]
-        h[4,2] =  h[2,4]
-        h[4,3] =  h[3,4]
+		h22(x) = l(x) * l(x) * h_hop_fd(x, 3, elem) + (1.0 - l(x) * l(x)) * h_hop_fd(x, 4, elem)
+		g = ForwardDiff.gradient(h22)
+        dh[:,2,2] = g(R)
+		h33(x) = m(x) * m(x) * h_hop_fd(x, 3, elem) + (1.0 - m(x) * m(x)) * h_hop_fd(x, 4, elem)
+		g = ForwardDiff.gradient(h33)
+        dh[:,3,3] = g(R)
+		h44(x) = n(x) * n(x) * h_hop_fd(x, 3, elem) + (1.0 - n(x) * n(x)) * h_hop_fd(x, 4, elem)
+		g = ForwardDiff.gradient(h44)
+        dh[:,4,4] = g(R)
+		h23(x) = l(x) * m(x) * ( h_hop_fd(x, 3, elem) - h_hop_fd(x, 4, elem) )
+		g = ForwardDiff.gradient(h23)
+        dh[:,2,3] = g(R)
+		h24(x) = l(x) * n(x) * ( h_hop_fd(x, 3, elem) - h_hop_fd(x, 4, elem) )
+		g = ForwardDiff.gradient(h24)
+        dh[:,2,4] = g(R)
+		h34(x) = m(x) * n(x) * ( h_hop_fd(x, 3, elem) - h_hop_fd(x, 4, elem) )
+		g = ForwardDiff.gradient(h34)
+        dh[:,3,4] = g(R)
+        dh[:,3,2] = - dh[:,2,3]
+        dh[:,4,2] = - dh[:,2,4]
+        dh[:,4,3] = - dh[:,3,4]
 
         # sd
-        h[1,5] = √3 * l * m * hh[5]
-        h[1,6] = √3 * m * n * hh[5]
-        h[1,7] = √3 * l * n * hh[5]
-        h[1,8] = √3/2 * (l^2 - m^2) * hh[5]
-        h[1,9] = ( n^2 - (l^2 + m^2)/2 ) * hh[5]
-        h[5,1] = h[1,5]
-        h[6,1] = h[1,6]
-        h[7,1] = h[1,7]
-        h[8,1] = h[1,8]
-        h[9,1] = h[1,9]
+	    h15(x) = √3 * l(x) * m(x) * h_hop_fd(x, 5, elem)
+    	g = ForwardDiff.gradient(h15)
+        dh[:,1,5] = g(R)
+	    h16(x) = √3 * m(x) * n(x) * h_hop_fd(x, 5, elem)
+       	g = ForwardDiff.gradient(h16)
+        dh[:,1,6] = g(R)
+		h17(x) = √3 * l(x) * n(x) * h_hop_fd(x, 5, elem)
+	 	g = ForwardDiff.gradient(h17)
+        dh[:,1,7] = g(R)
+	    h18(x) = √3/2 * (l(x)^2 - m(x)^2) * h_hop_fd(x, 5, elem)
+    	g = ForwardDiff.gradient(h18)
+        dh[:,1,8] = g(R)
+	    h19(x) = ( n(x)^2 - (l(x)^2 + m(x)^2)/2 ) * h_hop_fd(x, 5, elem)
+       	g = ForwardDiff.gradient(h19)
+        dh[:,1,9] = g(R)
+		dh[:,5,1] = dh[:,1,5]
+        dh[:,6,1] = dh[:,1,6]
+        dh[:,7,1] = dh[:,1,7]
+        dh[:,8,1] = dh[:,1,8]
+        dh[:,9,1] = dh[:,1,9]
         
         # pd
-        h[2,5] = √3 * l * l * m * hh[6] + m * (1.0 - 2.0 * l^2) * hh[7]
-        h[2,6] = √3 * l * m * n * hh[6] - 2.0 * l * m * n * hh[7]
-        h[2,7] = √3 * l * l * n * hh[6] + n * (1.0 - 2.0 * l^2) * hh[7]
-        h[2,8] = √3/2 * l * (l^2 - m^2) * hh[6] + l * (1.0 - l^2 + m^2) * hh[7]
-        h[2,9] = l * (n^2 - (l^2 + m^2)/2) * hh[6] - √3 * l * n^2 * hh[7]
-        h[5,2] = - h[2,5]
-        h[6,2] = - h[2,6]
-        h[7,2] = - h[2,7]
-        h[8,2] = - h[2,8]
-        h[9,2] = - h[2,9]
-        h[3,5] = √3 * l * m * m * hh[6] + l * (1.0 - 2.0 * m^2) * hh[7]
-        h[3,6] = √3 * m * m * n * hh[6] + n * (1.0 - 2.0 * m^2) * hh[7]
-        h[3,7] = √3 * l * m * n * hh[6] - 2.0 * l * m * n * hh[7]
-        h[3,8] = √3/2 * m * (l^2 - m^2) * hh[6] - m * (1.0 + l^2 - m^2) * hh[7]
-        h[3,9] = m * (n^2 - (l^2 + m^2)/2) * hh[6] - √3 * m * n^2 * hh[7]
-        h[5,3] = - h[3,5]
-        h[6,3] = - h[3,6]
-        h[7,3] = - h[3,7]
-        h[8,3] = - h[3,8]
-        h[9,3] = - h[3,9]
-        h[4,5] = √3 * l * m * n * hh[6] - 2.0 * l * m * n * hh[7]
-        h[4,6] = √3 * m * n * n * hh[6] + m * (1.0 - 2.0 * n^2) * hh[7]
-        h[4,7] = √3 * l * n * n * hh[6] + l * (1.0 - 2.0 * n^2) * hh[7]
-        h[4,8] = √3/2 * n * (l^2 - m^2) * hh[6] - n * (l^2 - m^2) * hh[7]
-        h[4,9] = n * (n^2 - (l^2 + m^2)/2) * hh[6] + √3 * n * (l^2 + m^2) * hh[7]
-        h[5,4] = - h[4,5]
-        h[6,4] = - h[4,6]
-        h[7,4] = - h[4,7]
-        h[8,4] = - h[4,8]
-        h[9,4] = - h[4,9]
+        dh[:,2,5] = √3 * l(x) * l(x) * m(x) * h_hop_fd(x, 6, elem) + m(x) * (1.0 - 2.0 * l(x)^2) * h_hop_fd(x, 7, elem) 
+        dh[:,2,6] = √3 * l(x) * m(x) * n(x) * hh[6] - 2.0 * l(x) * m(x) * n(x) * hh[7]
+        dh[:,2,7] = √3 * l(x) * l(x) * n(x) * hh[6] + n(x) * (1.0 - 2.0 * l(x)^2) * hh[7]
+        dh[:,2,8] = √3/2 * l(x) * (l(x)^2 - m(x)^2) * hh[6] + l(x) * (1.0 - l(x)^2 + m(x)^2) * hh[7]
+        dh[:,2,9] = l(x) * (n(x)^2 - (l(x)^2 + m(x)^2)/2) * hh[6] - √3 * l(x) * n(x)^2 * hh[7]
+        dh[:,5,2] = - dh[:,2,5]
+        dh[:,6,2] = - dh[:,2,6]
+        dh[:,7,2] = - dh[:,2,7]
+        dh[:,8,2] = - dh[:,2,8]
+        dh[:,9,2] = - dh[:,2,9]
+        dh[:,3,5] = √3 * l(x) * m(x) * m(x) * hh[6] + l(x) * (1.0 - 2.0 * m(x)^2) * hh[7]
+        dh[:,3,6] = √3 * m(x) * m(x) * n(x) * hh[6] + n(x) * (1.0 - 2.0 * m(x)^2) * hh[7]
+        dh[:,3,7] = √3 * l(x) * m(x) * n(x) * hh[6] - 2.0 * l(x) * m(x) * n(x) * hh[7]
+        dh[:,3,8] = √3/2 * m(x) * (l(x)^2 - m(x)^2) * hh[6] - m(x) * (1.0 + l(x)^2 - m(x)^2) * hh[7]
+        dh[:,3,9] = m(x) * (n(x)^2 - (l(x)^2 + m(x)^2)/2) * hh[6] - √3 * m(x) * n(x)^2 * hh[7]
+        dh[:,5,3] = - dh[:,3,5]
+        dh[:,6,3] = - dh[:,3,6]
+        dh[:,7,3] = - dh[:,3,7]
+        dh[:,8,3] = - dh[:,3,8]
+        dh[:,9,3] = - dh[:,3,9]
+        dh[:,4,5] = √3 * l(x) * m(x) * n(x) * hh[6] - 2.0 * l(x) * m(x) * n(x) * hh[7]
+        dh[:,4,6] = √3 * m(x) * n(x) * n(x) * hh[6] + m(x) * (1.0 - 2.0 * n(x)^2) * hh[7]
+        dh[:,4,7] = √3 * l(x) * n(x) * n(x) * hh[6] + l(x) * (1.0 - 2.0 * n(x)^2) * hh[7]
+        dh[:,4,8] = √3/2 * n(x) * (l(x)^2 - m(x)^2) * hh[6] - n(x) * (l(x)^2 - m(x)^2) * hh[7]
+        dh[:,4,9] = n * (n(x)^2 - (l(x)^2 + m(x)^2)/2) * hh[6] + √3 * n(x) * (l(x)^2 + m(x)^2) * hh[7]
+        dh[:,5,4] = - dh[:,4,5]
+        dh[:,6,4] = - dh[:,4,6]
+        dh[:,7,4] = - dh[:,4,7]
+        dh[:,8,4] = - dh[:,4,8]
+        dh[:,9,4] = - dh[:,4,9]
 
         # dd
         h[5,5] = 3.0 * l^2 * m^2 * hh[8] + (l^2 + m^2 - 4.0 * l^2 * m^2) * hh[9] + (n^2 + l^2 * m^2) * hh[10]
@@ -1066,8 +1095,6 @@ function mat_local_dh!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,3}
         h[9,7] = h[7,9]
         h[9,8] = h[8,9]
 		
-		=#
-        throw(ArgumentError("the numbers of atomic orbitals and bond types do not match!"))
     else
         throw(ArgumentError("the numbers of atomic orbitals and bond types do not match!"))
     end

@@ -515,9 +515,9 @@ function band_structure(at::ASEAtoms, tbm::TBModel)
     # TightBinding.update_eF!(at, tbm)
 
     K, weight = monkhorstpackgrid(at, tbm)
-    E = zeros(3, size(K,2))
-        Ne = tbm.norbitals * length(at)
-        nf = round(Int, ceil(Ne/2))
+    E = zeros(4, size(K,2))
+    Ne = tbm.norbitals * length(at)
+    nf = round(Int, ceil(Ne/2))
 
     for n = 1:size(K, 2)
         k = K[:, n]
@@ -525,6 +525,7 @@ function band_structure(at::ASEAtoms, tbm::TBModel)
         E[1,n] = epsn_k[nf-1]
         E[2,n] = epsn_k[nf]
         E[3,n] = epsn_k[nf+1]
+        E[4,n] = epsn_k[nf+2]
     end
 
     return K, E
