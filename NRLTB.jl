@@ -188,7 +188,7 @@ end
 #    Mc : change NRL's 5.0 to 10.0
 
 #function cutoff_NRL(r, Rc, lc; Mc=5.0)
-#    fcut = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc ))) .* (r .<= Rc) 
+#    fcut = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc ))) .* (r .<= Rc) #    return fcut
 #    return fcut
 #end
 
@@ -381,8 +381,14 @@ end
 ## hopping terms in M(OVERLAP)
 
 @inline m_hop(R, bond_type, elem::NRLParams) =
-    ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R)
+    ( ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R) * R)  )
       * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+
+@inline m_hop_csi(R, bond_type, elem::NRLParams) =
+    ( ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) 
+      + (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R) * R )
+      * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+
 
 
 function m_hop!(R::Float64, elem::NRLParams, temp)
@@ -409,6 +415,25 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
 			(p + q*R + r*R^2) * dcR )
     return mαβγ
 end
+
+# first order derivative for C & Si
+function dR_m_hop_csi(R, bond_type, elem::NRLParams)
+    Rc = elem.Rc
+    lc = elem.lc
+    p = elem.p[bond_type]
+    q = elem.q[bond_type]
+    r = elem.r[bond_type]
+    s = elem.s[bond_type]
+    cR = cutoff_NRL(R, Rc, lc)
+    dcR = d_cutoff_NRL(R, Rc, lc)
+    mαβγ = exp(-s^2*R) * ( (p + 2*q*R + 2*r*R*R) * cR - 
+			s^2 * (p*R + q*R^2 + r*R^3) * cR + 
+			(p*R + q*R^2 + r*R^3) * dcR )
+    return mαβγ
+end
+
+
+
 
 
 @inline mat_local_h!(r::Float64, R::Vector{Float64}, elem::NRLParams, h, temp) =
@@ -1665,22 +1690,60 @@ end
 # SILICON
 # 'Si' : silicon with s&p orbitals
 # reduce Rc = 12.5 to 7.5
-Si_sp  =  NRLParams( 4, 4,			# norbital, nbond
+Si_sp  =  NRLParams( 4, 4,			    # norbital, nbond
                     12.5, 0.5,			# Rc, lc 
                     1.10356625153,		# λ
                     [-0.053233461902  0.357859715265  0.357859715265  0.357859715265],  	#a
                     [-0.907642743185  0.303647693101  0.303647693101  0.303647693101],   	#b
                     [-8.83084913674   7.09222903560   7.09222903560   7.09222903560],     	#c
-                    [56.5661321469    -77.4785508399  -77.4785508399  -77.4785508399],      	#d
+                    [56.5661321469    -77.4785508399  -77.4785508399  -77.4785508399],     	#d
                     [219.560813651    10.127687621    -22.959028107   10.265449263],  		#e
                     [-16.2132459618   -4.4036811240   1.7207707741   4.6718241428],   		#f
                     [-15.5048968097   0.2266767834   1.4191307713   -2.2161562721],   		#g
                     [1.26439940008   0.92267194054   1.03136916513   1.11134828469],  		#h
                     [5.157587186     8.873646665     11.250489009   -692.184231145],    	#p
                     [0.660009308     -16.240770475  -1.1701322929    396.153248956],    	#q
-                    [-0.0815441307   5.1822969049   -1.0591485021   -13.8172106270],            #r
+                    [-0.0815441307   5.1822969049   -1.0591485021   -13.8172106270],        #r
                     [1.10814448800   1.24065238343   1.13762861032   1.57248559510],  		#s
                    )
+
+
+
+# SILICON
+# 'Si' : silicon with s&p&d orbitals  :BUT: ignore d-d orbital interactions
+# when this is used, one has to revise m_hop to
+# (... || bond_type == 8 || bond_type == 9|| bond_type == 10) ? 0.0 : 1.0
+# reduce Rc = 12.5 to 7.5
+Si_spd  =  NRLParams(9, 10,			# norbital, nbond
+                     12.5, 0.5,		# Rc, lc
+                     1.1108,		# λ
+                     [-0.0555,  0.4127,   0.4127,   0.4127,
+                      0.9691,   0.9691,   0.9691,   0.9691,  0.9691],         	#a
+                     [-1.1131,  -0.0907,  -0.0907,  -0.0907,
+                      -0.9151,  -0.9151,  -0.9151,  -0.9151, -0.9151],       	#b
+                     [-7.3201,  5.3155,   5.3155,   5.3155,
+                      -5.9743,  -5.9743,  -5.9743,  -5.9743, -5.9743],  	    #c
+                     [74.8905,  -44.0417, -44.0417, -44.0417,
+                      602.0289, 602.0289, 602.0289, 602.0289, 602.0289],       	#d
+
+                     [234.6937,   9.5555,  -22.6782,   -1.5942,  -7571.4416,
+                      -1.8087,   0.8933,  0.0,   0.0,  0.0],				    #e
+                     [-18.6013,   -4.1279,   1.3611,   4.7914,   2.2354,
+                      -3.4695,   0.1058,  0.0,  0.0,  0.0],                     #f
+                     [-15.0266,   0.2499,    1.3879,   -1.5693,   7.0122,
+                      -7.7637,   -0.0224, 0.0,  0.0,  0.0],                     #g
+                     [1.2502,    0.8761,    1.01655,    1.1030,   1.6234,
+                      1.6294,   0.8217,   0.0,  0.0,  0.0],                     #h
+
+                     [2.4394,   -12.0027,  13.9608,   188.0012,   11.4724,
+                      -0.6071,  -2.1340,   0.0,  0.0,  0.0],                    #p
+                     [0.9091,   -14.6860,  -1.1961,  -143.3625,  -0.4454,
+                      0.05789,  -0.5209,   0.0,  0.0,  0.0],                    #q
+                     [-0.0749,   6.1856,   -1.2606,   33.5043,   -0.5838,
+                      0.0221,   -0.0948,   0.0,  0.0,  0.0],                    #r
+                     [1.0590,   1.2218,    1.1118,    1.4340,   1.0598,
+                      0.8130,   1.0580,    0.0,  0.0,  0.0],                    #s
+                    )
 
 
 
@@ -1688,7 +1751,7 @@ Si_sp  =  NRLParams( 4, 4,			# norbital, nbond
 # CARBON
 # 'C' : carbon with s&p orbitals
 # reduce Rc = 10.5 to 6.0
-C_sp  =  NRLParams( 4, 4,			# norbital, nbond
+C_sp  =  NRLParams( 4, 4,			    # norbital, nbond
                     10.5, 0.5,			# Rc, lc 
                     1.59901905594,		# λ
                     [-0.102789972814  0.542619178314  0.542619178314  0.542619178314],  	#a
@@ -1701,7 +1764,7 @@ C_sp  =  NRLParams( 4, 4,			# norbital, nbond
                     [1.41100521808   1.16878908431   1.13627440135   1.36548919302],  		#h
                     [0.18525064246   1.85250642463   -1.29666913067   0.74092406925],   	#p
                     [1.56010486948   -2.50183774417   0.28270660019   -0.07310263856],  	#q
-                    [-0.308751658739   0.178540723033   -0.022234235553   0.016694077196],      #r
+                    [-0.308751658739   0.178540723033   -0.022234235553   0.016694077196],  #r
                     [1.13700564649   1.12900344616   0.76177690688   1.02148246334],  		#s
                    )
 
@@ -1710,8 +1773,8 @@ C_sp  =  NRLParams( 4, 4,			# norbital, nbond
 # ALUMINIUM
 # 'Al' : Aluminum with s&p&d orbitals
 # reduce Rc = 16.5 to 9.5
-Al_spd  =  NRLParams(9, 10,			# norbital, nbond
-                     16.5, 0.5,			# Rc, lc
+Al_spd  =  NRLParams(9, 10,			        # norbital, nbond
+                     16.5, 0.5,		    	# Rc, lc
                      1.108515601511,		# λ
                      [-0.0368090795665,  0.394060871550,  0.394060871550,  0.394060871550,
                       1.03732517161,  1.03732517161,  1.03732517161, 1.03732517161, 1.03732517161],         	#a
