@@ -380,11 +380,11 @@ end
 
 ## hopping terms in M(OVERLAP)
 
-@inline m_hop(R, bond_type, elem::NRLParams) =
+@inline m_hop_al(R, bond_type, elem::NRLParams) =
     ( ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R) * R)  )
       * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
 
-@inline m_hop_csi(R, bond_type, elem::NRLParams) =
+@inline m_hop(R, bond_type, elem::NRLParams) =
     ( ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) 
       + (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R) * R )
       * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
@@ -401,7 +401,7 @@ end
 
 
 # first order derivative
-function dR_m_hop(R, bond_type, elem::NRLParams)
+function dR_m_hop_al(R, bond_type, elem::NRLParams)
     Rc = elem.Rc
     lc = elem.lc
     p = elem.p[bond_type]
@@ -417,7 +417,7 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
 end
 
 # first order derivative for C & Si
-function dR_m_hop_csi(R, bond_type, elem::NRLParams)
+function dR_m_hop(R, bond_type, elem::NRLParams)
     Rc = elem.Rc
     lc = elem.lc
     p = elem.p[bond_type]
@@ -426,9 +426,9 @@ function dR_m_hop_csi(R, bond_type, elem::NRLParams)
     s = elem.s[bond_type]
     cR = cutoff_NRL(R, Rc, lc)
     dcR = d_cutoff_NRL(R, Rc, lc)
-    mαβγ = exp(-s^2*R) * ( (p + 2*q*R + 2*r*R*R) * cR - 
-			s^2 * (p*R + q*R^2 + r*R^3) * cR + 
-			(p*R + q*R^2 + r*R^3) * dcR )
+    mαβγ = exp(-s^2*R) * ( (p + 2*q*R + 3*r*R*R) * cR - 
+			s^2 * ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * cR + 
+			( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * dcR )
     return mαβγ
 end
 
