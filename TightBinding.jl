@@ -240,7 +240,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	nx = Int(kx/2) + 1
 	ny = Int(ky/2) + 1
 	nz = Int(kz/2) + 1
-	N = nx * ny * nz
+	N = kx * ky * kz
 	K = zeros(3, N)
 	weight = zeros(N)
 
@@ -249,11 +249,11 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	kz_step = b3 / (kz==0? 1:kz)
     w_step = 1.0 / ( (kx==0? 1:kx) * (ky==0? 1:ky) * (kz==0? 1:kz) )
 	# evaluate K and weight
-   	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
-		k = k1 + (k2-1) * nx + (k3-1) * nx * ny
-        K[:,k] = (k1-1) * kx_step + (k2-1) * ky_step + (k3-1) * kz_step
+   	for k1 = 1:kx, k2 = 1:ky, k3 = 1:kz
+		k = k1 + (k2-1) * kx + (k3-1) * kx * ky
+        K[:,k] = (k1-kx/2) * kx_step + (k2-ky/2) * ky_step + (k3-kz/2) * kz_step
 		# adjust weight by symmetry
-		weight[k] = w_step * 8.0
+		weight[k] = w_step #= * 8.0
     	if k1 == 1 || k1 == nx
 			weight[k] = weight[k] / 2.0
 		end
@@ -262,7 +262,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 		end
     	if k3 == 1 || k3 == nz
 			weight[k] = weight[k] / 2.0
-		end
+		end =#
     end
 	#print(K); println("\n"); print(weight); println("\n")
 	#println("sum_weight = "); print(sum(weight))
@@ -515,7 +515,7 @@ function band_structure(at::ASEAtoms, tbm::TBModel)
     # TightBinding.update_eF!(at, tbm)
 
     K, weight = monkhorstpackgrid(at, tbm)
-    E = zeros(4, size(K,2))
+    E = zeros(8, size(K,2))
     Ne = tbm.norbitals * length(at)
     nf = round(Int, ceil(Ne/2))
 
@@ -526,6 +526,10 @@ function band_structure(at::ASEAtoms, tbm::TBModel)
         E[2,n] = epsn_k[nf]
         E[3,n] = epsn_k[nf+1]
         E[4,n] = epsn_k[nf+2]
+        E[5,n] = epsn_k[nf+3]
+        E[6,n] = epsn_k[nf+4]
+        E[7,n] = epsn_k[nf+5]
+        E[8,n] = epsn_k[nf+6]
     end
 
     return K, E
@@ -607,16 +611,18 @@ end
 function forces(atm::ASEAtoms, tbm::TBModel)
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
-    # allocate output
-    frc = zeros(3, length(atm))
-
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
-    for iK = 1:size(K,2)
+    # allocate output
+    # frc = zeros(3, length(atm), size(K,2))
+    frc = zeros(3, length(atm))
+
+   for iK = 1:size(K,2)
         frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
+        # frc[:,:, iK] =  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
     end
     return frc
 end

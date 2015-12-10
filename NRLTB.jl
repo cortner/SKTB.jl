@@ -53,6 +53,7 @@ type NRLParams
     q::Array{Float64}
     r::Array{Float64}
     s::Array{Float64}
+    t::Array{Float64}
 end
 
 
@@ -380,14 +381,19 @@ end
 
 ## hopping terms in M(OVERLAP)
 
-@inline m_hop_al(R, bond_type, elem::NRLParams) =
-    ( ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R) * R)  )
-      * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+# @inline m_hop_Al(R, bond_type, elem::NRLParams) =
+#     ( ( (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R) * R)  )
+#       * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+#
+# @inline m_hop_C_Si(R, bond_type, elem::NRLParams) =
+#     ( ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) 
+#       + (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R) * R )
+#       * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
 
 @inline m_hop(R, bond_type, elem::NRLParams) =
-    ( ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) 
-      + (elem.p[bond_type] + (elem.q[bond_type] + elem.r[bond_type]*R)*R) * R )
-      * exp(-elem.s[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+    ( ( elem.p[bond_type] + (elem.q[bond_type] + (elem.r[bond_type] + elem.s[bond_type] * R) * R) * R )
+      * exp(-elem.t[bond_type]^2*R) * cutoff_NRL(R, elem.Rc, elem.lc) )
+
 
 
 
@@ -401,22 +407,38 @@ end
 
 
 # first order derivative
-function dR_m_hop_al(R, bond_type, elem::NRLParams)
-    Rc = elem.Rc
-    lc = elem.lc
-    p = elem.p[bond_type]
-    q = elem.q[bond_type]
-    r = elem.r[bond_type]
-    s = elem.s[bond_type]
-    cR = cutoff_NRL(R, Rc, lc)
-    dcR = d_cutoff_NRL(R, Rc, lc)
-    mαβγ = exp(-s^2*R) * ( (q + 2*r*R) * cR - 
-			s^2 * (p + q*R + r*R^2) * cR + 
-			(p + q*R + r*R^2) * dcR )
-    return mαβγ
-end
+# function dR_m_hop_Al(R, bond_type, elem::NRLParams)
+#    Rc = elem.Rc
+#    lc = elem.lc
+#    p = elem.p[bond_type]
+#    q = elem.q[bond_type]
+#    r = elem.r[bond_type]
+#    s = elem.s[bond_type]
+#    cR = cutoff_NRL(R, Rc, lc)
+#    dcR = d_cutoff_NRL(R, Rc, lc)
+#    mαβγ = exp(-s^2*R) * ( (q + 2*r*R) * cR - 
+#			s^2 * (p + q*R + r*R^2) * cR + 
+#			(p + q*R + r*R^2) * dcR )
+#    return mαβγ
+# end
 
 # first order derivative for C & Si
+# function dR_m_hop_C_Si(R, bond_type, elem::NRLParams)
+#    Rc = elem.Rc
+#    lc = elem.lc
+#    p = elem.p[bond_type]
+#    q = elem.q[bond_type]
+#    r = elem.r[bond_type]
+#    s = elem.s[bond_type]
+#    cR = cutoff_NRL(R, Rc, lc)
+#    dcR = d_cutoff_NRL(R, Rc, lc)
+#    mαβγ = exp(-s^2*R) * ( (p + 2*q*R + 3*r*R*R) * cR - 
+#			s^2 * ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * cR + 
+#			( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * dcR )
+#    return mαβγ
+# end
+
+# first order derivative
 function dR_m_hop(R, bond_type, elem::NRLParams)
     Rc = elem.Rc
     lc = elem.lc
@@ -424,13 +446,15 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
     q = elem.q[bond_type]
     r = elem.r[bond_type]
     s = elem.s[bond_type]
+    t = elem.t[bond_type]
     cR = cutoff_NRL(R, Rc, lc)
     dcR = d_cutoff_NRL(R, Rc, lc)
-    mαβγ = exp(-s^2*R) * ( (p + 2*q*R + 3*r*R*R) * cR - 
-			s^2 * ( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * cR + 
-			( ((bond_type == 2 || bond_type == 5 || bond_type == 6 || bond_type == 7) ? 0.0 : 1.0) + p*R + q*R^2 + r*R^3) * dcR )
+    mαβγ = exp(-t^2*R) * ( (q + 2*r*R + 3*s*R^2) * cR - 
+			t^2 * (p + q*R + r*R^2 + s*R^3) * cR + 
+			(p + q*R + r*R^2 + s*R^3) * dcR )
     return mαβγ
 end
+
 
 
 
@@ -1701,18 +1725,17 @@ Si_sp  =  NRLParams( 4, 4,			    # norbital, nbond
                     [-16.2132459618   -4.4036811240   1.7207707741   4.6718241428],   		#f
                     [-15.5048968097   0.2266767834   1.4191307713   -2.2161562721],   		#g
                     [1.26439940008   0.92267194054   1.03136916513   1.11134828469],  		#h
-                    [5.157587186     8.873646665     11.250489009   -692.184231145],    	#p
-                    [0.660009308     -16.240770475  -1.1701322929    396.153248956],    	#q
-                    [-0.0815441307   5.1822969049   -1.0591485021   -13.8172106270],        #r
-                    [1.10814448800   1.24065238343   1.13762861032   1.57248559510],  		#s
+                    [1.0 		     0.0     		 1.0 			 1.0],			    	#p
+                    [5.157587186     8.873646665     11.250489009   -692.184231145],    	#q
+                    [0.660009308     -16.240770475  -1.1701322929    396.153248956],    	#r
+                    [-0.0815441307   5.1822969049   -1.0591485021   -13.8172106270],        #s
+                    [1.10814448800   1.24065238343   1.13762861032   1.57248559510],  		#t
                    )
 
 
 
 # SILICON
 # 'Si' : silicon with s&p&d orbitals  :BUT: ignore d-d orbital interactions
-# when this is used, one has to revise m_hop to
-# (... || bond_type == 8 || bond_type == 9|| bond_type == 10) ? 0.0 : 1.0
 # reduce Rc = 12.5 to 7.5
 Si_spd  =  NRLParams(9, 10,			# norbital, nbond
                      12.5, 0.5,		# Rc, lc
@@ -1735,14 +1758,16 @@ Si_spd  =  NRLParams(9, 10,			# norbital, nbond
                      [1.2502,    0.8761,    1.01655,    1.1030,   1.6234,
                       1.6294,   0.8217,   0.0,  0.0,  0.0],                     #h
 
+                     [1.0,   0.0,  1.0,   1.0,   0.0,
+                      0.0,   0.0,  1.0,   1.0,   1.0],		                    #p
                      [2.4394,   -12.0027,  13.9608,   188.0012,   11.4724,
-                      -0.6071,  -2.1340,   0.0,  0.0,  0.0],                    #p
+                      -0.6071,  -2.1340,   0.0,  0.0,  0.0],                    #q
                      [0.9091,   -14.6860,  -1.1961,  -143.3625,  -0.4454,
-                      0.05789,  -0.5209,   0.0,  0.0,  0.0],                    #q
+                      0.05789,  -0.5209,   0.0,  0.0,  0.0],                    #r
                      [-0.0749,   6.1856,   -1.2606,   33.5043,   -0.5838,
-                      0.0221,   -0.0948,   0.0,  0.0,  0.0],                    #r
+                      0.0221,   -0.0948,   0.0,  0.0,  0.0],                    #s
                      [1.0590,   1.2218,    1.1118,    1.4340,   1.0598,
-                      0.8130,   1.0580,    0.0,  0.0,  0.0],                    #s
+                      0.8130,   1.0580,    0.0,  0.0,  0.0],                    #t
                     )
 
 
@@ -1762,10 +1787,11 @@ C_sp  =  NRLParams( 4, 4,			    # norbital, nbond
                     [-18.3225697598   3.6163510241   1.0450894823   -5.0603652530],   		#f
                     [-12.5253007169   1.0416715714   1.5062731505   -3.6844386855],   		#g
                     [1.41100521808   1.16878908431   1.13627440135   1.36548919302],  		#h
-                    [0.18525064246   1.85250642463   -1.29666913067   0.74092406925],   	#p
-                    [1.56010486948   -2.50183774417   0.28270660019   -0.07310263856],  	#q
-                    [-0.308751658739   0.178540723033   -0.022234235553   0.016694077196],  #r
-                    [1.13700564649   1.12900344616   0.76177690688   1.02148246334],  		#s
+                    [1.0             0.0             1.0             1.0],              	#p
+                    [0.18525064246   1.85250642463   -1.29666913067   0.74092406925],   	#q
+                    [1.56010486948   -2.50183774417   0.28270660019   -0.07310263856],  	#r
+                    [-0.308751658739   0.178540723033   -0.022234235553   0.016694077196],  #s
+                    [1.13700564649   1.12900344616   0.76177690688   1.02148246334],  		#t
                    )
 
 
@@ -1800,8 +1826,10 @@ Al_spd  =  NRLParams(9, 10,			        # norbital, nbond
                       -6.65151229760,   -5.86527866863,   80.7470264719,   -6.54916621891,   23.2260645871],    #q
                      [-1.33002925172,   -0.523366384472,   -1.08061004452,   24.2658321255,   -1.86799882707,
                       0.195368101148,   0.725698443913,   -2.93711938026,   1.11096322734,   -0.538315401068],  #r
+                     [0.0,   0.0,   0.0,   0.0,   0.0,
+                      0.0,   0.0,   0.0,   0.0,   0.0],     													#s
                      [1.06584516722,   0.943623371617,   0.915429215594,   1.17753799190,   0.988337965212,
-                      0.873041790591,   0.999293973116,   1.02005972107,   1.01466433826,   1.14341718458],     #s
+                      0.873041790591,   0.999293973116,   1.02005972107,   1.01466433826,   1.14341718458],     #t
                     )
 
 
