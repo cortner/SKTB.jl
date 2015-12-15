@@ -337,6 +337,53 @@ end
 
 
 
+# use ForwardDiff to compute the gradient, hessian, ⋯⋯
+
+function get_dos_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,2})
+	nneig = size(R)[2]
+	norb = elem.Norbital
+	# dh = zeros(3*nneig, norb)
+	for j = 1:nneig
+		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
+	    h(x) = os_NRL(elem, ρ(x))
+		g = ForwardDiff.gradient(h)
+		dh[:,j] = g(R[:])
+	end
+	return dh
+end
+
+
+function get_d2os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,3})
+	nneig = size(R)[2]
+	norb = elem.Norbital
+	# dh = zeros(3*nneig, 3*nneig, norb)
+	for j = 1:nneig
+		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
+	    h(x) = os_NRL(elem, ρ(x))
+		g = ForwardDiff.hessian(h)
+		dh[:,:,j] = g(R[:])
+	end
+	return dh
+end
+
+
+function get_d3os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,4})
+	nneig = size(R)[2]
+	norb = elem.Norbital
+	# dh = zeros(3*nneig, 3*nneig, 3*nneig, norb)
+	for j = 1:nneig
+		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
+	    h(x) = os_NRL(elem, ρ(x))
+		g = ForwardDiff.tensor(h)
+		dh[:,:,j] = g(R[:])
+	end
+	return dh
+end
+
+
+
+
+
 ## hopping terms in H
 # INPUT
 # R         : |atom[l] - atom[k]|

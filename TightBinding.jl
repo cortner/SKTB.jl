@@ -20,7 +20,7 @@ import Potentials.evaluate, Potentials.evaluate_d
 
 export AbstractTBModel, SimpleFunction
 export TBModel, FermiDiracSmearing, potential_energy, forces, evaluate,
-potential_energy_d, site_energy, band_structure
+potential_energy_d, site_energy, band_structure_all, band_structure_near_eF
 
 
 abstract AbstractTBModel <: AbstractCalculator
@@ -240,6 +240,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	nx = Int(kx/2) + 1
 	ny = Int(ky/2) + 1
 	nz = Int(kz/2) + 1
+
 	N = kx * ky * kz
 	K = zeros(3, N)
 	weight = zeros(N)
@@ -253,7 +254,25 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 		k = k1 + (k2-1) * kx + (k3-1) * kx * ky
         K[:,k] = (k1-kx/2) * kx_step + (k2-ky/2) * ky_step + (k3-kz/2) * kz_step
 		# adjust weight by symmetry
-		weight[k] = w_step #= * 8.0
+		weight[k] = w_step
+    end
+	
+	#= TODO:  IF the following symmetry is exploited, 
+			then the force for a perfect lattice is not 0
+	N = nx * ny * nz
+	K = zeros(3, N)
+	weight = zeros(N)
+
+	kx_step = b1 / (kx==0? 1:kx)
+	ky_step = b2 / (ky==0? 1:ky)
+	kz_step = b3 / (kz==0? 1:kz)
+    w_step = 1.0 / ( (kx==0? 1:kx) * (ky==0? 1:ky) * (kz==0? 1:kz) )
+	# evaluate K and weight
+   	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
+		k = k1 + (k2-1) * nx + (k3-1) * nx * ny
+        K[:,k] = (k1-1) * kx_step + (k2-1) * ky_step + (k3-1) * kz_step
+		# adjust weight by symmetry
+		weight[k] = w_step * 8.0
     	if k1 == 1 || k1 == nx
 			weight[k] = weight[k] / 2.0
 		end
@@ -262,10 +281,13 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 		end
     	if k3 == 1 || k3 == nz
 			weight[k] = weight[k] / 2.0
-		end =#
+		end
     end
+	=#
+
 	#print(K); println("\n"); print(weight); println("\n")
 	#println("sum_weight = "); print(sum(weight))
+
     return K, weight
 end
 
@@ -508,7 +530,31 @@ end
 
 
 
-function band_structure(at::ASEAtoms, tbm::TBModel)
+function band_structure_all(at::ASEAtoms, tbm::TBModel)
+
+    update!(at, tbm)
+    # tbm.fixed_eF = false
+    # TightBinding.update_eF!(at, tbm)
+
+	na = length(at) * tbm.norbitals	
+    K, weight = monkhorstpackgrid(at, tbm)
+    E = zeros(na, size(K,2))
+    Ne = tbm.norbitals * length(at)
+    nf = round(Int, ceil(Ne/2))
+
+    for n = 1:size(K, 2)
+        k = K[:, n]
+        epsn_k = get_k_array(tbm, :epsn, k)
+		for j = 1:na
+	        E[j,n] = epsn_k[j]
+		end
+    end
+
+    return K, E
+end
+
+
+function band_structure_near_eF(at::ASEAtoms, tbm::TBModel)
 
     update!(at, tbm)
     # tbm.fixed_eF = false
@@ -522,14 +568,14 @@ function band_structure(at::ASEAtoms, tbm::TBModel)
     for n = 1:size(K, 2)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
-        E[1,n] = epsn_k[nf-1]
-        E[2,n] = epsn_k[nf]
-        E[3,n] = epsn_k[nf+1]
-        E[4,n] = epsn_k[nf+2]
-        E[5,n] = epsn_k[nf+3]
-        E[6,n] = epsn_k[nf+4]
-        E[7,n] = epsn_k[nf+5]
-        E[8,n] = epsn_k[nf+6]
+	    E[1,n] = epsn_k[nf-2]
+	    E[2,n] = epsn_k[nf-1]
+        E[3,n] = epsn_k[nf]
+        E[4,n] = epsn_k[nf+1]
+        E[5,n] = epsn_k[nf+2]
+        E[6,n] = epsn_k[nf+3]
+        E[7,n] = epsn_k[nf+4]
+        E[8,n] = epsn_k[nf+5]
     end
 
     return K, E
