@@ -337,16 +337,21 @@ end
 
 
 
-# use ForwardDiff to compute the gradient, hessian, ⋯⋯
+
+# Use ForwardDiff to compute the gradient, hessian, ⋯⋯
+# Note taht the functions "pseudoDensity" and "get_os" can not be used in ForwardDiff.
+# Also, we have to use "cutoff_NRL_fd" rather than "cutoff_NRL".
 
 function get_dos_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,2})
 	nneig = size(R)[2]
 	norb = elem.Norbital
 	# dh = zeros(3*nneig, norb)
-	for j = 1:nneig
-		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
-	    h(x) = os_NRL(elem, ρ(x))
-		g = ForwardDiff.gradient(h)
+	for j = 1:norb
+		# r(x) = sum( [ norm(x[3*k-2:3*k]) for k = 1:nneig] )
+	    ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
+		g = ForwardDiff.gradient(ρ)
 		dh[:,j] = g(R[:])
 	end
 	return dh
@@ -357,9 +362,10 @@ function get_d2os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,3})
 	nneig = size(R)[2]
 	norb = elem.Norbital
 	# dh = zeros(3*nneig, 3*nneig, norb)
-	for j = 1:nneig
-		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
-	    h(x) = os_NRL(elem, ρ(x))
+	for j = 1:norb
+		ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
 		g = ForwardDiff.hessian(h)
 		dh[:,:,j] = g(R[:])
 	end
@@ -371,11 +377,12 @@ function get_d3os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,4})
 	nneig = size(R)[2]
 	norb = elem.Norbital
 	# dh = zeros(3*nneig, 3*nneig, 3*nneig, norb)
-	for j = 1:nneig
-		ρ(x) = pseudoDensity(Float64[ norm(reshape(x,3,nneig)[:,k]) for k = 1:nneig], elem)
-	    h(x) = os_NRL(elem, ρ(x))
+	for j = 1:norb
+		ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
 		g = ForwardDiff.tensor(h)
-		dh[:,:,j] = g(R[:])
+		dh[:,:,:,j] = g(R[:])
 	end
 	return dh
 end
