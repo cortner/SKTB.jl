@@ -349,9 +349,9 @@ function get_dos_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,2})
 	for j = 1:norb
 		# r(x) = sum( [ norm(x[3*k-2:3*k]) for k = 1:nneig] )
 	    ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
-				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), elem.Rc, elem.lc )  for k = 1:nneig ] )
 		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
-		g = ForwardDiff.gradient(ρ)
+		g = ForwardDiff.gradient(h)
 		dh[:,j] = g(R[:])
 	end
 	return dh
@@ -364,7 +364,7 @@ function get_d2os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,3})
 	# dh = zeros(3*nneig, 3*nneig, norb)
 	for j = 1:norb
 		ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
-				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), elem.Rc, elem.lc )  for k = 1:nneig ] )
 		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
 		g = ForwardDiff.hessian(h)
 		dh[:,:,j] = g(R[:])
@@ -379,7 +379,7 @@ function get_d3os_fd(R::Array{Float64}, elem::NRLParams, dh::Array{Float64,4})
 	# dh = zeros(3*nneig, 3*nneig, 3*nneig, norb)
 	for j = 1:norb
 		ρ(x) = sum( [ exp( -elem.λ^2 * norm(x[3*k-2:3*k]) ) for k = 1:nneig ] .*
-				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), 10.0, 0.5 )  for k = 1:nneig ] )
+				 [ cutoff_NRL_fd( norm(x[3*k-2:3*k]), elem.Rc, elem.lc )  for k = 1:nneig ] )
 		h(x) = elem.a[j] + elem.b[j] * ρ(x)^(2/3) + elem.c[j] * ρ(x)^(4/3) + elem.d[j] * ρ(x)^2 
 		g = ForwardDiff.tensor(h)
 		dh[:,:,:,j] = g(R[:])
