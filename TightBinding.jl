@@ -237,21 +237,25 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	# We can exploit the symmetry of the BZ.
 	## NOTE THAT this is not necessarily first BZ and
     # THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
-	nx = Int(kx/2) + 1
-	ny = Int(ky/2) + 1
-	nz = Int(kz/2) + 1
+	#nx = Int(kx/2) + 1
+	#ny = Int(ky/2) + 1
+	#nz = Int(kz/2) + 1
 
-	N = kx * ky * kz
+	nx = (kx==0? 1:kx)
+	ny = (ky==0? 1:ky)
+	nz = (kz==0? 1:kz)
+	N = nx * ny * nz
 	K = zeros(3, N)
 	weight = zeros(N)
 
-	kx_step = b1 / (kx==0? 1:kx)
-	ky_step = b2 / (ky==0? 1:ky)
-	kz_step = b3 / (kz==0? 1:kz)
-    w_step = 1.0 / ( (kx==0? 1:kx) * (ky==0? 1:ky) * (kz==0? 1:kz) )
+	kx_step = b1 / nx
+	ky_step = b2 / ny
+	kz_step = b3 / nz
+    w_step = 1.0 / ( nx * ny * nz )
 	# evaluate K and weight
-   	for k1 = 1:kx, k2 = 1:ky, k3 = 1:kz
+   	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
 		k = k1 + (k2-1) * kx + (k3-1) * kx * ky
+		# TODO : check when kx==0 or ky==0 or kz==0
         K[:,k] = (k1-kx/2) * kx_step + (k2-ky/2) * ky_step + (k3-kz/2) * kz_step
 		# adjust weight by symmetry
 		weight[k] = w_step
@@ -282,8 +286,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
     	if k3 == 1 || k3 == nz
 			weight[k] = weight[k] / 2.0
 		end
-    end
-	=#
+    end 	=#
 
 	#print(K); println("\n"); print(weight); println("\n")
 	#println("sum_weight = "); print(sum(weight))
@@ -1033,12 +1036,13 @@ end
 
 
 
-############## Hessian and Higher-oerder derivatives for site energy #################
 
+############## Hessian and Higher-oerder derivatives for site energy #################
+# by using 2n+1 theorem
 # site_hessian always returns a complete hessian, i.e. dEs = ( d × Natm )^2
 # comparing with site_force,  idx is a number rather than an array
 
-function site_hessian(idx::Int, atm::ASEAtoms, tbm::TBModel)
+function hessian(idx::Int, atm::ASEAtoms, tbm::TBModel)
 
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
@@ -1061,7 +1065,7 @@ end
 
 
 
-function site_hessian_k(idx::Int, X::Matrix{Float64},
+function hessian_k(idx::Int, X::Matrix{Float64},
                        tbm::TBModel, nlist, k::Vector{Float64};
                        beta = ones(size(X,2)))
     # obtain the precomputed arrays
