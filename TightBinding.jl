@@ -141,7 +141,6 @@ function set_eF!(fd::FermiDiracSmearing, eF)
 end
 
 
-
 """`ZeroTemperature`:
 
 TODO
@@ -149,9 +148,6 @@ TODO
 type ZeroTemperature <: SmearingFunction
     eF
 end
-
-
-# TODO: need a function that determines the Fermi Level!
 
 
 function full_hermitian(A)
@@ -196,7 +192,9 @@ get_k_array(tbm, symbol, k) = get_array(tbm, (symbol, k))
 
 
  """`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the
-computational cell defined by `cell` and `nkpoints`. Returns
+computational cell defined by `cell` and `nkpoints`.
+MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0.
+Returns
 
 ### Parameters
 
@@ -232,11 +230,9 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	b1 = 2 * π * c23 / dot(v1,c23)
 	b2 = 2 * π * c31 / dot(v2,c31)
 	b3 = 2 * π * c12 / dot(v3,c12)
-	## MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2}
-	# with shift = 0.0.
+
 	# We can exploit the symmetry of the BZ.
-	## NOTE THAT this is not necessarily first BZ and
-    # THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
+	# TODO: NOTE THAT this is not necessarily first BZ and THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
 	#nx = Int(kx/2) + 1
 	#ny = Int(ky/2) + 1
 	#nz = Int(kz/2) + 1
@@ -255,18 +251,18 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	# evaluate K and weight
    	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
 		k = k1 + (k2-1) * kx + (k3-1) * kx * ky
-		# TODO : check when kx==0 or ky==0 or kz==0
-        K[:,k] = (k1-kx/2) * kx_step + (k2-ky/2) * ky_step + (k3-kz/2) * kz_step
+		# check when kx==0 or ky==0 or kz==0
+        #K[:,k] = (k1-(kx/2)) * kx_step + (k2-(ky/2)) * ky_step + (k3-(kz/2)) * kz_step
+        K[:,k] = (k1-(kx==0? nx:(kx/2))) * kx_step + (k2-(ky==0?ny:(ky/2))) * ky_step + (k3-(kz==0?nz:(kz/2))) * kz_step
 		# adjust weight by symmetry
 		weight[k] = w_step
     end
-	
-	#= TODO:  IF the following symmetry is exploited, 
+
+	#= TODO: IF the following symmetry is exploited,
 			then the force for a perfect lattice is not 0
 	N = nx * ny * nz
 	K = zeros(3, N)
 	weight = zeros(N)
-
 	kx_step = b1 / (kx==0? 1:kx)
 	ky_step = b2 / (ky==0? 1:ky)
 	kz_step = b3 / (kz==0? 1:kz)
@@ -287,7 +283,6 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 			weight[k] = weight[k] / 2.0
 		end
     end 	=#
-
 	#print(K); println("\n"); print(weight); println("\n")
 	#println("sum_weight = "); print(sum(weight))
 
@@ -539,7 +534,7 @@ function band_structure_all(at::ASEAtoms, tbm::TBModel)
     # tbm.fixed_eF = false
     # TightBinding.update_eF!(at, tbm)
 
-	na = length(at) * tbm.norbitals	
+	na = length(at) * tbm.norbitals
     K, weight = monkhorstpackgrid(at, tbm)
     E = zeros(na, size(K,2))
     Ne = tbm.norbitals * length(at)
@@ -557,28 +552,26 @@ function band_structure_all(at::ASEAtoms, tbm::TBModel)
 end
 
 
-function band_structure_near_eF(at::ASEAtoms, tbm::TBModel)
+# get 2*Nb+1 bands around the fermi level
+function band_structure_near_eF(Nb, at::ASEAtoms, tbm::TBModel)
 
     update!(at, tbm)
     # tbm.fixed_eF = false
     # TightBinding.update_eF!(at, tbm)
 
     K, weight = monkhorstpackgrid(at, tbm)
-    E = zeros(8, size(K,2))
+    E = zeros(2*Nb+1, size(K,2))
     Ne = tbm.norbitals * length(at)
     nf = round(Int, ceil(Ne/2))
 
     for n = 1:size(K, 2)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
-	    E[1,n] = epsn_k[nf-2]
-	    E[2,n] = epsn_k[nf-1]
-        E[3,n] = epsn_k[nf]
-        E[4,n] = epsn_k[nf+1]
-        E[5,n] = epsn_k[nf+2]
-        E[6,n] = epsn_k[nf+3]
-        E[7,n] = epsn_k[nf+4]
-        E[8,n] = epsn_k[nf+5]
+        E[Nb+1,n] = epsn_k[nf]
+		for j = 1:Nb
+		    E[Nb+1-j,n] = epsn_k[nf-j]
+		    E[Nb+1+j,n] = epsn_k[nf+j]
+		end
     end
 
     return K, E
@@ -652,7 +645,6 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
     end  #  sites-loop
 
     return frc
-
 end
 
 
@@ -701,7 +693,7 @@ function forces_(atm::ASEAtoms, tbm::TBModel)
     end
     df::Matrix{Float64}
     dfe::Matrix{Float64}
-    
+
     # pre-allocate dH, with a (dumb) initial guess for the size
     const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
     const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
@@ -829,7 +821,7 @@ function site_energy(l::Integer, atm::ASEAtoms, tbm::TBModel)
 
 		I = indexblock(l, tbm)
 		for j = 1:tbm.norbitals
-			# the first component of the following line should be conjugate 
+			# the first component of the following line should be conjugate
 			Es += weight[n] * r_sum(real(f .* slice(C, I[j], :) .* slice(MC, I[j], :)))
 			# Es += weight[n] * r_sum( f .* (slice(C, I[j], :) .* slice(MC, I[j], :)) )
 		end
@@ -864,7 +856,7 @@ function site_forces(idx::Array{Int,1}, atm::ASEAtoms, tbm::TBModel)
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
     for iK = 1:size(K,2)
-        sfrc +=  weight[iK] * 
+        sfrc +=  weight[iK] *
             real(site_forces_k(idx, X, tbm, nlist, K[:,iK]))
     end
 
@@ -1037,12 +1029,126 @@ end
 
 
 
-############## Hessian and Higher-oerder derivatives for site energy #################
-# by using 2n+1 theorem
-# site_hessian always returns a complete hessian, i.e. dEs = ( d × Natm )^2
-# comparing with site_force,  idx is a number rather than an array
 
-function hessian(idx::Int, atm::ASEAtoms, tbm::TBModel)
+############## Hessian and Higher-oerder derivatives for site energy #################
+
+
+
+
+
+
+# For a given s and a given k-point, returns ψ_{s,n} for all n∈{1,⋯,d×Natm}
+# Input
+#	 s : which eigenstate
+#	 k : k-point
+# Output
+#	 psi_s_n : ψ_{s,n} for all n, a 3 × Natm × Nelc matrix
+# Algorithm
+#    ψ_{s,n} = ∑_{t,ϵ_t≠ϵ_s} ψ_t < ψ_t | ϵ_s⋅M_{,n} - H_{,n} | ψ_s > / (ϵ_t-ϵ_s)
+#				- 1/2 ∑_{t,ϵ_t=ϵ_s} ψ_t < ψ_t | M_{,n} | ψ_s >
+#
+#    Step 1. compute  g_s_n = (ϵ_s⋅M_{,n} - H_{,n}) ⋅ ψ_s
+#    		and  f_s_n = M_{,n} ⋅ ψ_s
+#    Step 2. (C' * g) ./ (epsilon - epsilon[s])
+# 			with the second part added in the loop for ϵ_t =≠ ϵ_s
+
+function d_eigenstate_k(Int::s, atm::ASEAtoms, tbm::TBModel, k::Vector{Float64})
+
+	# obtain the precomputed arrays
+    X = positions(atm)
+    epsn = get_k_array(tbm, :epsn, k)
+    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
+
+	# some constant parameters
+    Nelc = length(epsn)
+	Natm = length(atm)
+    Norb = tbm.norbitals
+	nlist = NeighbourList(cutoff(tbm), atm)
+    Nneig = 6
+    for (n, neigs, r, R) in Sites(nlist)
+        if length(neigs) > Nneig
+            Nneig = length(neigs)
+        end
+    end
+
+	# allocate memory
+	psi_s_n = zeros(Float64, 3*Natm, Nelc)
+	g_s_n = zeros(Float64, 3, Natm, Nelc)
+	f_s_n = zeros(Float64, 3, Natm, Nelc)
+	const dH_nn = zeros(Float64, 3, Norb, Norb, Nneig)
+    const dH_nm = zeros(3, Norb, Norb)
+	const dM_nm = zeros(3, Norb, Norb)
+ 
+	# Step 1. loop through all atoms to compute g_s_n and f_s_n for all n 
+    for (n, neigs, r, R) in Sites(nlist)
+
+        In = indexblock(n, tbm)
+        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
+
+        # compute and store ∂H_nn/∂y_n (onsite terms) 
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
+
+        for i_n = 1:length(neigs)
+			m = neigs[i_n]
+	        Im = indexblock(m, tbm)
+ 			    
+            # compute and store ∂H_nm/∂y_m (hopping terms) and ∂M_nm/∂y_m
+            grad!(tbm.hop, r[i_n], R[:,i_n], dH_nm)
+            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            #dH_n[:,:,:,i_n] = dH_nm
+            #dM_n[:,:,:,i_n] = dM_nm
+
+			for d = 1:3
+				g_s_n[d, m, In] -= slice(dH_nn, d, :, :, i_n) * C[Im, s] 
+				g_s_n[d, n, In] += slice(dH_nn, d, :, :, i_n) * C[In, s] 
+
+                g_s_n[d, m, In] -= slice(dH_nm, d, :, :) * C[Im, s] # * eikr
+       	        g_s_n[d, n, In] += slice(dH_nm, d, :, :) * C[Im, s] # * eikr
+	
+                f_s_n[d, m, In] += epsn[s] * slice(dM_nm, d, :, :) * C[Im, s] # * eikr
+   	            f_s_n[d, n, In] -= epsn[s] * slice(dM_nm, d, :, :) * C[Im, s] # * eikr
+			end		# loop for dimension
+
+		end		# loop for neighbours
+	end		# loop for atomic sites
+
+
+	# Step 2. compute psi_s_n for all n 
+	gsn = reshape(g_s_n, 3*Natm, Nelc)
+	fsn = reshape(f_s_n, 3*Natm, Nelc)
+
+	diff_eps_inv = zeros(Float64, Nelc)
+	# loop through all orbitals to compute 1/(ϵ_t-ϵ_s) and add the second part of ψ_{s,n}
+	for t = 1:Nelc
+		if abs(epsn[t]-epsn[s]) > 1e-10
+        	diff_eps_inv[t] = 1.0/(epsn[t]-epsn[s])
+        else
+        	diff_eps_inv[t] = 0.0
+            psi_s_n -= 0.5 * ( C[:,t] * (fsn * C[:,t])' )'
+        end
+	end 	# loop for orbitals
+
+    # g = - (C' * gsn) ./ (epsilon - epsilon[s])	
+	gsn = gsn * C
+	for jj = 1 : Nelc
+		@simd for ii = 1 : 3*Natm
+			@inbounds gsn[ii,jj] *= diff_eps_inv[jj]
+        end
+    end
+	# add the first part of ψ_{s,n}
+	psi_s_n += ( C * (gsn * C )' )'
+
+	return reshape(psi_s_n, 3, Natm, Nelc)
+end
+
+
+
+
+
+
+# Using 2n+1 theorem
+# hessian always returns a complete hessian, i.e. dEs = ( d × Natm )^2
+function hessian(atm::ASEAtoms, tbm::TBModel)
 
     # tell tbm to update the spectral decompositions
     update!(atm, tbm)
@@ -1050,13 +1156,13 @@ function hessian(idx::Int, atm::ASEAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
 
     # allocate output
-    shes = zeros(Float64, 3*length(atm), 3*length(atm))
+    hes = zeros(Float64, 3*length(atm), 3*length(atm))
 
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
     X = positions(atm)
     for iK = 1:size(K,2)
-        shes +=  weight[iK] * 
+        shes +=  weight[iK] *
             real(site_hessian_k(idx, X, tbm, nlist, K[:,iK]))
     end
 
