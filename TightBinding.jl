@@ -120,11 +120,20 @@ type FermiDiracSmearing <: SmearingFunction
     eF
 end
 FermiDiracSmearing(beta;eF=0.0) = FermiDiracSmearing(beta, eF)
+
 # FD distribution and its derivative. both are vectorised implementations
 fermi_dirac(eF, beta, epsn) =
     2.0 ./ ( 1.0 + exp((epsn - eF) * beta) )
 fermi_dirac_d(eF, beta, epsn) =
     - fermi_dirac(eF, beta, epsn).^2 .* exp((epsn - eF) * beta) * beta / 2.0
+fermi_dirac_d2(eF, beta, epsn) =
+    fermi_dirac(eF, beta, epsn).^3 .* exp((epsn - eF) * 2.0 * beta) * beta^2 / 2.0 -
+    fermi_dirac(eF, beta, epsn).^2 .* exp((epsn - eF) * beta) * beta^2 / 2.0
+fermi_dirac_d3(eF, beta, epsn) =
+    - 12.0 * fermi_dirac(eF, beta, epsn).^4 .* exp((epsn - eF) * 3.0 * beta) * beta^3 / 16.0 +
+    12.0 * fermi_dirac(eF, beta, epsn).^3 .* exp((epsn - eF) * 2.0 * beta) * beta^3 / 8.0 -
+    fermi_dirac(eF, beta, epsn).^2 .* exp((epsn - eF) * beta) * beta^3 / 2.0 
+
 # Boilerplate to work with the FermiDiracSmearing type
 @inline evaluate(fd::FermiDiracSmearing, epsn) =
     fermi_dirac(fd.eF, fd.beta, epsn)
@@ -1037,13 +1046,18 @@ end
 
 
 
-# For a given s and a given k-point, returns ψ_{s,n} for all n∈{1,⋯,d×Natm}
+
+# For a given s and a given k-point, returns ψ_{s,n} and ϵ_{s,n} for all n∈{1,⋯,d×Natm}
 # Input
 #	 s : which eigenstate
 #	 k : k-point
 # Output
-#	 psi_s_n : ψ_{s,n} for all n, a 3 × Natm × Nelc matrix
+#	 psi_s_n : ψ_{s,n} for all n, a  3 × Natm × Nelc  matrix
+#	 eps_s_n : ϵ_{s,n} for all n, a  3 × Natm         matrix
+#
 # Algorithm
+#	 ϵ_{s,n} = < ψ_s | H_{,n} - ϵ_s * M,n | ψ_s >
+#
 #    ψ_{s,n} = ∑_{t,ϵ_t≠ϵ_s} ψ_t < ψ_t | ϵ_s⋅M_{,n} - H_{,n} | ψ_s > / (ϵ_t-ϵ_s)
 #				- 1/2 ∑_{t,ϵ_t=ϵ_s} ψ_t < ψ_t | M_{,n} | ψ_s >
 #
@@ -1052,22 +1066,21 @@ end
 #    Step 2. (C' * g) ./ (epsilon - epsilon[s])
 # 			with the second part added in the loop for ϵ_t =≠ ϵ_s
 
-function d_eigenstate_k(s::Int, atm::ASEAtoms, tbm::TBModel,
-			  X::Matrix{Float64}, nlist, Nneig::Int, k::Vector{Float64})
+function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::Int, 
+						k::Vector{Float64})
 
 	# obtain the precomputed arrays
-    # X = positions(atm)
     epsn = get_k_array(tbm, :epsn, k)
     C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
 
 	# some constant parameters
     Nelc = length(epsn)
-	Natm = length(atm)
+	Natm = size(X,2)
     Norb = tbm.norbitals
-	# nlist = NeighbourList(cutoff(tbm), atm)
 
 	# allocate memory
 	psi_s_n = zeros(Float64, 3*Natm, Nelc)
+	eps_s_n = zeros(Float64, 3*Natm)
 	g_s_n = zeros(Float64, 3, Natm, Nelc)
 	f_s_n = zeros(Float64, 3, Natm, Nelc)
 	const dH_nn = zeros(Float64, 3, Norb, Norb, Nneig)
@@ -1090,8 +1103,6 @@ function d_eigenstate_k(s::Int, atm::ASEAtoms, tbm::TBModel,
             # compute and store ∂H_nm/∂y_m (hopping terms) and ∂M_nm/∂y_m
             grad!(tbm.hop, r[i_n], R[:,i_n], dH_nm)
             grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
-            #dH_n[:,:,:,i_n] = dH_nm
-            #dM_n[:,:,:,i_n] = dM_nm
 
 			for d = 1:3
 				g_s_n[d, m, In] -= slice(dH_nn, d, :, :, i_n) * C[Im, s] 
@@ -1107,10 +1118,12 @@ function d_eigenstate_k(s::Int, atm::ASEAtoms, tbm::TBModel,
 		end		# loop for neighbours
 	end		# loop for atomic sites
 
-
-	# Step 2. compute psi_s_n for all n 
+	# Step 2. compute eps_s_n and psi_s_n for all n 
 	gsn = reshape(g_s_n, 3*Natm, Nelc)
 	fsn = reshape(f_s_n, 3*Natm, Nelc)
+
+	# compute ϵ_{s,n}
+	eps_s_n = C[:,s] * gsn'
 
 	diff_eps_inv = zeros(Float64, Nelc)
 	# loop through all orbitals to compute 1/(ϵ_t-ϵ_s) and add the second part of ψ_{s,n}
@@ -1133,7 +1146,7 @@ function d_eigenstate_k(s::Int, atm::ASEAtoms, tbm::TBModel,
 	# add the first part of ψ_{s,n}
 	psi_s_n += ( C * (gsn * C )' )'
 
-	return reshape(psi_s_n, 3, Natm, Nelc)
+	return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
 end
 
 
@@ -1161,9 +1174,10 @@ function hessian(atm::ASEAtoms, tbm::TBModel)
     end
 
     X = positions(atm)
+    # loop for all k-points
     for iK = 1:size(K,2)
         hessian +=  weight[iK] *
-            real(site_hessian_k(idx, X, tbm, nlist, Nneig, K[:,iK]))
+            real(site_hessian_k(X, tbm, nlist, Nneig, K[:,iK]))
     end
 
     return hessian
@@ -1172,47 +1186,86 @@ end
 
 
 # Using 2n+1 theorem to compute hessian for a given k-point
-function hessian_k(idx::Int, X::Matrix{Float64},
-                   tbm::TBModel, nlist, Nneig, k::Vector{Float64};
-                   beta = ones(size(X,2)))
+# E_{,n}  =  ∑_s ( f(ϵ_s) + ϵ_s * f'(ϵ_s) ) * ϵ_{s,n}
+# E_{,mn} =  ∑_s ( (2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ϵ_{s,m} * ϵ_{s,n} 
+#			 	   + ( f(ϵ_s) + ϵ_s * f'(ϵ_s) ) * ϵ_{s,mn} )
+# with 
+# ϵ_{s,mn} = <ψ_s|H_,{mn}|ψ_s> + <ψ_s|H_{,n}|ψ_{s,m}> + <ψ_s|H_{,m}|ψ_{s,n}>
+#
+# Output
+# 		hessian ∈ R^{ 3 × Natm × 3 × Natm}
+#
+function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64})
 
 	# some constant parameters
     Nelc = length(epsn)
-	Natm = length(atm)
+	Natm = size(X,2)
     Norb = tbm.norbitals
-	# nlist = NeighbourList(cutoff(tbm), atm)
 	# "nlist" and "Nneig" from parameters
+	eF = tbm.eF
+	beta = tbm.smearing.beta
 
     # obtain the precomputed arrays
     epsn = get_k_array(tbm, :epsn, k)
     C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
 
     # allocate output
-    const Hess = zeros(Complex{Float64}, 3*Natm, 3*Natm)
-    # pre-allocate dH, with a (dumb) initial guess for the size
-    const d2H_nn = zeros(Norb, Norb, 3*Nneig, 3*Nneig)
-    const d2H_nm = zeros(Norb, Norb)
-    const d2M_nm = zeros(Norb, Norb)
+    const Hess = zeros(Complex{Float64}, 3, Natm, 3, Natm)
+
+    # pre-allocate dH, note that all of them will be computed by ForwardDiff
+    const dH_nn  = zeros(3*Nneig, Norb)
+    const d2H_nn = zeros(3*Nneig, 3*Nneig, Norb)
+    const dH_nm  = zeros(3, Norb, Norb)
+    const d2H_nm = zeros(3, 3, Norb, Norb)
+    const dM_nm  = zeros(3, Norb, Norb)
+    const d2M_nm = zeros(3, 3, Norb, Norb)
+
+	const eps_s_n = zeros(Float64, 3, Natm)
+	const psi_s_n = zeros(Float64, 3, Natm, Nelc)
 
 	# precompute electron distribution function
-	f = tbm.smearing(epsn, tbm.eF) .* epsn
-    df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-    d2f = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+	# TODO: update potential.jl by adding @D2 and @D3 for smearing function
+	feps1 = 2.0 * fermi_dirac_d(eF, beta, epsn) + epsn .* fermi_dirac_d2(eF, beta, epsn)
+	feps2 = fermi_dirac(eF, beta, epsn) + epsn .* fermi_dirac_d(eF, beta, epsn)
 
-	# loop through all eigenstates
+	# loop through all eigenstates to compute the hessian
 	for s = 1 : Nelc
-	    # loop through all atoms
+		# compute ϵ_{s,n} and ψ_{s,n} 
+		eps_s_n, psi_s_n = d_eigenstate_k(s, tbm, X, nlist, Nneig, k) 
+	
+		# loop for the first part 
+		# (2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ϵ_{s,m} * ϵ_{s,n} 
+		for d1 = 1:3
+			for n1 = 1:Natm
+				for d2 = 1:3
+					for n2 = 1:Natm
+						Hess[d1, n1, d2, n2] += feps1[s] * eps_s_n[d1,n1] * eps_s_n[d2,n2] 
+					end
+				end
+			end
+		end
+
+	    # loop through all atoms for the second part 
     	for (n, neigs, r, R) in Sites(nlist)
         	In = indexblock(n, tbm)
 	        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
 
-        	evaluate_d2!(tbm.onsite, r, R, dH_nn)
+        	evaluate_fd1!(tbm.onsite, R, dH_nn)
+        	evaluate_fd2!(tbm.onsite, R, d2H_nn)
 
-			# precompute and store dH and dM
+			# loop through all neighbours of the n-th site
     	    for i_n = 1:length(neigs)
-        	    # compute and store ∂H_mn/∂y_n (hopping terms) and ∂M_mn/∂y_n
-            	evaluate_d2!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-        	    evaluate_d2!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+				m = neigs[i_n]
+		        Im = indexblock(m, tbm)
+ 
+        	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
+            	evaluate_fd1!(tbm.hop, -R[:,i_n], dH_nm)
+            	evaluate_fd2!(tbm.hop, -R[:,i_n], d2H_nm)
+        	    evaluate_fd1!(tbm.overlap, -R[:,i_n], dM_nm)
+        	    evaluate_fd2!(tbm.overlap, -R[:,i_n], d2M_nm)
+		
+
+
 			end		# loop for neighbours
 
     	end		# loop for atomic sites
