@@ -1102,7 +1102,7 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
  			    
             # compute and store ∂H_nm/∂y_m (hopping terms) and ∂M_nm/∂y_m
             grad!(tbm.hop, r[i_n], R[:,i_n], dH_nm)
-            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+            grad!(tbm.overlap, r[i_n], R[:,i_n], dM_nm)
 
 			for d = 1:3
 				g_s_n[d, m, In] -= slice(dH_nn, d, :, :, i_n) * C[Im, s] 
@@ -1123,7 +1123,7 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
 	fsn = reshape(f_s_n, 3*Natm, Nelc)
 
 	# compute ϵ_{s,n}
-	eps_s_n = C[:,s] * gsn'
+	eps_s_n = - C[:,s] * gsn'
 
 	diff_eps_inv = zeros(Float64, Nelc)
 	# loop through all orbitals to compute 1/(ϵ_t-ϵ_s) and add the second part of ψ_{s,n}
@@ -1190,11 +1190,14 @@ end
 # E_{,mn} =  ∑_s ( (2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ϵ_{s,m} * ϵ_{s,n} 
 #			 	   + ( f(ϵ_s) + ϵ_s * f'(ϵ_s) ) * ϵ_{s,mn} )
 # with 
-# ϵ_{s,mn} = <ψ_s|H_,{mn}|ψ_s> + <ψ_s|H_{,n}|ψ_{s,m}> + <ψ_s|H_{,m}|ψ_{s,n}>
+# ϵ_{s,mn} = <ψ_s|H_{,mn}-ϵM_{,mn}-ϵ_{,n}M_{,m}-ϵ_{,m}M_{,n}|ψ_s> 
+#				 + <ψ_s|H_{,n}-ϵ_{,n}M-ϵM_{,n}|ψ_{s,m}>
+#				 + <ψ_s|H_{,m}-ϵ_{,m}M-ϵM_{,m}|ψ_{s,n}>
 #
 # Output
 # 		hessian ∈ R^{ 3 × Natm × 3 × Natm}
-#
+# TODO: have not added e^ikr into the hamiltonian yet
+
 function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64})
 
 	# some constant parameters
@@ -1217,6 +1220,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
     const d2H_nn = zeros(3*Nneig, 3*Nneig, Norb)
     const dH_nm  = zeros(3, Norb, Norb)
     const d2H_nm = zeros(3, 3, Norb, Norb)
+    const M_nm   = zeros(Norb, Norb)
     const dM_nm  = zeros(3, Norb, Norb)
     const d2M_nm = zeros(3, 3, Norb, Norb)
 
@@ -1236,16 +1240,16 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 		# loop for the first part 
 		# (2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ϵ_{s,m} * ϵ_{s,n} 
 		for d1 = 1:3
-			for n1 = 1:Natm
+			for n = 1:Natm
 				for d2 = 1:3
-					for n2 = 1:Natm
-						Hess[d1, n1, d2, n2] += feps1[s] * eps_s_n[d1,n1] * eps_s_n[d2,n2] 
+					for m = 1:Natm
+						Hess[d1, n, d2, m] += feps1[s] * eps_s_n[d1,n] * eps_s_n[d2,m] 
 					end
 				end
 			end
 		end
 
-	    # loop through all atoms for the second part 
+	    # loop through all atoms for the second part, i.e. ϵ_{s,nm} 
     	for (n, neigs, r, R) in Sites(nlist)
         	In = indexblock(n, tbm)
 	        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
@@ -1259,15 +1263,56 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 		        Im = indexblock(m, tbm)
  
         	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
+            	evaluate!(tbm.overlap, r[m], R[:, m], M_nm)
             	evaluate_fd1!(tbm.hop, -R[:,i_n], dH_nm)
             	evaluate_fd2!(tbm.hop, -R[:,i_n], d2H_nm)
         	    evaluate_fd1!(tbm.overlap, -R[:,i_n], dM_nm)
         	    evaluate_fd2!(tbm.overlap, -R[:,i_n], d2M_nm)
 		
+				for d1 = 1:3
+					for d2 = 1:3
+						# contributions from hopping terms
+						Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
+						Hess[d1, m, d2, m] = Hess[d1, m, d2, m] +
+						Hess[d1, m, d2, n] = Hess[d1, m, d2, n] +
+						Hess[d1, n, d2, m] = Hess[d1, n, d2, m] +
+							 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
+							 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
+							 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+							 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+							 C[In, s]' * ( -slice(dH_nm, d1, :, :) 
+							 - eps_s_n[d1, n] * M_nm
+							 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
+							 C[In, s]' * ( slice(dH_nm, d2, :, :) 
+							 - eps_s_n[d2, m] * M_nm
+							 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
 
+						# contributions from onsite terms
+						Hess[d1, n, d2, m] = Hess[d1, n, d2, m] +
+						Hess[d1, m, d2, n] = Hess[d1, m, d2, n] +
+						
+						for i_m = 1:length(neigs)
+							mm = neigs[i_m]
+		    			    Imm = indexblock(mm, tbm)
+ 							# indecies in d2H and d2M
+							m1 = 3*(i_n-1) + d2
+							m2 = 3*(i_m-1) + d2
 
-			end		# loop for neighbours
+							# TODO: how to compute 2nd order derivativs when involve index n?
+							Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
+							
+							Hess[d1, m, d2, mm] = Hess[d1, m, d2, mm] +
+								 C[In, s] .* d2M_nn[m1, m2, :] .* C[Im,s] +
+								 C[In, s] .* ( dH_nn[m1, :] - eps_s_n[d1, n] * 
+								 ones(Norb) ) .* psi_s_n[d2, m, Im] +
+								 C[In, s] .* ( dH_nn[m2, :] - eps_s_n[d2, m] * 
+								 ones(Norb) ) .* psi_s_n[d1, n, Im]
+						end		# loop for neighbours i_m
 
+					end		# loop for d1
+				end		# loop for d2
+
+			end		# loop for neighbours i_n
     	end		# loop for atomic sites
     end		# loop for eigenstates
 
