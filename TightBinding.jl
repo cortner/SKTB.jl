@@ -1146,9 +1146,10 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
         end
     end
 	# add the first part of ψ_{s,n}
-	psi_s_n += ( C * (g_s_n * C )' )'
+	psi_s_n += ( C * g_s_n' )'
 
-	return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
+	return eps_s_n, psi_s_n
+	# return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
 end
 
 
