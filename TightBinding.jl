@@ -1079,11 +1079,11 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
     Norb = tbm.norbitals
 
 	# allocate memory
-	psi_s_n = zeros(Float64, 3*Natm, Nelc)
+	psi_s_n = zeros(Complex{Float64}, 3*Natm, Nelc)
 	eps_s_n = zeros(Float64, 3*Natm)
-	g_s_n = zeros(Float64, 3, Natm, Nelc)
-	f_s_n = zeros(Float64, 3, Natm, Nelc)
-	const dH_nn = zeros(Float64, 3, Norb, Norb, Nneig)
+	g_s_n = zeros(Complex{Float64}, 3*Natm, Nelc)
+	f_s_n = zeros(Complex{Float64}, 3*Natm, Nelc)
+	const dH_nn = zeros(3, Norb, Norb, Nneig)
     const dH_nm = zeros(3, Norb, Norb)
 	const dM_nm = zeros(3, Norb, Norb)
  
@@ -1105,25 +1105,27 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
             grad!(tbm.overlap, r[i_n], R[:,i_n], dM_nm)
 
 			for d = 1:3
-				g_s_n[d, m, In] -= slice(dH_nn, d, :, :, i_n) * C[Im, s] 
-				g_s_n[d, n, In] += slice(dH_nn, d, :, :, i_n) * C[In, s] 
+				md = d + 3*(m-1)
+				nd = d + 3*(n-1)
+				g_s_n[md, In] += ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
+				g_s_n[nd, In] -= ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
 
-                g_s_n[d, m, In] -= slice(dH_nm, d, :, :) * C[Im, s] # * eikr
-       	        g_s_n[d, n, In] += slice(dH_nm, d, :, :) * C[Im, s] # * eikr
+                g_s_n[md, In] += ( slice(dH_nm, d, :, :) * C[Im, s] )' # * eikr
+       	        g_s_n[nd, In] -= ( slice(dH_nm, d, :, :) * C[Im, s] )' # * eikr
 	
-                f_s_n[d, m, In] += epsn[s] * slice(dM_nm, d, :, :) * C[Im, s] # * eikr
-   	            f_s_n[d, n, In] -= epsn[s] * slice(dM_nm, d, :, :) * C[Im, s] # * eikr
+                f_s_n[md, In] += ( slice(dM_nm, d, :, :) * C[Im, s] )' # * eikr
+   	            f_s_n[nd, In] -= ( slice(dM_nm, d, :, :) * C[Im, s] )' # * eikr
 			end		# loop for dimension
 
 		end		# loop for neighbours
 	end		# loop for atomic sites
 
+	g_s_n = epsn[s] * f_s_n - g_s_n
+
 	# Step 2. compute eps_s_n and psi_s_n for all n 
-	gsn = reshape(g_s_n, 3*Natm, Nelc)
-	fsn = reshape(f_s_n, 3*Natm, Nelc)
 
 	# compute ϵ_{s,n}
-	eps_s_n = - C[:,s] * gsn'
+	eps_s_n = real( - g_s_n * C[:,s] )
 
 	diff_eps_inv = zeros(Float64, Nelc)
 	# loop through all orbitals to compute 1/(ϵ_t-ϵ_s) and add the second part of ψ_{s,n}
@@ -1132,19 +1134,19 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
         	diff_eps_inv[t] = 1.0/(epsn[t]-epsn[s])
         else
         	diff_eps_inv[t] = 0.0
-            psi_s_n -= 0.5 * ( C[:,t] * (fsn * C[:,t])' )'
+            psi_s_n -= 0.5 * ( C[:,t] * (f_s_n * C[:,t])' )'
         end
 	end 	# loop for orbitals
 
     # g = - (C' * gsn) ./ (epsilon - epsilon[s])	
-	gsn = gsn * C
+	g_s_n = g_s_n * C
 	for jj = 1 : Nelc
 		@simd for ii = 1 : 3*Natm
-			@inbounds gsn[ii,jj] *= diff_eps_inv[jj]
+			@inbounds g_s_n[ii,jj] *= diff_eps_inv[jj]
         end
     end
 	# add the first part of ψ_{s,n}
-	psi_s_n += ( C * (gsn * C )' )'
+	psi_s_n += ( C * (g_s_n * C )' )'
 
 	return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
 end
@@ -1263,7 +1265,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 		        Im = indexblock(m, tbm)
  
         	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
-            	evaluate!(tbm.overlap, r[m], R[:, m], M_nm)
+            	evaluate!(tbm.overlap, r[i_n], R[:, i_n], M_nm)
             	evaluate_fd1!(tbm.hop, -R[:,i_n], dH_nm)
             	evaluate_fd2!(tbm.hop, -R[:,i_n], d2H_nm)
         	    evaluate_fd1!(tbm.overlap, -R[:,i_n], dM_nm)
@@ -1272,25 +1274,59 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 				for d1 = 1:3
 					for d2 = 1:3
 						# contributions from hopping terms
+						# 4 parts:  H_{nm,nn}, H_{nm,mm}, H_{nm,nm}, H_{nm,mn}
 						Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
+								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im]' +
+								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, m] * M_nm
+								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
+
 						Hess[d1, m, d2, m] = Hess[d1, m, d2, m] +
+								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
+								 C[In, s]' * ( slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, m] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im]'
+
 						Hess[d1, m, d2, n] = Hess[d1, m, d2, n] +
+								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
+								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, m] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im]' +
+								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im]'
+
 						Hess[d1, n, d2, m] = Hess[d1, n, d2, m] +
-							 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
-							 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
-							 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
-							 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
-							 C[In, s]' * ( -slice(dH_nm, d1, :, :) 
-							 - eps_s_n[d1, n] * M_nm
-							 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
-							 C[In, s]' * ( slice(dH_nm, d2, :, :) 
-							 - eps_s_n[d2, m] * M_nm
-							 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
+								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
+								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
+								 C[In, s]' * ( slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, m] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
 
 						# contributions from onsite terms
-						Hess[d1, n, d2, m] = Hess[d1, n, d2, m] +
-						Hess[d1, m, d2, n] = Hess[d1, m, d2, n] +
-						
+						# 4 parts: H_{nn,nn}, H_{nn,mm}, H_{nn,nm}, H_{nn,mn}  where n≠m
+						# TODO: it seems much more convenient to evaluate the onsite Hamiltonians
+						#		only the diagonal elements		
 						for i_m = 1:length(neigs)
 							mm = neigs[i_m]
 		    			    Imm = indexblock(mm, tbm)
@@ -1298,15 +1334,34 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 							m1 = 3*(i_n-1) + d2
 							m2 = 3*(i_m-1) + d2
 
-							# TODO: how to compute 2nd order derivativs when involve index n?
+							Hess[d1, n, d2, m] = Hess[d1, n, d2, m] -
+									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] -
+									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
+									 ones(Norb) ) .* psi_s_n[d2, mm, In] -
+									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
+									 ones(Norb) ) .* psi_s_n[d1, m, In]
+
+							Hess[d1, m, d2, n] = Hess[d1, m, d2, n] -
+									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] -
+									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
+									 ones(Norb) ) .* psi_s_n[d2, mm, In] -
+									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
+									 ones(Norb) ) .* psi_s_n[d1, m, In]
+
 							Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
-							
+									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] +
+									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
+									 ones(Norb) ) .* psi_s_n[d2, mm, In] +
+									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
+									 ones(Norb) ) .* psi_s_n[d1, m, In]
+			
 							Hess[d1, m, d2, mm] = Hess[d1, m, d2, mm] +
-								 C[In, s] .* d2M_nn[m1, m2, :] .* C[Im,s] +
-								 C[In, s] .* ( dH_nn[m1, :] - eps_s_n[d1, n] * 
-								 ones(Norb) ) .* psi_s_n[d2, m, Im] +
-								 C[In, s] .* ( dH_nn[m2, :] - eps_s_n[d2, m] * 
-								 ones(Norb) ) .* psi_s_n[d1, n, Im]
+									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] +
+									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
+									 ones(Norb) ) .* psi_s_n[d2, mm, In] +
+									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
+									 ones(Norb) ) .* psi_s_n[d1, m, In]
+
 						end		# loop for neighbours i_m
 
 					end		# loop for d1
