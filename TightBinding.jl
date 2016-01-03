@@ -1156,7 +1156,6 @@ end
 
 
 
-
 # hessian always returns a complete hessian, i.e. hessian = ( d × Natm )^2
 function hessian(atm::ASEAtoms, tbm::TBModel)
 
@@ -1267,7 +1266,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 			# there are three parts of H_{nn,[d1, n, d2, n]}, the first part is
 			for d1 = 1:3
 				for d2 = 1:3
-					Hess[d1, n, d2, n] += ( 
+					Hess[d1, n, d2, n] += feps2[s] * ( 
 						 - eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, n, In][:]
 						 - eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, n, In][:] 
 						 )[1] 
@@ -1290,7 +1289,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 					for d2 = 1:3
 						# contributions from hopping terms
 						# 4 parts:  H_{nm,nn}, H_{nm,mm}, H_{nm,mn}, H_{nm,nm}
-						Hess[d1, n, d2, n] += ( 
+						Hess[d1, n, d2, n] +=  feps2[s] * ( 
 								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
 								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
@@ -1303,7 +1302,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im][:]
 								 )[1]
 
-						Hess[d1, m, d2, m] += (
+						Hess[d1, m, d2, m] +=  feps2[s] * (
 								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
 								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 - eps_s_n[d1, m] * slice(dM_nm, d2, :, :)
@@ -1316,7 +1315,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im][:]
 								 )[1]
 
-						Hess[d1, m, d2, n] += ( 
+						Hess[d1, m, d2, n] +=  feps2[s] * ( 
 								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
 								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 + eps_s_n[d1, m] * slice(dM_nm, d2, :, :)
@@ -1329,7 +1328,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im][:]
 								 )[1]
 
-						Hess[d1, n, d2, m] += ( 
+						Hess[d1, n, d2, m] +=  feps2[s] * ( 
 								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
 								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
@@ -1348,18 +1347,18 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 						m2 = 3*(i_n-1) + d2
 		
 						# second part of H_{nn,[d1, n, d2, n]} is
-						Hess[d1, n, d2, n] += (
+						Hess[d1, n, d2, n] +=  feps2[s] * (
 								 C[In, s]' * ( - dH_nn[m1, :][:] .* psi_s_n[d2, n, In][:] ) +
 								 C[In, s]' * ( - dH_nn[m2, :][:] .* psi_s_n[d1, n, In][:] )
 								 )[1] 
 	
 						# there are two parts of H_{nn,[d1, n, d2, m]}, the first part is
-						Hess[d1, m, d2, n] += (
+						Hess[d1, m, d2, n] +=  feps2[s] * (
 								 C[In, s]' * ( ( - dH_nn[m1, :][:] - eps_s_n[d1, m] 
 								 * ones(Norb) ) .* psi_s_n[d2, n, In][:] ) -
 								 eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, m, In][:] 
 								 )[1] 
-						Hess[d1, n, d2, m] += (
+						Hess[d1, n, d2, m] +=  feps2[s] * (
 								 C[In, s]' * ( ( - dH_nn[m2, :][:] - eps_s_n[d2, m] 
 								 * ones(Norb) ) .* psi_s_n[d1, n, In][:] ) -
 								 eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, m, In][:] 
@@ -1372,7 +1371,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 							mm1 = 3*(i_m-1) + d1
 							mm2 = 3*(i_m-1) + d2
 	
-							Hess[d1, m, d2, mm] += (
+							Hess[d1, m, d2, mm] +=  feps2[s] * (
 									 C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
 									 C[In, s]' * ( ( dH_nn[m1, :][:] - eps_s_n[d1, m] * 
 									 ones(Norb) ) .* psi_s_n[d2, mm, In][:] ) +
@@ -1381,22 +1380,23 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 									 )[1] 
 
 							# second part of H_{nn,[d1, n, d2, m]}
-							Hess[d1, m, d2, n] += (
+							Hess[d1, m, d2, n] +=  feps2[s] * (
 									 C[In, s]' * ( - d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
 									 C[In, s]' * ( - dH_nn[mm2, :][:] .* psi_s_n[d1, m, In][:] ) 
 									 )[1] 
-							Hess[d1, n, d2, m] += (
+							Hess[d1, n, d2, m] +=  feps2[s] * (
 									 C[In, s]' * ( - d2H_nn[mm1, m2, :][:] .* C[In,s] ) +
 									 C[In, s]' * ( - dH_nn[mm1, :][:] .* psi_s_n[d2, m, In][:] )
 									 )[1] 
 
 							# third part of H_{nn,[d1, n, d2, n]} is
-							Hess[d1, n, d2, n] += ( C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) )[1] 
+							Hess[d1, n, d2, n] +=  feps2[s] * 
+									 ( C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) )[1] 
 
 						end		# loop for neighbours i_m
 
-					end		# loop for d1
-				end		# loop for d2
+					end		# loop for d2
+				end		# loop for d1
 
 			end		# loop for neighbours i_n
     	end		# loop for atomic sites
@@ -1404,6 +1404,187 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 
     return Hess
 end
+
+
+
+
+# d3E always returns a complete 3rd-order tensor, i.e. d3E = ( d × Natm )^3
+function d3E(atm::ASEAtoms, tbm::TBModel)
+
+    # tell tbm to update the spectral decompositions
+    update!(atm, tbm)
+    # BZ integration loop
+    K, weight = monkhorstpackgrid(atm, tbm)
+    # allocate output
+    D3E = zeros(Float64, 3, length(atm), 3, length(atm), 3, length(atm))
+
+    # precompute neighbourlist
+    nlist = NeighbourList(cutoff(tbm), atm)
+    Nneig = 6
+    for (n, neigs, r, R) in Sites(nlist)
+        if length(neigs) > Nneig
+            Nneig = length(neigs)
+        end
+    end
+
+    X = positions(atm)
+    # loop for all k-points
+    for iK = 1:size(K,2)
+        D3E +=  weight[iK] *
+            real(d3E_k(X, tbm, nlist, Nneig, K[:,iK]))
+    end
+
+    return D3E
+end
+
+
+
+# Using 2n+1 theorem to compute hessian for a given k-point
+# E_{,lmn} =  ∑_s ( ( 3 * f''(ϵ_s) + ϵ_s * f'''(ϵ_s) ) * ϵ_{s,l} * ϵ_{s,m} * ϵ_{s,n} 
+#			 	  + ( 2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ( ϵ_{s,mn} * ϵ_{s,l}
+#				  + ϵ_{s,lm} * ϵ_{s,n} + ϵ_{s,ln} * ϵ_{s,m} )
+#			 	  + ( f(ϵ_s) + ϵ_s * f'(ϵ_s) ) * ϵ_{s,lmn} )
+# with 
+# ϵ_{s,lmn} = <ψ_s|H_{,mn}-ϵM_{,mn}-ϵ_{,n}M_{,m}-ϵ_{,m}M_{,n}|ψ_s> 
+#				 + <ψ_s|H_{,n}-ϵ_{,n}M-ϵM_{,n}|ψ_{s,m}>
+#				 + <ψ_s|H_{,m}-ϵ_{,m}M-ϵM_{,m}|ψ_{s,n}>
+#
+# Output
+# 		d3E ∈ R^{ 3 × Natm × 3 × Natm × 3 × Natm }
+# TODO: have not added e^ikr into the hamiltonian yet
+
+function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64})
+
+    # obtain the precomputed arrays
+    epsn = get_k_array(tbm, :epsn, k)
+    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
+
+	# some constant parameters
+    Nelc = length(epsn)
+	Natm = size(X,2)
+    Norb = tbm.norbitals
+	# "nlist" and "Nneig" from parameters
+	eF = tbm.eF
+	beta = tbm.smearing.beta
+
+    # allocate output
+    const D3E = zeros(Complex{Float64}, 3, Natm, 3, Natm, 3, Natm)
+
+    # pre-allocate dH, note that all of them will be computed by ForwardDiff
+	dH_nn  = zeros(3*Nneig, Norb)
+    d2H_nn = zeros(3*Nneig, 3*Nneig, Norb)
+    d3H_nn = zeros(3*Nneig, 3*Nneig, 3*Nneig, Norb)
+    dH_nm  = zeros(3, Norb, Norb)
+    d2H_nm = zeros(3, 3, Norb, Norb)
+    d3H_nm = zeros(3, 3, 3, Norb, Norb)
+    M_nm   = zeros(Norb, Norb)
+    dM_nm  = zeros(3, Norb, Norb)
+    d2M_nm = zeros(3, 3, Norb, Norb)
+    d3M_nm = zeros(3, 3, 3, Norb, Norb)
+
+	# const eps_s_n = zeros(Float64, 3, Natm)
+	# const psi_s_n = zeros(Float64, 3, Natm, Nelc)
+
+	# precompute electron distribution function
+	# TODO: update potential.jl by adding @D2 and @D3 for smearing function
+	feps1 = 3.0 * fermi_dirac_d2(eF, beta, epsn) + epsn .* fermi_dirac_d3(eF, beta, epsn)
+	feps2 = 2.0 * fermi_dirac_d(eF, beta, epsn) + epsn .* fermi_dirac_d2(eF, beta, epsn)
+	feps3 = fermi_dirac(eF, beta, epsn) + epsn .* fermi_dirac_d(eF, beta, epsn)
+
+	# loop through all eigenstates to compute the hessian
+	for s = 1 : Nelc
+		# compute ϵ_{s,n} and ψ_{s,n} 
+		eps_s_n, psi_s_n = d_eigenstate_k(s, tbm, X, nlist, Nneig, k) 
+	
+		# loop for the first part  ϵ_{s,l} * ϵ_{s,m} * ϵ_{s,n} 
+		# and second part  ϵ_{s,mn} * ϵ_{s,l} + ϵ_{s,lm} * ϵ_{s,n} + ϵ_{s,ln} * ϵ_{s,m} 
+		# TODO: we have to pass the second order derivatives ϵ_{s,nm} from the previous computations
+		for d1 = 1:3
+			for l = 1:Natm
+				for d2 = 1:3
+					for m = 1:Natm
+						for d2 = 1:3
+							for m = 1:Natm
+								D3E[d1, l, d2, m, d3, n] += feps1[s] * 
+										eps_s_n[d1,l] * eps_s_n[d2,m] * eps_s_n[d3,n] +
+										feps2[s] * ( eps_s_mn[d1, l, d2, m] * eps_s_n[d3, n]
+										+ eps_s_mn[d2, m, d3, n] * eps_s_n[d1, l] 
+										+ eps_s_mn[d3, n, d1, l] * eps_s_n[d2, m] )
+							end
+						end
+					end
+				end
+			end
+		end
+
+	    # loop through all atoms for the second part, i.e. ϵ_{s,lmn} 
+    	for (n, neigs, r, R) in Sites(nlist)
+        	In = indexblock(n, tbm)
+	        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
+
+        	evaluate_fd!(tbm.onsite, R, dH_nn)
+        	evaluate_fd2!(tbm.onsite, R, d2H_nn)
+        	evaluate_fd3!(tbm.onsite, R, d3H_nn)
+
+			# loop through all neighbours of the n-th site
+    	    for i_n = 1:length(neigs)
+				m = neigs[i_n]
+		        Im = indexblock(m, tbm)
+ 
+        	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
+            	evaluate!(tbm.overlap, r[i_n], R[:, i_n], M_nm)
+            	evaluate_fd!(tbm.hop, R[:,i_n], dH_nm)
+            	evaluate_fd2!(tbm.hop, R[:,i_n], d2H_nm)
+            	evaluate_fd3!(tbm.hop, R[:,i_n], d3H_nm)
+        	    evaluate_fd!(tbm.overlap, R[:,i_n], dM_nm)
+        	    evaluate_fd2!(tbm.overlap, R[:,i_n], d2M_nm)
+        	    evaluate_fd3!(tbm.overlap, R[:,i_n], d3M_nm)
+						
+				for d1 = 1:3
+					for d2 = 1:3
+						for d3 = 1:3
+							# contributions from hopping terms
+							# 8 parts:  H_{nm,nnn}, H_{nm,nnm}, H_{nm,nmn}, H_{nm,nmm}
+							# 			H_{nm,mmm}, H_{nm,mmn}, H_{nm,mnm}, H_{nm,mnn}
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 + eps_s_n[d2, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im][:] +
+								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im][:]
+								 )[1]
+
+							# contributions from onsite terms
+							# 8 parts:  H_{nn,nnn}, H_{nn,nnm}, H_{nn,nmn}, H_{nn,nmm}
+							# 			H_{nn,mmm}, H_{nn,mmn}, H_{nn,mnm}, H_{nn,mnn}
+							# another two loops for neighbours
+							for i_m = 1:length(neigs)
+								mm = neigs[i_m]
+			    			    Imm = indexblock(mm, tbm)
+
+								for i_l = 1:length(neigs)
+									ll = neigs[i_l]
+			    			    	Ill = indexblock(ll, tbm)
+
+
+								end 	# loop for neighbours i_l
+							end		# loop for neighbours i_m
+						end		# loop for d3
+					end		# loop for d2
+				end		# loop for d1
+
+			end		# loop for neighbours i_n
+    	end		# loop for atomic sites
+    end		# loop for eigenstates
+
+    return D3E
+end
+
 
 
 
