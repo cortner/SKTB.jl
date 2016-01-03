@@ -1148,8 +1148,8 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
 	# add the first part of ψ_{s,n}
 	psi_s_n += ( C * g_s_n' )'
 
-	return eps_s_n, psi_s_n
-	# return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
+	# return eps_s_n, psi_s_n
+	return reshape(eps_s_n, 3, Natm), reshape(psi_s_n, 3, Natm, Nelc)
 end
 
 
@@ -1165,7 +1165,7 @@ function hessian(atm::ASEAtoms, tbm::TBModel)
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
     # allocate output
-    hessian = zeros(Float64, 3*length(atm), 3*length(atm))
+    hessian = zeros(Float64, 3, length(atm), 3, length(atm))
 
     # precompute neighbourlist
     nlist = NeighbourList(cutoff(tbm), atm)
@@ -1180,7 +1180,7 @@ function hessian(atm::ASEAtoms, tbm::TBModel)
     # loop for all k-points
     for iK = 1:size(K,2)
         hessian +=  weight[iK] *
-            real(site_hessian_k(X, tbm, nlist, Nneig, K[:,iK]))
+            real(hessian_k(X, tbm, nlist, Nneig, K[:,iK]))
     end
 
     return hessian
@@ -1203,6 +1203,10 @@ end
 
 function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64})
 
+    # obtain the precomputed arrays
+    epsn = get_k_array(tbm, :epsn, k)
+    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
+
 	# some constant parameters
     Nelc = length(epsn)
 	Natm = size(X,2)
@@ -1211,24 +1215,22 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 	eF = tbm.eF
 	beta = tbm.smearing.beta
 
-    # obtain the precomputed arrays
-    epsn = get_k_array(tbm, :epsn, k)
-    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
-
     # allocate output
     const Hess = zeros(Complex{Float64}, 3, Natm, 3, Natm)
 
     # pre-allocate dH, note that all of them will be computed by ForwardDiff
-    const dH_nn  = zeros(3*Nneig, Norb)
-    const d2H_nn = zeros(3*Nneig, 3*Nneig, Norb)
-    const dH_nm  = zeros(3, Norb, Norb)
-    const d2H_nm = zeros(3, 3, Norb, Norb)
-    const M_nm   = zeros(Norb, Norb)
-    const dM_nm  = zeros(3, Norb, Norb)
-    const d2M_nm = zeros(3, 3, Norb, Norb)
+    # TODO: it seems much more convenient to evaluate the onsite Hamiltonians
+	#		only the diagonal elements		
+	dH_nn  = zeros(3*Nneig, Norb)
+    d2H_nn = zeros(3*Nneig, 3*Nneig, Norb)
+    dH_nm  = zeros(3, Norb, Norb)
+    d2H_nm = zeros(3, 3, Norb, Norb)
+    M_nm   = zeros(Norb, Norb)
+    dM_nm  = zeros(3, Norb, Norb)
+    d2M_nm = zeros(3, 3, Norb, Norb)
 
-	const eps_s_n = zeros(Float64, 3, Natm)
-	const psi_s_n = zeros(Float64, 3, Natm, Nelc)
+	# const eps_s_n = zeros(Float64, 3, Natm)
+	# const psi_s_n = zeros(Float64, 3, Natm, Nelc)
 
 	# precompute electron distribution function
 	# TODO: update potential.jl by adding @D2 and @D3 for smearing function
@@ -1257,8 +1259,20 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
         	In = indexblock(n, tbm)
 	        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
 
-        	evaluate_fd1!(tbm.onsite, R, dH_nn)
+        	evaluate_fd!(tbm.onsite, R, dH_nn)
+			# print(dH_nn)
         	evaluate_fd2!(tbm.onsite, R, d2H_nn)
+
+			# contributions from onsite terms
+			# there are three parts of H_{nn,[d1, n, d2, n]}, the first part is
+			for d1 = 1:3
+				for d2 = 1:3
+					Hess[d1, n, d2, n] += ( 
+						 - eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, n, In][:]
+						 - eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, n, In][:] 
+						 )[1] 
+				end
+			end
 
 			# loop through all neighbours of the n-th site
     	    for i_n = 1:length(neigs)
@@ -1267,101 +1281,117 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
  
         	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
             	evaluate!(tbm.overlap, r[i_n], R[:, i_n], M_nm)
-            	evaluate_fd1!(tbm.hop, -R[:,i_n], dH_nm)
-            	evaluate_fd2!(tbm.hop, -R[:,i_n], d2H_nm)
-        	    evaluate_fd1!(tbm.overlap, -R[:,i_n], dM_nm)
-        	    evaluate_fd2!(tbm.overlap, -R[:,i_n], d2M_nm)
-		
+            	evaluate_fd!(tbm.hop, R[:,i_n], dH_nm)
+            	evaluate_fd2!(tbm.hop, R[:,i_n], d2H_nm)
+        	    evaluate_fd!(tbm.overlap, R[:,i_n], dM_nm)
+        	    evaluate_fd2!(tbm.overlap, R[:,i_n], d2M_nm)
+						
 				for d1 = 1:3
 					for d2 = 1:3
 						# contributions from hopping terms
-						# 4 parts:  H_{nm,nn}, H_{nm,mm}, H_{nm,nm}, H_{nm,mn}
-						Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
+						# 4 parts:  H_{nm,nn}, H_{nm,mm}, H_{nm,mn}, H_{nm,nm}
+						Hess[d1, n, d2, n] += ( 
 								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
 								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
-								 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 + eps_s_n[d2, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
 								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
 								 - eps_s_n[d1, n] * M_nm
-								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im]' +
+								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im][:] +
 								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
-								 - eps_s_n[d2, m] * M_nm
-								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
+								 - eps_s_n[d2, n] * M_nm
+								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im][:]
+								 )[1]
 
-						Hess[d1, m, d2, m] = Hess[d1, m, d2, m] +
+						Hess[d1, m, d2, m] += (
 								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
 								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
-								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
-								 - eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
-								 C[In, s]' * ( slice(dH_nm, d1, :, :) 
-								 - eps_s_n[d1, n] * M_nm
-								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
-								 C[In, s]' * ( slice(dH_nm, d2, :, :) 
-								 - eps_s_n[d2, m] * M_nm
-								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im]'
-
-						Hess[d1, m, d2, n] = Hess[d1, m, d2, n] +
-								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
-								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
-								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d1, m] * slice(dM_nm, d2, :, :)
 								 - eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
 								 C[In, s]' * ( slice(dH_nm, d1, :, :) 
 								 - eps_s_n[d1, m] * M_nm
-								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im]' +
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im][:] +
+								 C[In, s]' * ( slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d2, m] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im][:]
+								 )[1]
+
+						Hess[d1, m, d2, n] += ( 
+								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
+								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 + eps_s_n[d1, m] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 C[In, s]' * ( slice(dH_nm, d1, :, :) 
+								 - eps_s_n[d1, m] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im][:] +
 								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
 								 - eps_s_n[d2, n] * M_nm
-								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im]'
+								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, m, Im][:]
+								 )[1]
 
-						Hess[d1, n, d2, m] = Hess[d1, n, d2, m] +
+						Hess[d1, n, d2, m] += ( 
 								 C[In, s]' * ( - slice(d2H_nm, d1, d2, :, :)
 								 + epsn[s] * slice(d2M_nm, d1, d2, :, :)
 								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
 								 + eps_s_n[d2, m] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
 								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
 								 - eps_s_n[d1, n] * M_nm
-								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im]' +
+								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, m, Im][:] +
 								 C[In, s]' * ( slice(dH_nm, d2, :, :) 
 								 - eps_s_n[d2, m] * M_nm
-								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im]'
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im][:]
+								 )[1]
 
 						# contributions from onsite terms
 						# 4 parts: H_{nn,nn}, H_{nn,mm}, H_{nn,nm}, H_{nn,mn}  where n≠m
-						# TODO: it seems much more convenient to evaluate the onsite Hamiltonians
-						#		only the diagonal elements		
+						m1 = 3*(i_n-1) + d1
+						m2 = 3*(i_n-1) + d2
+		
+						# second part of H_{nn,[d1, n, d2, n]} is
+						Hess[d1, n, d2, n] += (
+								 C[In, s]' * ( - dH_nn[m1, :][:] .* psi_s_n[d2, n, In][:] ) +
+								 C[In, s]' * ( - dH_nn[m2, :][:] .* psi_s_n[d1, n, In][:] )
+								 )[1] 
+	
+						# there are two parts of H_{nn,[d1, n, d2, m]}, the first part is
+						Hess[d1, m, d2, n] += (
+								 C[In, s]' * ( ( - dH_nn[m1, :][:] - eps_s_n[d1, m] 
+								 * ones(Norb) ) .* psi_s_n[d2, n, In][:] ) -
+								 eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, m, In][:] 
+								 )[1] 
+						Hess[d1, n, d2, m] += (
+								 C[In, s]' * ( ( - dH_nn[m2, :][:] - eps_s_n[d2, m] 
+								 * ones(Norb) ) .* psi_s_n[d1, n, In][:] ) -
+								 eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, m, In][:] 
+								 )[1] 
+
+						# another loop for neighbours
 						for i_m = 1:length(neigs)
 							mm = neigs[i_m]
 		    			    Imm = indexblock(mm, tbm)
- 							# indecies in d2H and d2M
-							m1 = 3*(i_n-1) + d2
-							m2 = 3*(i_m-1) + d2
+							mm1 = 3*(i_m-1) + d1
+							mm2 = 3*(i_m-1) + d2
+	
+							Hess[d1, m, d2, mm] += (
+									 C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
+									 C[In, s]' * ( ( dH_nn[m1, :][:] - eps_s_n[d1, m] * 
+									 ones(Norb) ) .* psi_s_n[d2, mm, In][:] ) +
+									 C[In, s]' * ( ( dH_nn[mm2, :][:] - eps_s_n[d2, mm] * 
+									 ones(Norb) ) .* psi_s_n[d1, m, In][:] )
+									 )[1] 
 
-							Hess[d1, n, d2, m] = Hess[d1, n, d2, m] -
-									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] -
-									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
-									 ones(Norb) ) .* psi_s_n[d2, mm, In] -
-									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
-									 ones(Norb) ) .* psi_s_n[d1, m, In]
+							# second part of H_{nn,[d1, n, d2, m]}
+							Hess[d1, m, d2, n] += (
+									 C[In, s]' * ( - d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
+									 C[In, s]' * ( - dH_nn[mm2, :][:] .* psi_s_n[d1, m, In][:] ) 
+									 )[1] 
+							Hess[d1, n, d2, m] += (
+									 C[In, s]' * ( - d2H_nn[mm1, m2, :][:] .* C[In,s] ) +
+									 C[In, s]' * ( - dH_nn[mm1, :][:] .* psi_s_n[d2, m, In][:] )
+									 )[1] 
 
-							Hess[d1, m, d2, n] = Hess[d1, m, d2, n] -
-									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] -
-									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
-									 ones(Norb) ) .* psi_s_n[d2, mm, In] -
-									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
-									 ones(Norb) ) .* psi_s_n[d1, m, In]
-
-							Hess[d1, n, d2, n] = Hess[d1, n, d2, n] +
-									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] +
-									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
-									 ones(Norb) ) .* psi_s_n[d2, mm, In] +
-									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
-									 ones(Norb) ) .* psi_s_n[d1, m, In]
-			
-							Hess[d1, m, d2, mm] = Hess[d1, m, d2, mm] +
-									 C[In, s] .* d2M_nn[m, mm, :] .* C[In,s] +
-									 C[In, s] .* ( dH_nn[m, :] - eps_s_n[d1, m] * 
-									 ones(Norb) ) .* psi_s_n[d2, mm, In] +
-									 C[In, s] .* ( dH_nn[mm, :] - eps_s_n[d2, mm] * 
-									 ones(Norb) ) .* psi_s_n[d1, m, In]
+							# third part of H_{nn,[d1, n, d2, n]} is
+							Hess[d1, n, d2, n] += ( C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) )[1] 
 
 						end		# loop for neighbours i_m
 

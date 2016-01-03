@@ -71,14 +71,14 @@ evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)/BOHR
 function evaluate_d!(p::NRLos, r, R, dH_nn::Array{Float64, 4}) 
     get_dos!(r/BOHR, R/BOHR, p.elem, dH_nn)
     dH_nn[:] /= BOHR
-    # @inbounds @simd for i = 1:length(dH_nn)
-    #     dH_nn[i] = dH_nn[i] / BOHR
-    # end
 end
 # derivatives computed by ForwardDiff
-evaluate_fd!(p::NRLos, R::Array{Float64}, dH) = get_dos_fd!(R/BOHR, p.elem, dh)/BOHR
-evaluate_fd2!(p::NRLos, R::Array{Float64}, dH) = get_d2os_fd!(R/BOHR, p.elem, dh)/BOHR  # BOHR^2?
-evaluate_fd3!(p::NRLos, R::Array{Float64}, dH) = get_d3os_fd!(R/BOHR, p.elem, dh)/BOHR  # BOHR^3?
+function evaluate_fd!(p::NRLos, R::Array{Float64}, dH) 
+	get_dos_fd!(R/BOHR, p.elem, dH)
+	#/BOHR
+end
+evaluate_fd2!(p::NRLos, R::Array{Float64}, dH) = get_d2os_fd!(R/BOHR, p.elem, dH)/BOHR  # BOHR^2?
+evaluate_fd3!(p::NRLos, R::Array{Float64}, dH) = get_d3os_fd!(R/BOHR, p.elem, dH)/BOHR  # BOHR^3?
 
 
 
@@ -100,9 +100,9 @@ function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
     end
 end
 # derivatives computed by ForwardDiff
-evaluate_fd(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd2(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd2!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd3(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd3!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd2!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd2!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd3!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd3!(R/BOHR, p.elem, dH)/BOHR
 
 
 
@@ -131,9 +131,9 @@ function grad!(p::NRLhop, r, R, dM::Array{Float64, 3})
     end
 end
 # derivatives computed by ForwardDiff
-evaluate_fd(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd2(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd2!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd3(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd3!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd2!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd2!(R/BOHR, p.elem, dH)/BOHR
+evaluate_fd3!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd3!(R/BOHR, p.elem, dH)/BOHR
 
 
 
