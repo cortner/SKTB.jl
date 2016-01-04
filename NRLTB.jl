@@ -68,17 +68,23 @@ evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)/BOHR
 # cutoff(p::NRLos) = p.elem.Rc
 
 # CO : added an in-place operation for experimenting
-function evaluate_d!(p::NRLos, r, R, dH_nn::Array{Float64, 4}) 
-    get_dos!(r/BOHR, R/BOHR, p.elem, dH_nn)
-    dH_nn[:] /= BOHR
+function evaluate_d!(p::NRLos, r, R, dH::Array{Float64, 4}) 
+    get_dos!(r/BOHR, R/BOHR, p.elem, dH)
+    dH[:] /= BOHR
 end
 # derivatives computed by ForwardDiff
 function evaluate_fd!(p::NRLos, R::Array{Float64}, dH) 
 	get_dos_fd!(R/BOHR, p.elem, dH)
-	#/BOHR
+    dH[:] /= BOHR
 end
-evaluate_fd2!(p::NRLos, R::Array{Float64}, dH) = get_d2os_fd!(R/BOHR, p.elem, dH)/BOHR  # BOHR^2?
-evaluate_fd3!(p::NRLos, R::Array{Float64}, dH) = get_d3os_fd!(R/BOHR, p.elem, dH)/BOHR  # BOHR^3?
+function evaluate_fd2!(p::NRLos, R::Array{Float64}, dH) 
+	get_d2os_fd!(R/BOHR, p.elem, dH)
+	dH[:] /= BOHR^2
+end
+function evaluate_fd3!(p::NRLos, R::Array{Float64}, dH) 
+	get_d3os_fd!(R/BOHR, p.elem, dH)
+	dH[:] /= BOHR^3
+end
 
 
 
@@ -100,9 +106,18 @@ function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
     end
 end
 # derivatives computed by ForwardDiff
-evaluate_fd!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd2!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd2!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd3!(p::NRLhop, R::Vector{Float64}, dH) = hop_local_fd3!(R/BOHR, p.elem, dH)/BOHR
+function evaluate_fd!(p::NRLhop, R::Vector{Float64}, dH) 
+	hop_local_fd!(R/BOHR, p.elem, dH)
+	dH[:] /= BOHR
+end
+function evaluate_fd2!(p::NRLhop, R::Vector{Float64}, dH) 
+	hop_local_fd2!(R/BOHR, p.elem, dH)
+	dH[:] /= BOHR^2
+end
+function evaluate_fd3!(p::NRLhop, R::Vector{Float64}, dH) 
+	hop_local_fd3!(R/BOHR, p.elem, dH)
+	dH[:] /= BOHR^3
+end
 
 
 
@@ -124,16 +139,25 @@ evaluate(p::NRLoverlap, r, R) =
 # evaluate_d(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dM")
 grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
-function grad!(p::NRLhop, r, R, dM::Array{Float64, 3})
+function grad!(p::NRLoverlap, r, R, dM::Array{Float64, 3})
     d_mat_local!(r/BOHR, R/BOHR, p.elem, :dM, dM)
-    @inbounds for i = 1:length(dH)
-        dH[i] = dH[i] / BOHR
+    @inbounds for i = 1:length(dM)
+        dM[i] = dM[i] / BOHR
     end
 end
 # derivatives computed by ForwardDiff
-evaluate_fd!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd2!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd2!(R/BOHR, p.elem, dH)/BOHR
-evaluate_fd3!(p::NRLoverlap, R::Vector{Float64}, dH) = overlap_local_fd3!(R/BOHR, p.elem, dH)/BOHR
+function evaluate_fd!(p::NRLoverlap, R::Vector{Float64}, dM) 
+	overlap_local_fd!(R/BOHR, p.elem, dM)
+	dM[:] /= BOHR
+end
+function evaluate_fd2!(p::NRLoverlap, R::Vector{Float64}, dM) 
+	overlap_local_fd2!(R/BOHR, p.elem, dM)
+	dM[:] /= BOHR^2
+end
+function evaluate_fd3!(p::NRLoverlap, R::Vector{Float64}, dM) 
+	overlap_local_fd3!(R/BOHR, p.elem, dM)
+	dM[:] /= BOHR^3
+end
 
 
 
@@ -2247,7 +2271,7 @@ end
 
 
 
-function overlap_local_d3!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,5}) 
+function overlap_local_fd3!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,5}) 
     # dim = 3
     # dh = zeros(dim, dim, Norb, Norb)
     r(x) = norm(x)

@@ -1039,11 +1039,7 @@ end
 
 
 
-############## Hessian and Higher-oerder derivatives for site energy #################
-
-
-
-
+###################### Hessian and Higher-oerder derivatives ##########################
 
 
 
@@ -1123,6 +1119,7 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
 	g_s_n = epsn[s] * f_s_n - g_s_n
 
 	# Step 2. compute eps_s_n and psi_s_n for all n 
+	# TODO: use BLAS for matrix-matrix/vector multiplication?
 
 	# compute ϵ_{s,n}
 	eps_s_n = real( - g_s_n * C[:,s] )
@@ -1445,9 +1442,16 @@ end
 #				  + ϵ_{s,lm} * ϵ_{s,n} + ϵ_{s,ln} * ϵ_{s,m} )
 #			 	  + ( f(ϵ_s) + ϵ_s * f'(ϵ_s) ) * ϵ_{s,lmn} )
 # with 
-# ϵ_{s,lmn} = <ψ_s|H_{,mn}-ϵM_{,mn}-ϵ_{,n}M_{,m}-ϵ_{,m}M_{,n}|ψ_s> 
-#				 + <ψ_s|H_{,n}-ϵ_{,n}M-ϵM_{,n}|ψ_{s,m}>
-#				 + <ψ_s|H_{,m}-ϵ_{,m}M-ϵM_{,m}|ψ_{s,n}>
+# ϵ_{s,i} and ϵ_{s,jk} passed from previous calculations and
+# 
+# ϵ_{s,ijk} = <ψ_s|H_{,ijk}-ϵM_{,ijk}-ϵ_{,i}M_{,jk}-ϵ_{,j}M_{,ik}-ϵ_{,k}M_{,ij}
+#					-ϵ_{,ij}M_{,k}-ϵ_{,ik}M_{,j}-ϵ_{,jk}M_{,i}|ψ_s> 
+#			 + 2Re<ψ_s|H_{,jk}-ϵ_{,jk}M-ϵ_{,j}M_{,k}-ϵ_{,k}M_{,j}-ϵM_{,jk}|ψ_{s,i}>
+#			 + 2Re<ψ_s|H_{,ik}-ϵ_{,ik}M-ϵ_{,i}M_{,k}-ϵ_{,k}M_{,i}-ϵM_{,ik}|ψ_{s,j}>
+#			 + 2Re<ψ_s|H_{,ij}-ϵ_{,ij}M-ϵ_{,i}M_{,j}-ϵ_{,j}M_{,i}-ϵM_{,ij}|ψ_{s,k}>
+#			 + 2Re<ψ_{s,i}|H_{,k}-ϵ_{,k}M-ϵM_{,k}|ψ_{s,j}>
+#			 + 2Re<ψ_{s,i}|H_{,j}-ϵ_{,j}M-ϵM_{,j}|ψ_{s,k}>
+#			 + 2Re<ψ_{s,j}|H_{,i}-ϵ_{,i}M-ϵM_{,i}|ψ_{s,k}>
 #
 # Output
 # 		d3E ∈ R^{ 3 × Natm × 3 × Natm × 3 × Natm }
@@ -1504,12 +1508,12 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 				for d2 = 1:3
 					for m = 1:Natm
 						for d2 = 1:3
-							for m = 1:Natm
+							for n = 1:Natm
 								D3E[d1, l, d2, m, d3, n] += feps1[s] * 
 										eps_s_n[d1,l] * eps_s_n[d2,m] * eps_s_n[d3,n] +
-										feps2[s] * ( eps_s_mn[d1, l, d2, m] * eps_s_n[d3, n]
-										+ eps_s_mn[d2, m, d3, n] * eps_s_n[d1, l] 
-										+ eps_s_mn[d3, n, d1, l] * eps_s_n[d2, m] )
+										feps2[s] * ( eps_s_nm[d1, l, d2, m] * eps_s_n[d3, n]
+										+ eps_s_nm[d2, m, d3, n] * eps_s_n[d1, l] 
+										+ eps_s_nm[d3, n, d1, l] * eps_s_n[d2, m] )
 							end
 						end
 					end
@@ -1546,18 +1550,343 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 							# contributions from hopping terms
 							# 8 parts:  H_{nm,nnn}, H_{nm,nnm}, H_{nm,nmn}, H_{nm,nmm}
 							# 			H_{nm,mmm}, H_{nm,mmn}, H_{nm,mnm}, H_{nm,mnn}
+							
+							# 1. nnn
 							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
-								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
 								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
-								 + eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
-								 + eps_s_n[d2, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
-								 C[In, s]' * ( - slice(dH_nm, d1, :, :) 
-								 - eps_s_n[d1, n] * M_nm
-								 + epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d2, n, Im][:] +
-								 C[In, s]' * ( - slice(dH_nm, d2, :, :) 
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
 								 - eps_s_n[d2, n] * M_nm
-								 + epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d1, n, Im][:]
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
 								 )[1]
+		
+							# 2. nnm
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 3. nmn
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 4. nmm
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 5. mmm
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 6. mmn
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 7. mnm
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
+							# 8. mmm
+							D3E[d1, n, d2, n, d3, n] +=  feps3[s] * ( 
+								 C[In, s]' * ( slice(d3H_nm, d1, d2, d3, :, :)
+								 - epsn[s] * slice(d3M_nm, d1, d2, d3, :, :)
+								 - eps_s_n[d1, n] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d3, n] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_nm[d1, n, d2, n] * slice(dM_nm, d3, :, :) 
+								 - eps_s_nm[d1, n, d3, n] * slice(dM_nm, d2, :, :) 
+								 - eps_s_nm[d2, n, d3, n] * slice(dM_nm, d1, :, :) ) * C[Im,s] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d2, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d2, d3, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_nm[d2, n, d3, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d3, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d3, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d3, :, :)
+								 - eps_s_n[d3, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d3, n] * M_nm ) * psi_s_n[d2, n, Im][:] +
+								 #
+								 2.0 * C[In, s]' * ( slice(d2H_nm, d1, d2, :, :) 
+								 - epsn[s] * slice(d2M_nm, d1, d2, :, :)
+								 - eps_s_n[d1, n] * slice(dM_nm, d2, :, :)
+								 - eps_s_n[d2, n] * slice(dM_nm, d1, :, :)
+								 - eps_s_nm[d1, n, d2, n] * M_nm ) * psi_s_n[d1, n, Im][:] +
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d3, :, :)
+								 - eps_s_n[d3, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d1, n, In][:])' * ( slice(dH_nm, d2, :, :)
+								 - eps_s_n[d2, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, n, Im]
+								 #	
+								 2.0 * (psi_s_n[d2, n, In][:])' * ( slice(dH_nm, d1, :, :)
+								 - eps_s_n[d1, n] * M_nm
+								 - epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, n, Im]
+								 )[1]
+
 
 							# contributions from onsite terms
 							# 8 parts:  H_{nn,nnn}, H_{nn,nnm}, H_{nn,nmn}, H_{nn,nmm}
