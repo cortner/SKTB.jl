@@ -1242,20 +1242,24 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 
 		# loop for the first part
 		# (2 * f'(ϵ_s) + ϵ_s * f''(ϵ_s) ) * ϵ_{s,m} * ϵ_{s,n}
-# 		for d1 = 1:3
-# 			for n = 1:Natm
-# 				for d2 = 1:3
-# 					for m = 1:Natm
+ 		for d1 = 1:3
+ 			for n = 1:Natm
+ 				for d2 = 1:3
+ 					for m = 1:Natm
 # 						# Hess[d1, n, d2, m] += feps1[s] * eps_s_n[d1,n] * eps_s_n[d2,m]
 #                         Hess[d1, n, d2, m] += # feps2[s] *
 #                         (
 # 						 - eps_s_n[d1, n] * C[:, s]' * psi_s_n[d2, m, :][:]
 # 						 - eps_s_n[d2, m] * C[:, s]' * psi_s_n[d1, n, :][:]
 # 						 )[1]
-# 					end
-# 				end
-# 			end
-# 		end
+						Hess[d1, n, d2, m] += (
+	 						 - eps_s_n[d1, n] * C[:, s]' * psi_s_n[d2, m, :][:]
+	 						 - eps_s_n[d2, m] * C[:, s]' * psi_s_n[d1, n, :][:]
+							 )[1]
+ 					end
+ 				end
+ 			end
+ 		end
 
 	    # loop through all atoms for the second part, i.e. ϵ_{s,nm}
     	for (n, neigs, r, R) in Sites(nlist)
