@@ -633,6 +633,7 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
             # dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
             # dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
             grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+            # evaluate_fd!(tbm.hop, -R[:,i_n], dH_nm)
             grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
 
             # the following is a hack to put the on-site assembly into the
@@ -1295,7 +1296,42 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 				for d1 = 1:3
 					for d2 = 1:3
 						# contributions from hopping terms
-						# 4 parts:  H_{nm,nn}, H_{nm,mm}, H_{nm,mn}, H_{nm,nm}
+						# from H_{nm,n} and H_{nm,m} to E_{,nk}, E_{,kn}, E_{,mk}, E_{,km}
+						for k = 1 : Natm
+							if k != n && k != m    
+								Hess[d1, n, d2, k] += # feps2[s] *
+                                	 (
+									 C[In, s]' * ( - slice(dH_nm, d1, :, :)
+									 #- eps_s_n[d1, n] * M_nm
+									 #+ epsn[s] * slice(dM_nm, d1, :, :)
+                                	              ) * psi_s_n[d2, k, Im][:] 
+									 )[1]
+								Hess[d1, k, d2, n] += # feps2[s] *
+                                	 (
+									 C[In, s]' * ( - slice(dH_nm, d2, :, :)
+									 #- eps_s_n[d1, n] * M_nm
+									 #+ epsn[s] * slice(dM_nm, d1, :, :)
+                                	              ) * psi_s_n[d1, k, Im][:] 
+									 )[1]
+								Hess[d1, m, d2, k] += # feps2[s] *
+                                	 (
+									 C[In, s]' * ( slice(dH_nm, d1, :, :)
+									 #- eps_s_n[d1, n] * M_nm
+									 #+ epsn[s] * slice(dM_nm, d1, :, :)
+                                	              ) * psi_s_n[d2, k, Im][:] 
+									 )[1]
+								Hess[d1, k, d2, m] += # feps2[s] *
+                                	 (
+									 C[In, s]' * ( slice(dH_nm, d2, :, :)
+									 #- eps_s_n[d1, n] * M_nm
+									 #+ epsn[s] * slice(dM_nm, d1, :, :)
+                                	              ) * psi_s_n[d1, k, Im][:] 
+									 )[1]								
+							end
+						end 	# loop for atom k
+
+						# contributions from hopping terms
+						# 4 parts: from H_{nm,nn}, H_{nm,mm}, H_{nm,mn}, H_{nm,nm}
 						Hess[d1, n, d2, n] += # feps2[s] *
                                  (
 								 C[In, s]' * ( slice(d2H_nm, d1, d2, :, :)
