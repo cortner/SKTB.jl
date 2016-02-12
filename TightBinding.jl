@@ -464,7 +464,7 @@ function hamiltonian!(tbm::TBModel, k,
             idx += 1
             It[idx] = In[i]
             Jt[idx] = In[j]
-            #Ht[idx] = H_nn[i,j]
+            Ht[idx] = H_nn[i,j]
             Mt[idx] = M_nn[i,j]
         end
     end
@@ -630,10 +630,7 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
             kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
 		    eikr = exp(im * kR)::Complex{Float64}
             # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-            # dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
-            # dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
             grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-            # evaluate_fd!(tbm.hop, -R[:,i_n], dH_nm)
             grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
 
             # the following is a hack to put the on-site assembly into the
@@ -646,8 +643,8 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
                 # add contributions to the force
                 for j = 1:3
                     frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
-                                       dM_nm[j,a,b] * t2  #+ dH_nn[j,a,b,i_n] * t3
-                    #frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
+                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+                    frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
                 end
             end
 
@@ -668,110 +665,13 @@ function forces(atm::ASEAtoms, tbm::TBModel)
     # BZ integration loop
     K, weight = monkhorstpackgrid(atm, tbm)
     # allocate output
-    # frc = zeros(3, length(atm), size(K,2))
     frc = zeros(3, length(atm))
 
    for iK = 1:size(K,2)
         frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
-        # frc[:,:, iK] =  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
     end
     return frc
 end
-
-
-
-# pull the k-loop inside the site-loop
-function forces_(atm::ASEAtoms, tbm::TBModel)
-
-    # tell tbm to update the spectral decompositions
-    update!(atm, tbm)
-    # allocate output
-    const frc = zeros(3, length(atm))
-
-    # precompute neighbourlist
-    nlist = NeighbourList(cutoff(tbm), atm)
-    X = positions(atm)::Matrix{Float64}
-    K, weight = monkhorstpackgrid(atm, tbm)
-
-    # obtain the precomputed arrays
-    df = zeros(length(atm)*tbm.norbitals, size(K,2))::Matrix{Float64}
-    dfe = zeros(length(atm)*tbm.norbitals, size(K,2))::Matrix{Float64}
-    for iK = 1:size(K,2)
-     	epsn = get_k_array(tbm, :epsn, K[:,iK])::Vector{Float64}
-     	df[:,iK] = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-     	dfe[:,iK] = df[:,iK] .* epsn
-    end
-    df::Matrix{Float64}
-    dfe::Matrix{Float64}
-
-    # pre-allocate dH, with a (dumb) initial guess for the size
-    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
-    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
-    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
-
-    for (n, neigs, r, R, _) in Sites(nlist)
-        # compute the block of indices for the orbitals belonging to n
-        In = indexblock(n, tbm)
-
-        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
-        # dH_nn should be 3 x norbitals x norbitals x nneigs
-        # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
-        # in-place version
-        if length(neigs) > size(dH_nn, 4)
-            dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
-                          ceil(Int, 1.5*length(neigs)))
-        end
-        evaluate_d!(tbm.onsite, r, R, dH_nn)
-
-        for i_n = 1:length(neigs)
-     	    m = neigs[i_n]
-			Im = indexblock(m, tbm)
-            # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-            # dH_nm = (@GRAD tbm.hop(r[i_n], -R[:, i_n]))::Array{Float64,3}
-            # dM_nm = (@GRAD tbm.overlap(r[i_n], -R[:,i_n]))::Array{Float64,3}
-            grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
-
-  	        for iK = 1:size(K,2)
-			    k = K[:,iK]
-	            kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
-			    eikr = exp(im * kR) # ::Complex{Float64}
-
-			    C = get_k_array(tbm, :C, k)::Matrix{Complex{Float64}}
-			    # C_df_Ct = (C * (df[:,iK]' .* C)')
-			    # C_dfepsn_Ct = (C * (dfe[:,iK]' .* C)')
-
-          	    # the following is a hack to put the on-site assembly into the
-	            # innermost loop
-    	        # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-        	    for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                    Ima = Im[a]; Ina = In[a]; Inb = In[b]
-                    t1 = t2 = t3 = im*0.0
-                    @inbounds @simd for s = 1:size(C,2)
-                        t1 += df[s,iK] * C[Ima,s] * C[Inb,s]' # C_df_Ct[Im[a], In[b]]
-                        t2 += dfe[s,iK] * C[Ima,s] * C[Inb,s]' # C_dfepsn_Ct[Im[a], In[b]]
-                        t3 += df[s,iK] * C[Ina,s] * C[Inb,s]' # C_df_Ct[In[a],In[b]]
-                    end
-                    s1 = 2.0 * real(t1 * eikr)
-                    s2 = 2.0 * real(t2 * eikr)
-                    s3 = real(t3)
-            	    # t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
-                    # t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
-					# t3 = real(C_df_Ct[In[a],In[b]])
-    	            # add contributions to the force
-                    @inbounds for j = 1:3
-                        frc[j,n] = frc[j,n] - weight[iK] * ( dH_nm[j,a,b] * s1 -
-                                    dM_nm[j,a,b] * s2 - dH_nn[j,a,b,i_n] * s3 )
-                        frc[j,m] = frc[j,m] - weight[iK] * s3 * dH_nn[j,a,b,i_n]
-                    end
-                end
-
-	    end  # BZ integal k-loop
-       	end  # m in neigs-loop
-    end  # sites-loop
-    return frc
-end
-
 
 
 
@@ -787,7 +687,6 @@ function forces_debug(atm::ASEAtoms, tbm)
 
     @code_warntype forces_k(X, tbm, nlist, zeros(3))
 end
-
 
 
 
@@ -877,7 +776,6 @@ end
 
 # scalar index: just wraps the vector version
 site_forces(n::Int, atm::ASEAtoms, tbm::TBModel) = site_forces([n;], atm, tbm)
-
 
 
 
@@ -1104,8 +1002,8 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
 			for d = 1:3
 				md = d + 3*(m-1)
 				nd = d + 3*(n-1)
-				#g_s_n[md, In] += ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
-				#g_s_n[nd, In] -= ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
+				g_s_n[md, In] += ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
+				g_s_n[nd, In] -= ( slice(dH_nn, d, :, :, i_n) * C[In, s] )'
 
                 g_s_n[md, In] += ( slice(dH_nm, d, :, :) * C[Im, s] )' # * eikr
        	        g_s_n[nd, In] -= ( slice(dH_nm, d, :, :) * C[Im, s] )' # * eikr
@@ -1183,6 +1081,10 @@ function hessian(atm::ASEAtoms, tbm::TBModel)
 
     return hessian
 end
+
+
+
+potential_energy_d2(atm::ASEAtoms, tbm::TBModel) = hessian(atm, tbm)
 
 
 
@@ -1277,17 +1179,6 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
         	evaluate_fd!(tbm.onsite, R, dH_nn)
         	evaluate_fd2!(tbm.onsite, R, d2H_nn)
 
-			# contributions from onsite terms
-			# there are three parts of H_{nn,[d1, n, d2, n]}, the first part is
-# 			for d1 = 1:3
-# 				for d2 = 1:3
-# 					Hess[d1, n, d2, n] += feps2[s] * (
-# 						 - eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, n, In][:]
-# 						 - eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, n, In][:]
-# 						 )[1]
-# 				end
-# 			end
-
 			# loop through all neighbours of the n-th site
     	    for i_n = 1:length(neigs)
 				m = neigs[i_n]
@@ -1337,7 +1228,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 								 eps_s_n[d1, l] * slice(dM_nm, d2, :, :)
                                               ) * C[Im,s] 
 								 )[1]								
-						end	# loop for atom k
+						end	# loop for atom l
 
 						# contributions from hopping terms
 						# 4 parts: from H_{nm,nn}, H_{nm,mm}, H_{nm,mn}, H_{nm,nm}
@@ -1362,64 +1253,46 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
                                               ) * C[Im,s] 
 								 )[1]
 
+
 						# contributions from onsite terms
-						# 4 parts: H_{nn,nn}, H_{nn,mm}, H_{nn,nm}, H_{nn,mn}  where n≠m
 						m1 = 3*(i_n-1) + d1
 						m2 = 3*(i_n-1) + d2
-
-						# second part of H_{nn,[d1, n, d2, n]} is
-# 						Hess[d1, n, d2, n] +=  feps2[s] * (
-# 								 C[In, s]' * ( - dH_nn[m1, :][:] .* psi_s_n[d2, n, In][:] ) +
-# 								 C[In, s]' * ( - dH_nn[m2, :][:] .* psi_s_n[d1, n, In][:] )
-# 								 )[1]
-
-# 						# there are two parts of H_{nn,[d1, n, d2, m]}, the first part is
-# 						Hess[d1, m, d2, n] +=  feps2[s] * (
-# 								 C[In, s]' * ( #( dH_nn[m1, :][:]
-#                                                 - eps_s_n[d1, m]
-# 								 #* ones(Norb) ) .
-#                                                 * psi_s_n[d2, n, In][:] ) -
-# 								 eps_s_n[d2, n] * C[In, s]' * psi_s_n[d1, m, In][:]
-# 								 )[1]
-# 						Hess[d1, n, d2, m] +=  feps2[s] * (
-# 								 C[In, s]' * ( #( dH_nn[m2, :][:]
-#                                                 - eps_s_n[d2, m]
-# 								 #* ones(Norb) ) .
-#                                                 * psi_s_n[d1, n, In][:] ) -
-# 								 eps_s_n[d1, n] * C[In, s]' * psi_s_n[d2, m, In][:]
-# 								 )[1]
+	
+						# from H_{nn,n} and H_{nn,m} to E_{,nk}, E_{,kn}, E_{,mk}, E_{,km}
+						for l = 1 : Natm
+							Hess[d1, n, d2, l] += feps2[s] * (
+								 C[In, s]' * ( - slice(dH_nn, m1, :) .* psi_s_n[d2, l, In][:] )
+								 )[1]
+							Hess[d1, l, d2, n] += feps2[s] * (
+								 C[In, s]' * ( - slice(dH_nn, m2, :) .* psi_s_n[d1, l, In][:] )
+								 )[1]
+							Hess[d1, m, d2, l] += feps2[s] * (
+								 C[In, s]' * ( slice(dH_nn, m1, :) .* psi_s_n[d2, l, In][:] )
+								 )[1]
+							Hess[d1, l, d2, m] += feps2[s] * (
+								 C[In, s]' * ( slice(dH_nn, m2, :) .* psi_s_n[d1, l, In][:] )
+								 )[1]								
+						end	# loop for atom l
 
 						# another loop for neighbours
+						# 4 parts: from H_{nn,nn}, H_{nn,mm}, H_{nn,mn}, H_{nn,nm}
 						for i_m = 1:length(neigs)
 							mm = neigs[i_m]
 		    			    Imm = indexblock(mm, tbm)
 							mm1 = 3*(i_m-1) + d1
 							mm2 = 3*(i_m-1) + d2
-
-# 							Hess[d1, m, d2, mm] +=  feps2[s] * (
-# 									 #C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
-# 									 #C[In, s]' * ( ( dH_nn[m1, :][:] - eps_s_n[d1, m] *
-# 									 #ones(Norb) ) .* psi_s_n[d2, mm, In][:] ) +
-# 									 C[In, s]' * ( #( dH_nn[mm2, :][:]
-#                                                   - eps_s_n[d2, mm] *
-# 									 #ones(Norb) ) .*
-#                                                       psi_s_n[d1, m, In][:] )
-# 									 )[1]
-
-# 							# second part of H_{nn,[d1, n, d2, m]}
-# 							Hess[d1, m, d2, n] +=  feps2[s] * (
-# 									 C[In, s]' * ( - d2H_nn[m1, mm2, :][:] .* C[In,s] ) +
-# 									 C[In, s]' * ( - dH_nn[mm2, :][:] .* psi_s_n[d1, m, In][:] )
-# 									 )[1]
-# 							Hess[d1, n, d2, m] +=  feps2[s] * (
-# 									 C[In, s]' * ( - d2H_nn[mm1, m2, :][:] .* C[In,s] ) +
-# 									 C[In, s]' * ( - dH_nn[mm1, :][:] .* psi_s_n[d2, m, In][:] )
-# 									 )[1]
-
-# 							# third part of H_{nn,[d1, n, d2, n]} is
-# 							Hess[d1, n, d2, n] +=  feps2[s] *
-# 									 ( C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) )[1]
-
+ 							Hess[d1, m, d2, mm] +=  feps2[s] * (
+ 									 C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] ) 
+ 									 )[1]
+ 							Hess[d1, m, d2, n] +=  feps2[s] * (
+ 									 C[In, s]' * ( - d2H_nn[m1, mm2, :][:] .* C[In,s] ) 
+ 									 )[1]
+ 							Hess[d1, n, d2, m] +=  feps2[s] * (
+ 									 C[In, s]' * ( - d2H_nn[mm1, m2, :][:] .* C[In,s] ) 
+ 									 )[1]
+ 							Hess[d1, n, d2, n] +=  feps2[s] *
+ 									 ( C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* C[In,s] )
+									 )[1]
 						end		# loop for neighbours i_m
 
 					end		# loop for d2
