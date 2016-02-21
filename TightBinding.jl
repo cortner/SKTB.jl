@@ -1475,7 +1475,6 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 		        Im = indexblock(m, tbm)
 
         	    # compute and store ∂H, ∂^2H and ∂M, ∂^2M
-            	evaluate!(tbm.overlap, r[i_n], R[:, i_n], M_nm)
             	evaluate_fd!(tbm.hop, R[:,i_n], dH_nm)
             	evaluate_fd2!(tbm.hop, R[:,i_n], d2H_nm)
             	evaluate_fd3!(tbm.hop, R[:,i_n], d3H_nm)
@@ -1494,6 +1493,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, n, d2, p, d3, q] +=  feps3[s] * (
 											eps_s_mn[s, d2, p, d3, q] * C[In, s]' * slice(dM_nm, d1, :, :) * C[Im, s]
 											+ 2.0 * eps_s_n[d2, p] * C[In, s]' * slice(dM_nm, d1, :, :) * psi_s_n[d3, q, Im][:]
+											+ 2.0 * eps_s_n[d3, q] * C[In, s]' * slice(dM_nm, d1, :, :) * psi_s_n[d2, p, Im][:]
 											+ 2.0 * psi_s_n[d2, p, In][:]' * ( - slice(dH_nm, d1, :, :)
 								 			+ epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, q, Im][:]
 											)[1]
@@ -1501,6 +1501,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, m, d2, p, d3, q] +=  feps3[s] * (
 											- eps_s_mn[s, d2, p, d3, q] * C[In, s]' * slice(dM_nm, d1, :, :) * C[Im, s]
 											- 2.0 * eps_s_n[d2, p] * C[In, s]' * slice(dM_nm, d1, :, :) * psi_s_n[d3, q, Im][:]
+											- 2.0 * eps_s_n[d3, q] * C[In, s]' * slice(dM_nm, d1, :, :) * psi_s_n[d2, p, Im][:]
 											+ 2.0 * psi_s_n[d2, p, In][:]' * ( slice(dH_nm, d1, :, :)
 								 			- epsn[s] * slice(dM_nm, d1, :, :) ) * psi_s_n[d3, q, Im][:]
 											)[1]
@@ -1508,6 +1509,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, p, d2, n, d3, q] +=  feps3[s] * (
 											eps_s_mn[s, d1, p, d3, q] * C[In, s]' * slice(dM_nm, d2, :, :) * C[Im, s]
 											+ 2.0 * eps_s_n[d1, p] * C[In, s]' * slice(dM_nm, d2, :, :) * psi_s_n[d3, q, Im][:]
+											+ 2.0 * eps_s_n[d3, q] * C[In, s]' * slice(dM_nm, d2, :, :) * psi_s_n[d1, p, Im][:]
 											+ 2.0 * psi_s_n[d1, p, In][:]' * ( - slice(dH_nm, d2, :, :)
 								 			+ epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, q, Im][:]
 											)[1]
@@ -1515,6 +1517,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, p, d2, m, d3, q] +=  feps3[s] * (
 											- eps_s_mn[s, d1, p, d3, q] * C[In, s]' * slice(dM_nm, d2, :, :) * C[Im, s]
 											- 2.0 * eps_s_n[d1, p] * C[In, s]' * slice(dM_nm, d2, :, :) * psi_s_n[d3, q, Im][:]
+											- 2.0 * eps_s_n[d3, q] * C[In, s]' * slice(dM_nm, d2, :, :) * psi_s_n[d1, p, Im][:]
 											+ 2.0 * psi_s_n[d1, p, In][:]' * ( slice(dH_nm, d2, :, :)
 								 			- epsn[s] * slice(dM_nm, d2, :, :) ) * psi_s_n[d3, q, Im][:]
 											)[1]
@@ -1522,6 +1525,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, p, d2, q, d3, n] +=  feps3[s] * (
 											eps_s_mn[s, d1, p, d2, q] * C[In, s]' * slice(dM_nm, d3, :, :) * C[Im, s]
 											+ 2.0 * eps_s_n[d1, p] * C[In, s]' * slice(dM_nm, d3, :, :) * psi_s_n[d2, q, Im][:]
+											+ 2.0 * eps_s_n[d2, q] * C[In, s]' * slice(dM_nm, d3, :, :) * psi_s_n[d1, p, Im][:]
 											+ 2.0 * psi_s_n[d1, p, In][:]' * ( - slice(dH_nm, d3, :, :)
 								 			+ epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, q, Im][:]
 											)[1]
@@ -1529,6 +1533,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, p, d2, q, d3, m] +=  feps3[s] * (
 											- eps_s_mn[s, d1, p, d2, q] * C[In, s]' * slice(dM_nm, d3, :, :) * C[Im, s]
 											- 2.0 * eps_s_n[d1, p] * C[In, s]' * slice(dM_nm, d3, :, :) * psi_s_n[d2, q, Im][:]
+											- 2.0 * eps_s_n[d2, q] * C[In, s]' * slice(dM_nm, d3, :, :) * psi_s_n[d1, p, Im][:]
 											+ 2.0 * psi_s_n[d1, p, In][:]' * ( slice(dH_nm, d3, :, :)
 								 			- epsn[s] * slice(dM_nm, d3, :, :) ) * psi_s_n[d2, q, Im][:]
 											)[1]
