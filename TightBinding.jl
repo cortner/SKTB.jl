@@ -465,7 +465,7 @@ function hamiltonian!(tbm::TBModel, k,
             idx += 1
             It[idx] = In[i]
             Jt[idx] = In[j]
-            # Ht[idx] = H_nn[i,j]
+            Ht[idx] = H_nn[i,j]
             Mt[idx] = M_nn[i,j]
         end
     end
@@ -623,7 +623,7 @@ function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
             dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
                           ceil(Int, 1.5*length(neigs)))
         end
-        # evaluate_d!(tbm.onsite, r, R, dH_nn)
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
 
         for i_n = 1:length(neigs)
             m = neigs[i_n]
@@ -990,7 +990,7 @@ function d_eigenstate_k(s::Int, tbm::TBModel, X::Matrix{Float64}, nlist, Nneig::
         exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
 
         # compute and store ∂H_nn/∂y_n (onsite terms)
-        # evaluate_d!(tbm.onsite, r, R, dH_nn)
+        evaluate_d!(tbm.onsite, r, R, dH_nn)
 
         for i_n = 1:length(neigs)
 			m = neigs[i_n]
@@ -1179,8 +1179,8 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
         	In = indexblock(n, tbm)
 	        exp_i_kR = exp(im * (k' * (R - (X[:, neigs] .- X[:, n]))))
 
-        	# evaluate_fd!(tbm.onsite, R, dH_nn)
-        	# evaluate_fd2!(tbm.onsite, R, d2H_nn)
+        	evaluate_fd!(tbm.onsite, R, dH_nn)
+        	evaluate_fd2!(tbm.onsite, R, d2H_nn)
 
 			# loop through all neighbours of the n-th site
     	    for i_n = 1:length(neigs)
@@ -1273,7 +1273,7 @@ function hessian_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Flo
 						end	# loop for atom l
 
 						# another loop for neighbours
-						# 4 parts: from H_{nn,nn}, H_{nn,mm}, H_{nn,mn}, H_{nn,nm}
+						# 4 parts: from H_{nn,nn}, H_{nn,mm'}, H_{nn,mn}, H_{nn,nm}
 						for i_m = 1:length(neigs)
 							mm = neigs[i_m]
 		    			    Imm = indexblock(mm, tbm)
@@ -1664,17 +1664,126 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 
 
 							# contributions from onsite terms
-							# 8 parts:  H_{nn,nnn}, H_{nn,nnm}, H_{nn,nmn}, H_{nn,nmm}
-							# 			H_{nn,mmm}, H_{nn,mmn}, H_{nn,mnm}, H_{nn,mnn}
-							# another two loops for neighbours
+							m1 = 3*(i_n-1) + d1
+							m2 = 3*(i_n-1) + d2
+							m3 = 3*(i_n-1) + d3
+
+							# loop for all terms related to H_{nn,i} 
+							# 6 parts:  where i can only be n or m
+							for p = 1 : Natm
+								for q = 1 : Natm
+									# npq, mpq
+									D3E[d1, n, d2, p, d3, q] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d2, p, In][:]' * ( - dH_nn[m1, :][:] .* psi_s_n[d3, q, In][:] )
+										)[1]
+									D3E[d1, m, d2, p, d3, q] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d2, p, In][:]' * ( dH_nn[m1, :][:] .* psi_s_n[d3, q, In][:] )
+										)[1]
+									# npq, mpq
+									D3E[d1, p, d2, n, d3, q] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d1, p, In][:]' * ( - dH_nn[m2, :][:] .* psi_s_n[d3, q, In][:] )
+										)[1]
+									D3E[d1, p, d2, m, d3, q] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d1, p, In][:]' * ( dH_nn[m2, :][:] .* psi_s_n[d3, q, In][:] )
+										)[1]
+									# npq, mpq
+									D3E[d1, p, d2, q, d3, n] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d1, p, In][:]' * ( - dH_nn[m3, :][:] .* psi_s_n[d2, q, In][:] )
+										)[1]
+									D3E[d1, p, d2, p, d3, m] +=  feps3[s] * (
+ 										2.0 * psi_s_n[d1, p, In][:]' * ( dH_nn[m3, :][:] .* psi_s_n[d2, q, In][:] )
+										)[1]
+								end 	# loop for atom q
+							end 	# loop for atom p
+
+							# another loop for neighbors
 							for i_m = 1:length(neigs)
 								mm = neigs[i_m]
 			    			    Imm = indexblock(mm, tbm)
+								mm1 = 3*(i_m-1) + d1
+								mm2 = 3*(i_m-1) + d2
+								mm3 = 3*(i_m-1) + d3
 
+								# loop for all terms related to H_{nn,ij} 
+								# 12 parts:  where ij can only be nn, mm, nm, mn
+								for l = 1 : Natm
+									# nnl, nml, mnl, mml
+									D3E[d1, n, d2, n, d3, l] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* psi_s_n[d3, l, In][:] )
+										)[1]
+									D3E[d1, n, d2, m, d3, l] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[mm1, m2, :][:] .* psi_s_n[d3, l, In][:] )
+										)[1]
+									D3E[d1, m, d2, n, d3, l] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[m1, mm2, :][:] .* psi_s_n[d3, l, In][:] )
+										)[1]
+									D3E[d1, m, d2, mm, d3, l] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m1, mm2, :][:] .* psi_s_n[d3, l, In][:] )
+										)[1]
+									# nln, nlm, mln, mlm
+									D3E[d1, n, d2, l, d3, n] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m1, mm3, :][:] .* psi_s_n[d2, l, In][:] )
+										)[1]
+									D3E[d1, n, d2, l, d3, m] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[mm1, m3, :][:] .* psi_s_n[d2, l, In][:] )
+										)[1]
+									D3E[d1, m, d2, l, d3, n] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[m1, mm3, :][:] .* psi_s_n[d2, l, In][:] )
+										)[1]
+									D3E[d1, m, d2, l, d3, mm] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m1, mm3, :][:] .* psi_s_n[d2, l, In][:] )
+										)[1]
+									# lnn, lnm, lmn, lmm
+									D3E[d1, l, d2, n, d3, n] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m2, mm3, :][:] .* psi_s_n[d1, l, In][:] )
+										)[1]
+									D3E[d1, l, d2, n, d3, m] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[mm2, m3, :][:] .* psi_s_n[d1, l, In][:] )
+										)[1]
+									D3E[d1, l, d2, m, d3, n] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( - d2H_nn[m2, mm3, :][:] .* psi_s_n[d1, l, In][:] )
+										)[1]
+									D3E[d1, l, d2, m, d3, mm] +=  feps3[s] * (
+ 										2.0 * C[In, s]' * ( d2H_nn[m2, mm3, :][:] .* psi_s_n[d1, l, In][:] )
+										)[1]
+								end 	# loop for atom l
+
+								# 8 parts:  H_{nn,nnn}, H_{nn,nnm}, H_{nn,nmn}, H_{nn,nm'm''}
+								# 			H_{nn,mm'm''}, H_{nn,mmn}, H_{nn,mnm}, H_{nn,mnn}
+								# a third loop for neighbours
 								for i_l = 1:length(neigs)
 									ll = neigs[i_l]
 			    			    	Ill = indexblock(ll, tbm)
-
+									ll1 = 3*(i_l-1) + d1
+									ll2 = 3*(i_l-1) + d2
+									ll3 = 3*(i_l-1) + d3
+			
+									# nnn, nnm, nmn, nmm
+									D3E[d1, n, d2, n, d3, n] +=  feps3[s] * (
+									 	C[In, s]' * ( - d3H_nn[m1, mm2, ll3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, n, d2, n, d3, m] +=  feps3[s] * (
+									 	C[In, s]' * ( d3H_nn[mm1, ll2, m3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, n, d2, m, d3, n] +=  feps3[s] * (
+									 	C[In, s]' * ( d3H_nn[mm1, m2, ll3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, n, d2, m, d3, mm] +=  feps3[s] * (
+									 	C[In, s]' * ( - d3H_nn[ll1, m2, mm3, :][:] .* C[In, s] )
+										)[1]
+									# mnn, mnm, mmn, mmm
+									D3E[d1, m, d2, n, d3, n] +=  feps3[s] * (
+									 	C[In, s]' * ( d3H_nn[m1, mm2, ll3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, m, d2, n, d3, mm] +=  feps3[s] * (
+									 	C[In, s]' * ( - d3H_nn[m1, ll2, mm3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, m, d2, mm, d3, n] +=  feps3[s] * (
+									 	C[In, s]' * ( - d3H_nn[m1, mm2, ll3, :][:] .* C[In, s] )
+										)[1]
+									D3E[d1, m, d2, mm, d3, ll] +=  feps3[s] * (
+									 	C[In, s]' * ( d3H_nn[m1, mm2, ll3, :][:] .* C[In, s] )
+										)[1]
 
 								end 	# loop for neighbours i_l
 							end		# loop for neighbours i_m
