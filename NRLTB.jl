@@ -2069,6 +2069,19 @@ function hop_local_fd3!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float64,5
     # 9 orbitals : s, px, py, pz, dxy, dyz, dzx, dx2-y2, d3z2-r2
     # 10 bond types are : 1ssσ, 2spσ, 3ppσ, 4ppπ, 5sdσ, 6pdσ, 7pdπ, 8ddσ, 9ddπ, 10ddδ
 		
+		# TODO: fix the following dirty hack (for the bug from ForwardDiff)
+		# same dirty hack for 3rd order derivatives for overlap terms when norb = 9
+        R[find(R .== 0.0)] = 1.0e-15
+		if R[1] == R[2] 
+			R[1] += 1.0e-12
+		end
+		if R[1] == R[3]
+			R[1] += 1.0e-12
+		end
+		if R[2] == R[3]
+			R[2] -= 1.0e-12
+		end
+
         # ss
         h11(x) = h_hop_fd(x, 1, elem)
 		g = ForwardDiff.tensor(h11)
@@ -2327,7 +2340,20 @@ function overlap_local_fd3!(R::Vector{Float64}, elem::NRLParams, dh::Array{Float
     elseif Norb == 9 && Nb == 10
     # 9 orbitals : s, px, py, pz, dxy, dyz, dzx, dx2-y2, d3z2-r2
     # 10 bond types are : 1ssσ, 2spσ, 3ppσ, 4ppπ, 5sdσ, 6pdσ, 7pdπ, 8ddσ, 9ddπ, 10ddδ
-		
+			
+		# TODO: fix the following dirty hack (for the bug from ForwardDiff)
+		# same dirty hack for 3rd order derivatives for overlap terms when norb = 9
+        R[find(R .== 0.0)] = 1.0e-15
+		if R[1] == R[2] 
+			R[1] += 1.0e-12
+		end
+		if R[1] == R[3]
+			R[1] += 1.0e-12
+		end
+		if R[2] == R[3]
+			R[2] -= 1.0e-12
+		end
+
         # ss
         h11(x) = m_hop_fd(x, 1, elem)
 		g = ForwardDiff.tensor(h11)
