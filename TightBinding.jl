@@ -1679,18 +1679,18 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									D3E[d1, m, d2, p, d3, q] +=  feps3[s] * (
  										2.0 * psi_s_n[d2, p, In][:]' * ( dH_nn[m1, :][:] .* psi_s_n[d3, q, In][:] )
 										)[1]
-									# npq, mpq
+									# pnq, pmq
 									D3E[d1, p, d2, n, d3, q] +=  feps3[s] * (
  										2.0 * psi_s_n[d1, p, In][:]' * ( - dH_nn[m2, :][:] .* psi_s_n[d3, q, In][:] )
 										)[1]
 									D3E[d1, p, d2, m, d3, q] +=  feps3[s] * (
  										2.0 * psi_s_n[d1, p, In][:]' * ( dH_nn[m2, :][:] .* psi_s_n[d3, q, In][:] )
 										)[1]
-									# npq, mpq
+									# pqn, pqm
 									D3E[d1, p, d2, q, d3, n] +=  feps3[s] * (
  										2.0 * psi_s_n[d1, p, In][:]' * ( - dH_nn[m3, :][:] .* psi_s_n[d2, q, In][:] )
 										)[1]
-									D3E[d1, p, d2, p, d3, m] +=  feps3[s] * (
+									D3E[d1, p, d2, q, d3, m] +=  feps3[s] * (
  										2.0 * psi_s_n[d1, p, In][:]' * ( dH_nn[m3, :][:] .* psi_s_n[d2, q, In][:] )
 										)[1]
 								end 	# loop for atom q
