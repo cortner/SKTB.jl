@@ -256,7 +256,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
     w_step = 1.0 / ( nx * ny * nz )
 	# evaluate K and weight
    	for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
-		k = k1 + (k2-1) * kx + (k3-1) * kx * ky
+		k = k1 + (k2-1) * nx + (k3-1) * nx * ny
 		# check when kx==0 or ky==0 or kz==0
         # K[:,k] = (k1-(kx/2)) * kx_step + (k2-(ky/2)) * ky_step + (k3-(kz/2)) * kz_step
         K[:,k] = (k1-(kx==0? nx:(kx/2))) * kx_step +
