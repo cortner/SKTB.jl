@@ -1,4 +1,5 @@
-module TightBinding.jl
+
+module TightBinding
 
 # package code goes here
 

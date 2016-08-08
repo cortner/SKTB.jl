@@ -1,1 +1,2 @@
 julia 0.4
+# JuLIP  (can't require it since it is not yet registered?)
