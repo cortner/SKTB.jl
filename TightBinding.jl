@@ -162,7 +162,12 @@ end
 function full_hermitian(A)
     A = 0.5 * (A + A')
     A[diagind(A)] = real(A[diagind(A)])
-    return Hermitian(full(A))
+    if vecnorm(conj(A) - A, Inf) < 1e-10
+      A = Symmetric(full(real(A)))
+    else
+      A = Hermitian(full(A))
+    end
+    return A
 end
 
 
@@ -344,7 +349,7 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
 	for n = 1:size(K, 2)
         k = K[:, n]
         epsn_k = get_k_array(tbm, :epsn, k)
-		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
+   		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
     end
 	# iteration by Newton algorithm
 	err = 1.0
@@ -762,7 +767,7 @@ site_forces(n::Int, atm::ASEAtoms, tbm::TBModel) = site_forces([n;], atm, tbm)
 # note that in the old version, we loop through through atoms
 #     E_l 	= ∑_s f(ɛ_s)⋅[ψ_s]_l^2
 #     E_l 	= ∑_s f(ɛ_s)⋅[ψ_s]_l⋅[M⋅ψ_s]_l
-# E_{l,n}	= ∑_s (	f'(ɛ_s)⋅ɛ_{s,n}⋅[ψ_s]_l⋅[M⋅ψ_s]_l + 2.0⋅f(ɛ_s)⋅[ψ_s]_{l,n}⋅[M⋅ψ_s]_l 
+# E_{l,n}	= ∑_s (	f'(ɛ_s)⋅ɛ_{s,n}⋅[ψ_s]_l⋅[M⋅ψ_s]_l + 2.0⋅f(ɛ_s)⋅[ψ_s]_{l,n}⋅[M⋅ψ_s]_l
 #					+ f(ɛ_s)⋅[ψ_s]⋅[M_{,n}⋅ψ_s]_l )
 # We loop through eigenpair s to compute the first two parts and through atom n for the third part
 #
@@ -845,7 +850,7 @@ function site_forces_k(idx::Array{Int,1}, X::Matrix{Float64},
 				end 	# loop for s
 			end		# loop for neighbour i_n
 		end 	# end of if
-	end		# loop for atom n 
+	end		# loop for atom n
 
 	return dEs
 	# note that this is in fact the site force, -dEs
@@ -1586,7 +1591,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 							m2 = 3*(i_n-1) + d2
 							m3 = 3*(i_n-1) + d3
 
-							# loop for all terms related to H_{nn,i} 
+							# loop for all terms related to H_{nn,i}
 							# 6 parts:  where i can only be n or m
 							for p = 1 : Natm
 								for q = 1 : Natm
@@ -1622,7 +1627,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 								mm2 = 3*(i_m-1) + d2
 								mm3 = 3*(i_m-1) + d3
 
-								# loop for all terms related to H_{nn,ij} 
+								# loop for all terms related to H_{nn,ij}
 								# 12 parts:  where ij can only be nn, mm, nm, mn
 								for l = 1 : Natm
 									# nnl, nml, mnl, mml
@@ -1675,7 +1680,7 @@ function d3E_k(X::Matrix{Float64}, tbm::TBModel, nlist, Nneig, k::Vector{Float64
 									ll1 = 3*(i_l-1) + d1
 									ll2 = 3*(i_l-1) + d2
 									ll3 = 3*(i_l-1) + d3
-			
+
 									# nnn, nnm, nmn, nmm
 									D3E[d1, n, d2, n, d3, n] +=  feps3[s] * (
 									 	C[In, s]' * ( - d3H_nn[m1, mm2, ll3, :][:] .* C[In, s] )
