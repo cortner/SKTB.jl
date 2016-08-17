@@ -317,7 +317,7 @@ function update!(atm::ASEAtoms, tbm::TBModel)
    Xnew = positions(atm)
    Xold = tbm[:X]   # (returns nothing if X has not been stored previously)
    if Xnew != Xold
-      tbm[:X] = Xnew
+      tbm[:X] = copy(Xnew)
       # do all the updates
       update_eig!(atm, tbm)
       update_eF!(atm, tbm)

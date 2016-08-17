@@ -3,7 +3,7 @@ module TightBinding
 
 using JuLIP
 using JuLIP.Potentials
-using JuLIP.ASE   # TODO: remove ASE dependence???
+using JuLIP.ASE   # TODO: remove ASE dependence??? 
 
 
 abstract AbstractTBModel <: AbstractCalculator
