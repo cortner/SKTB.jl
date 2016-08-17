@@ -1,11 +1,31 @@
 
 using JuLIP.Potentials
-import JuLIP.Potentials: cutoff
+# using FixedSizeArrays
+
+
+import JuLIP: energy, forces
+import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
+
+
+export hamiltonian, densitymatrix
+
 
 # TODO: making SmearingFunction a potential is a bit of a hack;
 #       not so pretty really
 abstract SmearingFunction <: Potential
 
+
+# TODO: default evaluate!
+#       should this potentially go into Potentials?
+evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
+evaluate_d!(pot, r, R, target)  = copy!(target, evaluate_d(pot, r, R))
+grad(pot, r, R) = R .* (evaluate_d(pot, r, R) ./ r)'
+function grad!(p, r, R, G)
+    g = grad(p, r, R)
+    for ind in eachindex(g)
+        G[ind] = g[ind]
+    end
+end
 
 """
 `TBModel`: basic non-self consistent tight binding calculator. This
@@ -87,14 +107,16 @@ cutoff(tbm::TBModel) = tbm.Rcut
 # TODO: this should be working; resolve this at some point
 
 
-"""`FermiDiracSmearing`:
+# """`FermiDiracSmearing`:
+#
+# f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
+# """
 
-f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
-"""
-type FermiDiracSmearing <: SmearingFunction
+@pot type FermiDiracSmearing <: SmearingFunction
     beta
     eF
 end
+
 FermiDiracSmearing(beta;eF=0.0) = FermiDiracSmearing(beta, eF)
 
 # FD distribution and its derivative. both are vectorised implementations
@@ -111,26 +133,23 @@ fermi_dirac_d3(eF, beta, epsn) =
     fermi_dirac(eF, beta, epsn).^2 .* exp((epsn - eF) * beta) * beta^3 / 2.0
 
 # Boilerplate to work with the FermiDiracSmearing type
-@inline evaluate(fd::FermiDiracSmearing, epsn) =
-    fermi_dirac(fd.eF, fd.beta, epsn)
-@inline evaluate_d(fd::FermiDiracSmearing, epsn) =
-    fermi_dirac_d(fd.eF, fd.beta, epsn)
+evaluate(fd::FermiDiracSmearing, epsn) = fermi_dirac(fd.eF, fd.beta, epsn)
+evaluate_d(fd::FermiDiracSmearing, epsn) = fermi_dirac_d(fd.eF, fd.beta, epsn)
 # Boilerplate to work with the FermiDiracSmearing type
-@inline evaluate(fd::FermiDiracSmearing, epsn, eF) =
-    fermi_dirac(eF, fd.beta, epsn)
-@inline evaluate_d(fd::FermiDiracSmearing, epsn, eF) =
-    fermi_dirac_d(eF, fd.beta, epsn)
+evaluate(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac(eF, fd.beta, epsn)
+evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
 
 function set_eF!(fd::FermiDiracSmearing, eF)
     fd.eF = eF
 end
 
 
-"""`ZeroTemperature`:
+# """`ZeroTemperature`:
+#
+# TODO
+# """
 
-TODO
-"""
-type ZeroTemperature <: SmearingFunction
+@pot type ZeroTemperature <: SmearingFunction
     eF
 end
 
@@ -173,11 +192,13 @@ end
 
 """ store k-point dependent arrays"""
 set_k_array!(tbm, q, symbol, k) =  set_array!(tbm, (symbol, k), q)
+
 """retrieve k-point dependent arrays"""
 get_k_array(tbm, symbol, k) = get_array(tbm, (symbol, k))
 
 
- """`monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the
+ """
+ `monkhorstpackgrid(cell, nkpoints)` : constructs an MP grid for the
 computational cell defined by `cell` and `nkpoints`.
 MonkhorstPack: K = {b/kz * j + shift}_{j=-kz/2+1,...,kz/2} with shift = 0.0.
 Returns
@@ -267,13 +288,13 @@ and spectral decompositions on the MP grid.
 """
 function update_eig!(atm::ASEAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
-    nlist = NeighbourList(cutoff(tbm), atm)
+    nlist = neighbourlist(atm, cutoff(tbm))
     nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
     It = zeros(Int32, nnz_est)
     Jt = zeros(Int32, nnz_est)
     Ht = zeros(Complex{Float64}, nnz_est)
     Mt = zeros(Complex{Float64}, nnz_est)
-    X = positions(atm)
+    X = positions(atm) |> mat
     for n = 1:size(K, 2)
         k = K[:,n]
         H, M = hamiltonian!(tbm, k, It, Jt, Ht, Mt, nlist, X)
@@ -284,7 +305,8 @@ function update_eig!(atm::ASEAtoms, tbm::TBModel)
 end
 
 
-"""`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
+"""
+`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
 data stored in `tbm` needs to be updated (by comparing atom positions) and
 if so, does all necessary updates. At the moment, the following are updated:
 
@@ -292,54 +314,55 @@ if so, does all necessary updates. At the moment, the following are updated:
 * the fermi-level (`update_eF!`)
 """
 function update!(atm::ASEAtoms, tbm::TBModel)
-    Xnew = positions(atm)
-    Xold = tbm[:X]   # (returns nothing if X has not been stored previously)
-    if Xnew != Xold
-        tbm[:X] = Xnew
-        # do all the updates
-        update_eig!(atm, tbm)
-        update_eF!(atm, tbm)
-    end
+   Xnew = positions(atm)
+   Xold = tbm[:X]   # (returns nothing if X has not been stored previously)
+   if Xnew != Xold
+      tbm[:X] = Xnew
+      # do all the updates
+      update_eig!(atm, tbm)
+      update_eF!(atm, tbm)
+   end
 end
 
 
-"""`update_eF!(tbm::TBModel)`: recompute the correct
+"""
+`update_eF!(tbm::TBModel)`: recompute the correct
 fermi-level; using the precomputed data in `tbm.arrays`
 """
 function update_eF!(atm::ASEAtoms, tbm::TBModel)
-    if tbm.fixed_eF
-        set_eF!(tbm.smearing, tbm.eF)
-        return
-    end
-    # the following algorithm works for Fermi-Dirac, not general Smearing
-    K, weight = monkhorstpackgrid(atm, tbm)
-    Ne = tbm.norbitals * length(atm)
-	nf = round(Int, ceil(Ne/2))
-	# update_eig!(atm, tbm)
-	# set an initial eF
-	μ = 0.0
-	for n = 1:size(K, 2)
-        k = K[:, n]
-        epsn_k = get_k_array(tbm, :epsn, k)
-		μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
-    end
-	# iteration by Newton algorithm
-	err = 1.0
-	while abs(err) > 1.0e-8
-		Ni = 0.0
-		gi = 0.0
-		for n = 1:size(K,2)
-	        k = K[:, n]
-    	    epsn_k = get_k_array(tbm, :epsn, k)
-			Ni += weight[n] * r_sum( tbm.smearing(epsn_k, μ) )
-			gi += weight[n] * r_sum( @D tbm.smearing(epsn_k, μ) )
-		end
-	    err = Ne - Ni
-		#println("\n err=");  print(err)
-	    μ = μ - err / gi
-	end
-    tbm.eF = μ
-    set_eF!(tbm.smearing, tbm.eF)
+   if tbm.fixed_eF
+      set_eF!(tbm.smearing, tbm.eF)
+      return
+   end
+   # the following algorithm works for Fermi-Dirac, not general Smearing
+   K, weight = monkhorstpackgrid(atm, tbm)
+   Ne = tbm.norbitals * length(atm)
+   nf = round(Int, ceil(Ne/2))
+   # update_eig!(atm, tbm)
+   # set an initial eF
+   μ = 0.0
+   for n = 1:size(K, 2)
+      k = K[:, n]
+      epsn_k = get_k_array(tbm, :epsn, k)
+      μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
+   end
+   # iteration by Newton algorithm
+   err = 1.0
+   while abs(err) > 1.0e-8
+      Ni = 0.0
+      gi = 0.0
+      for n = 1:size(K,2)
+         k = K[:, n]
+         epsn_k = get_k_array(tbm, :epsn, k)
+         Ni += weight[n] * r_sum( tbm.smearing(epsn_k, μ) )
+         gi += weight[n] * r_sum( @D tbm.smearing(epsn_k, μ) )
+      end
+      err = Ne - Ni
+      #println("\n err=");  print(err)
+      μ = μ - err / gi
+   end
+   tbm.eF = μ
+   set_eF!(tbm.smearing, tbm.eF)
 end
 
 
@@ -348,7 +371,8 @@ end
 ### Hamiltonian Evaluation
 
 
-"""`hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
+"""
+`hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
 binding model.
 
 #### Parameters:
@@ -361,74 +385,85 @@ binding model.
 
 * `H` : hamiltoian in CSC format
 * `M` : overlap matrix in CSC format
-    """
+"""
 function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
-    nlist = NeighbourList(cutoff(tbm), atm)
-    nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
-    It = zeros(Int32, nnz_est)
-    Jt = zeros(Int32, nnz_est)
-    Ht = zeros(Complex{Float64}, nnz_est)
-    Mt = zeros(Complex{Float64}, nnz_est)
-    X = positions(atm)
-    return hamiltonian!( tbm, k, It, Jt, Ht, Mt, nlist, X)
+   nlist = neighbourlist(atm, cutoff(tbm))
+   nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
+   It = zeros(Int32, nnz_est)
+   Jt = zeros(Int32, nnz_est)
+   Ht = zeros(Complex{Float64}, nnz_est)
+   Mt = zeros(Complex{Float64}, nnz_est)
+   X = positions(atm) |> mat
+   return hamiltonian!( tbm, k, It, Jt, Ht, Mt, nlist, X)
 end
 
-hamiltonian(atm::ASEAtoms, tbm::TBModel) =
-    hamiltonian(atm::ASEAtoms, tbm::TBModel, [0.;0.;0.])
+hamiltonian(tbm::TBModel, atm::ASEAtoms) =
+   hamiltonian(atm::ASEAtoms, tbm::TBModel, [0.;0.;0.])
 
 
-function hamiltonian!(tbm::TBModel, k,
-                      It, Jt, Ht, Mt, nlist, X)
+# # TODO
+# dott(a::JVec, b::AbstractArray) = [dot(a, c) for c in b]
+#
+# import Base.-
+# -(b::Array{FixedSizeArrays.Point{3,Float64},1}, a::FixedSizeArrays.Point{3,Float64}) = [c - a for c in b]
 
-    idx = 0                     # index ito triplet format
-    H_nm = zeros(tbm.norbitals, tbm.norbitals)    # temporary arrays
-    M_nm = zeros(tbm.norbitals, tbm.norbitals)
-    temp = zeros(10)
 
-    # loop through sites
-    for (n, neigs, r, R, _) in Sites(nlist)
-        In = indexblock(n, tbm)   # index-block for atom index n
-        exp_i_kR = exp(im * (k' * (R - (X[:,neigs] .- X[:,n]))))
-        # loop through the neighbours of the current atom
-        for m = 1:length(neigs)
-            Im = TightBinding.indexblock(neigs[m], tbm)
-            # compute hamiltonian block
-            H_nm = evaluate!(tbm.hop, r[m], R[:, m], H_nm)
-            # compute overlap block
-            M_nm = evaluate!(tbm.overlap, r[m], R[:, m], M_nm)
-            # add new indices into the sparse matrix
-            @inbounds for i = 1:tbm.norbitals, j = 1:tbm.norbitals
-                idx += 1
-                It[idx] = In[i]
-                Jt[idx] = Im[j]
-                Ht[idx] = H_nm[i,j] * exp_i_kR[m]
-                Mt[idx] = M_nm[i,j] * exp_i_kR[m]
-            end
-        end
-        # now compute the on-site terms (we could move these to be done in-place)
-        H_nn = tbm.onsite(r, R)
-        M_nn = tbm.overlap(0.0)
-        # add into sparse matrix
-        for i = 1:tbm.norbitals, j = 1:tbm.norbitals
+function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
+
+   # # TODO
+   # k = JVec(k)
+
+   idx = 0                     # index ito triplet format
+   H_nm = zeros(tbm.norbitals, tbm.norbitals)    # temporary arrays
+   M_nm = zeros(tbm.norbitals, tbm.norbitals)
+   temp = zeros(10)
+
+   # loop through sites
+   for (n, neigs, r, R, _) in sites(nlist)
+      R = collect(R) |> mat     # TODO
+      In = indexblock(n, tbm)   # index-block for atom index n
+      exp_i_kR = exp( im * k' * (R - (X[:,neigs] .- X[:, n])) )
+      # loop through the neighbours of the current atom
+      for m = 1:length(neigs)
+         Im = TightBinding.indexblock(neigs[m], tbm)
+         # compute hamiltonian block
+         H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
+         # compute overlap block
+         M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
+         # add new indices into the sparse matrix
+         @inbounds for i = 1:tbm.norbitals, j = 1:tbm.norbitals
             idx += 1
             It[idx] = In[i]
-            Jt[idx] = In[j]
-            Ht[idx] = H_nn[i,j]
-            Mt[idx] = M_nn[i,j]
-        end
-    end
+            Jt[idx] = Im[j]
+            Ht[idx] = H_nm[i,j] * exp_i_kR[m]
+            Mt[idx] = M_nm[i,j] * exp_i_kR[m]
+         end
+      end
+      # now compute the on-site terms
+      # TODO: we could move these to be done in-place???
+      H_nn = tbm.onsite(r, R)
+      M_nn = tbm.overlap(0.0)
+      # add into sparse matrix
+      for i = 1:tbm.norbitals, j = 1:tbm.norbitals
+         idx += 1
+         It[idx] = In[i]
+         Jt[idx] = In[j]
+         Ht[idx] = H_nn[i,j]
+         Mt[idx] = M_nn[i,j]
+      end
+   end
 
-    # convert M, H into Sparse CCS and return
-    #   TODO: The conversion to sparse format accounts for about 1/2 of the
-    #         total cost. Since It, Jt are in an ordered format, it should be
-    #         possible to write a specialised code that converts it to
-    #         CCS much faster, possibly with less additional allocation?
-    #         another option would be to store a single It, Jt somewhere
-    #         for ALL the hamiltonians, and store multiple Ht, Mt and convert
-    #         these "on-the-fly", depending on whether full or sparse is needed.
-    #         but at the moment, eigfact cost MUCH more than the assembly,
-    #         so we could choose to stop here.
-    return sparse(It, Jt, Ht), sparse(It, Jt, Mt)
+   # convert M, H into Sparse CCS and return
+   #   TODO: The conversion to sparse format accounts for about 1/2 of the
+   #         total cost. Since It, Jt are in an ordered format, it should be
+   #         possible to write a specialised code that converts it to
+   #         CCS much faster, possibly with less additional allocation?
+   #         another option would be to store a single It, Jt somewhere
+   #         for ALL the hamiltonians, and store multiple Ht, Mt and convert
+   #         these "on-the-fly", depending on whether full or sparse is needed.
+   #         but at the moment, eigfact cost MUCH more than the assembly,
+   #         so we could choose to stop here.
+   return sparse(It, Jt, Ht), sparse(It, Jt, Mt)
 end
 
 
@@ -446,20 +481,20 @@ where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
     ρ = ∑_k w^k ∑_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
 """
 function densitymatrix(at::ASEAtoms, tbm::TBModel)
-    update!(at, tbm)
-    K, weight = monkhorstpackgrid(atm, tbm)
-    rho = 0.0
-    for n = 1:size(K, 2)
-        k = K[:, n]
-        epsn_k = get_k_array(tbm, :epsn, k)
-        C_k = get_k_array(tbm, :C, k)
-        f = tbm.smearing(epsn_k, tbm.eF)
-        # TODO: should eF be passed or should it be sotred in SmearingFunction?
-        for m = 1:length(epsn_k)
-            rho += weight[n] * f[m] * C_k[:,m] * C_k[:,m]'
-        end
-    end
-    return rho
+   update!(at, tbm)
+   K, weight = monkhorstpackgrid(atm, tbm)
+   rho = 0.0
+   for n = 1:size(K, 2)
+      k = K[:, n]
+      epsn_k = get_k_array(tbm, :epsn, k)
+      C_k = get_k_array(tbm, :C, k)
+      f = tbm.smearing(epsn_k, tbm.eF)
+      # TODO: should eF be passed or should it be sotred in SmearingFunction?
+      for m = 1:length(epsn_k)
+         rho += weight[n] * f[m] * C_k[:,m] * C_k[:,m]'
+      end
+   end
+   return rho
 end
 
 
@@ -468,159 +503,164 @@ end
 ### Standard Calculator Functions
 
 
-function potential_energy(at::ASEAtoms, tbm::TBModel)
+function energy(tbm::TBModel, at::ASEAtoms)
 
-    update!(at, tbm)
+   update!(at, tbm)
 
-    K, weight = monkhorstpackgrid(at, tbm)
-    E = 0.0
-    for n = 1:size(K, 2)
-        k = K[:, n]
-        epsn_k = get_k_array(tbm, :epsn, k)
-        E += weight[n] * r_sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
-        # TODO: pass eF?
-    end
+   K, weight = monkhorstpackgrid(at, tbm)
 
-    return E
+   E = 0.0
+   for n = 1:size(K, 2)
+      k = K[:, n]
+      epsn_k = get_k_array(tbm, :epsn, k)
+      E += weight[n] * sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
+      # TODO: pass eF?
+   end
+
+   return E
 end
 
 
 
 function band_structure_all(at::ASEAtoms, tbm::TBModel)
 
-    update!(at, tbm)
-    # tbm.fixed_eF = false
-    # TightBinding.update_eF!(at, tbm)
+   update!(at, tbm)
+   # tbm.fixed_eF = false
+   # TightBinding.update_eF!(at, tbm)
 
-	na = length(at) * tbm.norbitals
-    K, weight = monkhorstpackgrid(at, tbm)
-    E = zeros(na, size(K,2))
-    Ne = tbm.norbitals * length(at)
-    nf = round(Int, ceil(Ne/2))
+   na = length(at) * tbm.norbitals
+   K, weight = monkhorstpackgrid(at, tbm)
+   E = zeros(na, size(K,2))
+   Ne = tbm.norbitals * length(at)
+   nf = round(Int, ceil(Ne/2))
 
-    for n = 1:size(K, 2)
-        k = K[:, n]
-        epsn_k = get_k_array(tbm, :epsn, k)
-		for j = 1:na
-	        E[j,n] = epsn_k[j]
-		end
-    end
+   for n = 1:size(K, 2)
+      k = K[:, n]
+      epsn_k = get_k_array(tbm, :epsn, k)
+      for j = 1:na
+         E[j,n] = epsn_k[j]
+      end
+   end
 
-    return K, E
+   return K, E
 end
 
 
 # get 2*Nb+1 bands around the fermi level
 function band_structure_near_eF(Nb, at::ASEAtoms, tbm::TBModel)
 
-    update!(at, tbm)
-    # tbm.fixed_eF = false
-    # TightBinding.update_eF!(at, tbm)
+   update!(at, tbm)
+   # tbm.fixed_eF = false
+   # TightBinding.update_eF!(at, tbm)
 
-    K, weight = monkhorstpackgrid(at, tbm)
-    E = zeros(2*Nb+1, size(K,2))
-    Ne = tbm.norbitals * length(at)
-    nf = round(Int, ceil(Ne/2))
+   K, weight = monkhorstpackgrid(at, tbm)
+   E = zeros(2*Nb+1, size(K,2))
+   Ne = tbm.norbitals * length(at)
+   nf = round(Int, ceil(Ne/2))
 
-    for n = 1:size(K, 2)
-        k = K[:, n]
-        epsn_k = get_k_array(tbm, :epsn, k)
-        E[Nb+1,n] = epsn_k[nf]
-		for j = 1:Nb
-		    E[Nb+1-j,n] = epsn_k[nf-j]
-		    E[Nb+1+j,n] = epsn_k[nf+j]
-		end
-    end
+   for n = 1:size(K, 2)
+      k = K[:, n]
+      epsn_k = get_k_array(tbm, :epsn, k)
+      E[Nb+1,n] = epsn_k[nf]
+      for j = 1:Nb
+         E[Nb+1-j,n] = epsn_k[nf-j]
+         E[Nb+1+j,n] = epsn_k[nf+j]
+      end
+   end
 
-    return K, E
+   return K, E
 end
 
 
 
 function forces_k(X::Matrix{Float64}, tbm::TBModel, nlist, k::Vector{Float64})
 
-    # obtain the precomputed arrays
-    epsn = get_k_array(tbm, :epsn, k)
-    C = get_k_array(tbm, :C, k)
-    df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+   # obtain the precomputed arrays
+   epsn = get_k_array(tbm, :epsn, k)
+   C = get_k_array(tbm, :C, k)
+   df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
 
-    # precompute some products
-    const C_df_Ct = (C * (df' .* C)')::Matrix{Complex{Float64}}
-    const C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')::Matrix{Complex{Float64}}
+   # precompute some products
+   const C_df_Ct = (C * (df' .* C)')::Matrix{Complex{Float64}}
+   const C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')::Matrix{Complex{Float64}}
 
-    # allocate forces
-    const frc = zeros(Complex{Float64}, 3, size(X,2))
+   # allocate forces
+   const frc = zeros(Complex{Float64}, 3, size(X,2))
 
-    # pre-allocate dH, with a (dumb) initial guess for the size
-    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
-    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
-    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   # pre-allocate dH, with a (dumb) initial guess for the size
+   const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
+   const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
 
-    # loop through all atoms, to compute the force on atm[n]
-    for (n, neigs, r, R) in Sites(nlist)
-        neigs::Vector{Int}
-        R::Matrix{Float64}
-        # compute the block of indices for the orbitals belonging to n
-        In = indexblock(n, tbm)
+   # loop through all atoms, to compute the force on atm[n]
+   for (n, neigs, r, R, _) in sites(nlist)
+      R = collect(R) |> mat
+      # neigs::Vector{Int}   # TODO: put this back in?!?
+      #  R::Matrix{Float64}  # TODO: put this back in?!?
+      # compute the block of indices for the orbitals belonging to n
+      In = indexblock(n, tbm)
 
-        # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
-        # dH_nn should be 3 x norbitals x norbitals x nneigs
-        # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
-        # in-place version
-        if length(neigs) > size(dH_nn, 4)
-            dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
-                          ceil(Int, 1.5*length(neigs)))
-        end
-        evaluate_d!(tbm.onsite, r, R, dH_nn)
+      # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+      # dH_nn should be 3 x norbitals x norbitals x nneigs
+      # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
+      # in-place version
+      if length(neigs) > size(dH_nn, 4)
+         dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
+         ceil(Int, 1.5*length(neigs)))
+      end
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
 
-        for i_n = 1:length(neigs)
-            m = neigs[i_n]
-		    Im = indexblock(m, tbm)
-            kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
-		    eikr = exp(im * kR)::Complex{Float64}
-            # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-            grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
-            grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
+      for i_n = 1:length(neigs)
+         m = neigs[i_n]
+         Im = indexblock(m, tbm)
+         kR = dot(R[:,i_n] - (X[:,neigs[i_n]] - X[:,n]), k)
+         eikr = exp(im * kR)::Complex{Float64}
+         # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+         grad!(tbm.hop, r[i_n], -R[:,i_n], dH_nm)
+         grad!(tbm.overlap, r[i_n], -R[:,i_n], dM_nm)
 
-            # the following is a hack to put the on-site assembly into the
-            # innermost loop
-            # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-            for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-                t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
-                t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
-                t3 = C_df_Ct[In[a],In[b]]
-                # add contributions to the force
-                for j = 1:3
-                    frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
-                                       dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
-                    frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
-                end
+         # if n <= 2 && i_n <= 3
+         #    println(dM_nm[:]')
+         # elseif n > 2
+         #    quit()
+         # end
+
+         # the following is a hack to put the on-site assembly into the
+         # innermost loop
+         # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+         for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+            t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
+            t3 = C_df_Ct[In[a],In[b]]
+            # add contributions to the force
+            for j = 1:3
+               frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
+               dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+               frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
             end
+         end
 
-        end  # m in neigs-loop
-    end  #  sites-loop
+      end  # m in neigs-loop
+   end  #  sites-loop
 
-    return frc
+   return frc
 end
 
 
 
-function forces(atm::ASEAtoms, tbm::TBModel)
-    # tell tbm to update the spectral decompositions
-    update!(atm, tbm)
-    # precompute neighbourlist
-    nlist = NeighbourList(cutoff(tbm), atm)
-    X = positions(atm)
-    # BZ integration loop
-    K, weight = monkhorstpackgrid(atm, tbm)
-    # allocate output
-    frc = zeros(3, length(atm))
+function forces(tbm::TBModel, atm::ASEAtoms)
+   # tell tbm to update the spectral decompositions
+   update!(atm, tbm)
+   # precompute neighbourlist
+   nlist = neighbourlist(atm, cutoff(tbm))
+   X = positions(atm) |> mat
+   # BZ integration loop
+   K, weight = monkhorstpackgrid(atm, tbm)
+   # allocate output
+   frc = zeros(3, length(atm))
 
    for iK = 1:size(K,2)
-        frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
-    end
-    return frc
+      frc +=  weight[iK] * real(forces_k(X, tbm, nlist, K[:,iK]))
+   end
+   return frc |> vecs
 end
-
-
-grad(atm::ASEAtoms, tbm::TBModel) = -forces(atm, tbm)

@@ -1,6 +1,6 @@
 
 
-module ToyModel
+module ToyModels
 
 #######################################################################
 ###    The s-orbital Toy model                                      ###
@@ -8,30 +8,20 @@ module ToyModel
 
 export ToyTBModel
 
-using Potentials, TightBinding, ASE, MatSciPy
-import Potentials.evaluate, Potentials.evaluate_d
-export evaluate, evaluate_d
+using JuLIP
+using JuLIP.Potentials, JuLIP.ASE
+using TightBinding: FermiDiracSmearing, TBModel
 
-type ToyTBOverlap <: PairPotential
+import JuLIP.Potentials: evaluate, evaluate_d, @pot
+
+
+@pot type ToyTBOverlap <: PairPotential
 end
 # return 0.0 if two parameters are passed (only for off-diagional terms)
 evaluate(p::ToyTBOverlap, r, R) = 0.0
 evaluate_d(p::ToyTBOverlap, r, R) = 0.0
 # return 1.0 for diagonal terms (when r = 0)
 evaluate(p::ToyTBOverlap, r) = (r == 0.0 ? 1.0 : error("ToyTBOverlap(r) : r must be 0.0"))
-
-
-#type ToyHop <: PairPotential
-#    A
-#    r0
-#end
-#@inline morse_exp(p::ToyHop, r) = exp(-p.A * (r/p.r0 - 1.0))
-#@inline function evaluate(p::ToyHop, r)
-#    e = morse_exp(p, r); return e .* (e - 2.0)
-#end
-#@inline function  evaluate_d(p::ToyHop, r)
-#    e = morse_exp(p, r);  return (-2.0 * p.A / p.r0) * e .* (e - 1.0)
-#end
 
 
 
@@ -53,7 +43,7 @@ is given by
 function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
                     eF = 0.0, hfd=1e-6)
 
-    hop = SWCutoff(MorsePotential(1.0, alpha, r0), rcut, 1.0)
+    hop = MorsePotential(e0=1.0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0)
 
     #hop = MorsePotential(1.0, alpha, r0)
     return TBModel(hop = hop,
