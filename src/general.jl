@@ -427,9 +427,9 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       for m = 1:length(neigs)
          Im = TightBinding.indexblock(neigs[m], tbm)
          # compute hamiltonian block
-         H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
+         H_nm = evaluate!(tbm.hop, r[m], R[:,m], H_nm)
          # compute overlap block
-         M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
+         M_nm = evaluate!(tbm.overlap, r[m], R[:,m], M_nm)
          # add new indices into the sparse matrix
          @inbounds for i = 1:tbm.norbitals, j = 1:tbm.norbitals
             idx += 1
