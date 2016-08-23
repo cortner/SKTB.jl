@@ -2,6 +2,7 @@
 using JuLIP
 using JuLIP.Potentials
 
+using FixedSizeArrays
 
 import JuLIP: energy, forces
 import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
@@ -14,18 +15,15 @@ export hamiltonian, densitymatrix
 #       not so pretty really
 abstract SmearingFunction <: Potential
 
+
 # TODO: generalize to `AbstractAtoms`
 
 # TODO: default evaluate!; should this potentially go into Potentials?
 evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
 evaluate_d!(pot, r, R, target)  = copy!(target, evaluate_d(pot, r, R))
 grad(pot, r, R) = R .* (evaluate_d(pot, r, R) ./ r)'
-function grad!(p, r, R, G)
-    g = grad(p, r, R)
-    for ind in eachindex(g)
-        G[ind] = g[ind]
-    end
-end
+grad!(p, r, R, G) = copy!(G, grad(p, r, R))
+
 
 """
 `TBModel`: basic non-self consistent tight binding calculator. This
@@ -48,7 +46,7 @@ type TBModel{P_os, P_hop, P_ol, P_p} <: AbstractTBModel
 
     # HJ: add a parameter Rcut
     # since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
-    # TODO: this should not happe; need to resolve this issue
+    # TODO: this should not happen; need to resolve this issue
     Rcut::Float64
 
     # remaining model parameters
@@ -99,7 +97,7 @@ TBModel(;onsite = ZeroSitePotential(),
 a little auxiliary function to compute indices for several orbitals
 """
 indexblock{T <: Integer}(n::T, tbm::TBModel) =
-         T[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals]
+      Vec( T[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals] )
 
 cutoff(tbm::TBModel) = tbm.Rcut
 # HJ: not sure this returns right Rcut for NRL ----------------------------------
@@ -121,7 +119,8 @@ end
 FermiDiracSmearing(beta;eF=0.0) = FermiDiracSmearing(beta, eF)
 
 # FD distribution and its derivative. both are vectorised implementations
-# TODO: rewrite using auto-diff
+# TODO: rewrite using auto-diff!!!
+#       but this requires us to admit parameters for auto-diff
 fermi_dirac(eF, beta, epsn) =
     2.0 ./ ( 1.0 + exp((epsn - eF) * beta) )
 fermi_dirac_d(eF, beta, epsn) =
@@ -142,24 +141,23 @@ evaluate(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac(eF, fd.beta, epsn)
 evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
 
 function set_eF!(fd::FermiDiracSmearing, eF)
-    fd.eF = eF
+   fd.eF = eF
 end
 
 
 # """`ZeroTemperature`:
 #
-# TODO
+# TODO: write documentation
 # """
 
 @pot type ZeroTemperature <: SmearingFunction
-    eF
+   eF
 end
 
-
 function full_hermitian(A)
-    A = 0.5 * (A + A')
-    A[diagind(A)] = real(A[diagind(A)])
-    return Hermitian(full(A))
+   A = 0.5 * (A + A')
+   A[diagind(A)] = real(A[diagind(A)])
+   return Hermitian(full(A))
 end
 
 
@@ -239,18 +237,19 @@ function monkhorstpackgrid(cell::Matrix{Float64},
 	# We can exploit the symmetry of the BZ.
 	# TODO: NOTE THAT this is not necessarily first BZ
 	# and THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
-	nx, ny, nz = max(kx, 1), max(ky, 1), max(kz, 1)
+	nx, ny, nz = nn = max(kx, 1), max(ky, 1), max(kz, 1)
+   kxs, kys, kzs = (kx==0 ? nx : (kx/2)), (ky==0 ? ny : (ky/2)), (kz==0 ? nz : (kz/2))
 	N = nx * ny * nz
 	K = zerovecs(N)
 	weight = zeros(N)
 
 	# evaluate K and weight
+   #   TODO: make this loop use vectors more efficiently
    for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
+      # TODO: use `sub2ind` here
       k = k1 + (k2-1) * nx + (k3-1) * nx * ny
       # check when kx==0 or ky==0 or kz==0
-      K[k] = (k1 - (kx==0 ? nx : (kx/2))) * b1/nx +
-   			 (k2 - (ky==0 ? ny : (ky/2))) * b2/ny +
-             (k3 - (kz==0 ? nz : (kz/2))) * b3/nz
+      K[k] = (k1 - kxs) * b1/nx + (k2 - kys) * b2/ny + (k3 - kzs) * b3/nz
       weight[k] = 1.0 / ( nx * ny * nz )
    end
 
@@ -342,8 +341,8 @@ function update_eF!(atm::ASEAtoms, tbm::TBModel)
       for n = 1:size(K,2)
          k = K[n]
          epsn_k = get_k_array(tbm, :epsn, k)
-         Ni += weight[n] * r_sum( tbm.smearing(epsn_k, μ) )
-         gi += weight[n] * r_sum( @D tbm.smearing(epsn_k, μ) )
+         Ni += weight[n] * sum_kbn( tbm.smearing(epsn_k, μ) )
+         gi += weight[n] * sum_kbn( @D tbm.smearing(epsn_k, μ) )
       end
       err = Ne - Ni
       #println("\n err=");  print(err)
@@ -427,9 +426,9 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          Im = TightBinding.indexblock(neigs[m], tbm)
          # compute hamiltonian block
          # TODO: we are not yet converting NRLTB, so we cast R into a Vector
-         H_nm = evaluate!(tbm.hop, r[m], R[m] |> Vector, H_nm)
+         H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
          # compute overlap block
-         M_nm = evaluate!(tbm.overlap, r[m], R[m] |> Vector, M_nm)
+         M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
          # add new indices into the sparse matrix
          idx = append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, tbm.norbitals, idx)
       end
@@ -437,7 +436,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       # TODO: we could move these to be done in-place???
       # (first test: with small vectors and matrices in-place operations
       #  should become unnecessary)
-      H_nn = tbm.onsite(r, R |> mat)
+      H_nn = tbm.onsite(r, R)
       M_nn = tbm.overlap(0.0)
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nn, M_nn, 1.0, tbm.norbitals, idx)
@@ -499,7 +498,7 @@ function energy(tbm::TBModel, at::ASEAtoms)
    for n = 1:size(K, 2)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
-      E += weight[n] * sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
+      E += weight[n] * sum_kbn(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
    end
    return E
 end
@@ -558,26 +557,25 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
    const frc = zeros(Complex{Float64}, 3, length(X))
 
    # pre-allocate dH, with a (dumb) initial guess for the size
+   # TODO: re-interpret these as arrays of JVecs, where the first argument is the JVec
    const dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, 6)
    const dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
    const dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
 
    # loop through all atoms, to compute the force on atm[n]
    for (n, neigs, r, R, _) in sites(nlist)
-      # neigs::Vector{Int}   # TODO: put this back in?!?
-      #  R::Matrix{Float64}  # TODO: put this back in?!?
+      # neigs::Vector{Int}   # TODO: put this back in?!?  > PROFILE IT AGAIN
+      # R::Matrix{Float64}  # TODO: put this back in?!?
+      #   IT LOOKS LIKE the type of R is not inferred!
       # compute the block of indices for the orbitals belonging to n
       In = indexblock(n, tbm)
 
       # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
       # dH_nn should be 3 x norbitals x norbitals x nneigs
-      # dH_nn = (@D tbm.onsite(r, R))::Array{Float64,4}
-      # in-place version
       if length(neigs) > size(dH_nn, 4)
-         dH_nn = zeros(3, tbm.norbitals, tbm.norbitals,
-         ceil(Int, 1.5*length(neigs)))
+         dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, ceil(Int, 1.5*length(neigs)))
       end
-      evaluate_d!(tbm.onsite, r, R |> mat, dH_nn)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
 
       for i_n = 1:length(neigs)
          m = neigs[i_n]
@@ -586,8 +584,8 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
          kR = dot(tmp, k)
          eikr = exp(im * kR)::Complex{Float64}
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-         grad!(tbm.hop, r[i_n], - (R[i_n] |> Vector), dH_nm)
-         grad!(tbm.overlap, r[i_n], - (R[i_n] |> Vector), dM_nm)
+         grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
+         grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
 
          # the following is a hack to put the on-site assembly into the
          # innermost loop
@@ -597,10 +595,10 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
             t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
             t3 = C_df_Ct[In[a],In[b]]
             # add contributions to the force
+            # TODO: can re-write this as sum over JVecs
             for j = 1:3
-               frc[j,n] = frc[j,n] - dH_nm[j,a,b] * t1 +
-                           dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
-               frc[j,m] = frc[j,m] - t3 * dH_nn[j,a,b,i_n]
+               frc[j,n] += - dH_nm[j,a,b] * t1 + dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+               frc[j,m] += - t3 * dH_nn[j,a,b,i_n]
             end
          end
 

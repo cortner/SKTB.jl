@@ -24,9 +24,8 @@ evaluate_d(p::ToyTBOverlap, r, R) = 0.0
 evaluate(p::ToyTBOverlap, r) = (r == 0.0 ? 1.0 : error("ToyTBOverlap(r) : r must be 0.0"))
 
 
-
-
-"""`ToyTBModel`: constructs a simple 1-orbital tight binding model.
+"""
+`ToyTBModel`: constructs a simple 1-orbital tight binding model.
 It doesn't model anything but can be used for quick tests. The hopping function
 is given by
 
@@ -41,20 +40,19 @@ is given by
 * hfd = 1e-6 : finite difference step for computing hessians
 """
 function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
-                    eF = 0.0, hfd=1e-6)
+   eF = 0.0, hfd=1e-6)
 
-    hop = MorsePotential(e0=1.0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0)
+   hop = MorsePotential(e0=1.0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0)
 
-    #hop = MorsePotential(1.0, alpha, r0)
-    return TBModel(hop = hop,
-                   overlap = ToyTBOverlap(),
-                   smearing = FermiDiracSmearing(beta),
-                   norbitals = 1,
-                   Rcut = rcut,
-                   fixed_eF = fixed_eF,
-                   eF = eF,
-                   nkpoints = (0,0,0),
-                   hfd=hfd)
+   return TBModel(hop = hop,
+                  overlap = ToyTBOverlap(),
+                  smearing = FermiDiracSmearing(beta),
+                  norbitals = 1,
+                  Rcut = rcut,
+                  fixed_eF = fixed_eF,
+                  eF = eF,
+                  nkpoints = (0,0,0),
+                  hfd=hfd)
 end
 
 
