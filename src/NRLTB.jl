@@ -1,6 +1,8 @@
 
 module NRLTB
 
+# TODO: switch entirely to auto-diff
+
 using JuLIP
 using JuLIP.Potentials
 using JuLIP.ASE
@@ -61,62 +63,38 @@ include("NRLTB_data.jl")
    elem :: NRLParams
 end
 evaluate(p::NRLos, r, R) = get_os(r/BOHR, p.elem)
-evaluate_d(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)/BOHR
+function evaluate_d(p::NRLos, r, R)
+   scale!(R, 1.0/BOHR)
+   out = get_dos(r/BOHR, R, p.elem)/BOHR
+   scale!(R, BOHR)
+   return out
+end
 # grad(p::NRLos, r, R) = get_dos(r/BOHR, R/BOHR, p.elem)
 # cutoff(p::NRLos) = p.elem.Rc
 
 # CO : added an in-place operation for experimenting
 function evaluate_d!(p::NRLos, r, R, dH::Array{Float64, 4})
-   get_dos!(r/BOHR, R/BOHR, p.elem, dH)
-   dH[:] /= BOHR
+   scale!(R, 1.0/BOHR)
+   get_dos!(r/BOHR, R, p.elem, dH)
+   scale!(R, BOHR)
+   scale!(dH, 1.0/BOHR)
 end
-# derivatives computed by ForwardDiff
-function evaluate_fd!(p::NRLos, R, dH)
-	get_dos_fd!(R/BOHR, p.elem, dH)
-    dH[:] /= BOHR
-end
-function evaluate_fd2!(p::NRLos, R, dH)
-	get_d2os_fd!(R/BOHR, p.elem, dH)
-	dH[:] /= BOHR^2
-end
-function evaluate_fd3!(p::NRLos, R, dH)
-	get_d3os_fd!(R/BOHR, p.elem, dH)
-	dH[:] /= BOHR^3
-end
-
 
 
 
 @pot type NRLhop <: PairPotential
     elem :: NRLParams
 end
-evaluate!(p::NRLhop, r::Float64, R::Vector{Float64}, H, temp) =
+evaluate!(p::NRLhop, r::Float64, R::JVecF, H, temp) =
     mat_local_h!(r/BOHR, R/BOHR, p.elem, H, temp)
-evaluate(p::NRLhop, r::Float64, R::Vector{Float64}) =
-    mat_local_h!(r/BOHR, R/BOHR, p.elem,
-                 zeros(p.elem.Norbital, p.elem.Norbital), zeros(10))
+evaluate(p::NRLhop, r::Float64, R::JVecF) =
+    mat_local_h!(r/BOHR, R/BOHR, p.elem, zeros(p.elem.Norbital, p.elem.Norbital), zeros(10))
 # evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
 grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dH)/BOHR
-function grad!(p::NRLhop, r, R, dH::Array{Float64, 3})
-    d_mat_local!(r/BOHR, R/BOHR, p.elem, :dH, dH)
-    @inbounds for i = 1:length(dH)
-        dH[i] = dH[i] / BOHR
-    end
+function grad!(p::NRLhop, r::Float64, R::JVecF, dH::Array{Float64, 3})
+   d_mat_local!(r/BOHR, R/BOHR, p.elem, :dH, dH)
+   scale!(dH, 1.0/BOHR)
 end
-# derivatives computed by ForwardDiff
-function evaluate_fd!(p::NRLhop, R, dH)
-	hop_local_fd!(R/BOHR, p.elem, dH)
-	dH[:] /= BOHR
-end
-function evaluate_fd2!(p::NRLhop, R, dH)
-	hop_local_fd2!(R/BOHR, p.elem, dH)
-	dH[:] /= BOHR^2
-end
-function evaluate_fd3!(p::NRLhop, R, dH)
-	hop_local_fd3!(R/BOHR, p.elem, dH)
-	dH[:] /= BOHR^3
-end
-
 
 
 
@@ -139,24 +117,8 @@ grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
 function grad!(p::NRLoverlap, r, R, dM::Array{Float64, 3})
     d_mat_local!(r/BOHR, R/BOHR, p.elem, :dM, dM)
-    @inbounds for i = 1:length(dM)
-        dM[i] = dM[i] / BOHR
-    end
+    scale!(dM, 1.0/BOHR)
 end
-# derivatives computed by ForwardDiff
-function evaluate_fd!(p::NRLoverlap, R, dM)
-	overlap_local_fd!(R/BOHR, p.elem, dM)
-	dM[:] /= BOHR
-end
-function evaluate_fd2!(p::NRLoverlap, R, dM)
-	overlap_local_fd2!(R/BOHR, p.elem, dM)
-	dM[:] /= BOHR^2
-end
-function evaluate_fd3!(p::NRLoverlap, R, dM)
-	overlap_local_fd3!(R/BOHR, p.elem, dM)
-	dM[:] /= BOHR^3
-end
-
 
 
 
@@ -248,7 +210,7 @@ end
 # OUTPUT
 # ρ    : return the pseudo density on site n = 1, ... , length(atm)
 
-function pseudoDensity(r::Vector{Float64}, elem::NRLParams)
+function pseudoDensity(r::AbstractVector{Float64}, elem::NRLParams)
     λ = elem.λ
     Rc = elem.Rc
     lc = elem.lc
@@ -279,11 +241,11 @@ function os_NRL(elem::NRLParams, ρ::Float64)
     c = elem.c
     d = elem.d
     hl = Float64[ a[i] + b[i] * ρ^(2/3) + c[i] * ρ^(4/3) + d[i] * ρ^2
-				for i=1:elem.Norbital ]
+   				for i=1:elem.Norbital ]
     return hl
 end
 
-function os_NRL(elem::NRLParams, ρ::Vector{Float64})
+function os_NRL(elem::NRLParams, ρ::AbstractVector{Float64})
     a = elem.a
     b = elem.b
     c = elem.c
@@ -304,7 +266,7 @@ function dρ_os_NRL(elem::NRLParams, ρ::Float64)
     return hl
 end
 
-function dρ_os_NRL(elem::NRLParams, ρ::Vector{Float64})
+function dρ_os_NRL(elem::NRLParams, ρ::AbstractVector{Float64})
     a = elem.a
     b = elem.b
     c = elem.c
@@ -315,7 +277,7 @@ function dρ_os_NRL(elem::NRLParams, ρ::Vector{Float64})
 end
 
 # get the onsite terms
-function get_os(r::Vector{Float64}, elem::NRLParams)
+function get_os(r::AbstractVector{Float64}, elem::NRLParams)
     n = elem.Norbital
     H = zeros(n, n)
     ρ = pseudoDensity(r, elem)
@@ -327,7 +289,7 @@ function get_os(r::Vector{Float64}, elem::NRLParams)
 end
 
 # first order derivative
-function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
+function get_dos(r::Vector{Float64}, R::AbstractVector{JVecF}, elem::NRLParams)
     dim = 3
     ρ = pseudoDensity(r, elem)
 	nneig = length(r)
@@ -338,14 +300,15 @@ function get_dos(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams)
         dρ = dR_pseudoDensity(r[m], elem)
         dh = dρ_os_NRL(elem, ρ)
         for d = 1:dim, i = 1:norbitals
-            dH[d, i, i, m] = dρ * dh[i] * R[d,m]/r[m]
+            dH[d, i, i, m] = dρ * dh[i] * R[m][d]/r[m]    # ***!!!***
+                                                         # make dH an arrays of JVecs
         end
 	end
 	return dH
 end
 
 # first order derivative
-function get_dos!(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams,
+function get_dos!(r::AbstractVector{Float64}, R::AbstractVector{JVecF}, elem::NRLParams,
                   dH::Array{Float64, 4})
     dim = 3
     ρ = pseudoDensity(r, elem)
@@ -357,7 +320,7 @@ function get_dos!(r::Vector{Float64}, R::Array{Float64}, elem::NRLParams,
         dρ = dR_pseudoDensity(r[m], elem)
         dh = dρ_os_NRL(elem, ρ)
         for d = 1:dim, i = 1:norbitals
-            dH[d, i, i, m] = dρ * dh[i] * R[d,m]/r[m]
+            dH[d, i, i, m] = dρ * dh[i] * R[m][d]/r[m]      # ***!!!***
         end
     end
     return dH
@@ -443,13 +406,10 @@ function dR_m_hop(R, bond_type, elem::NRLParams)
 end
 
 
-
-
-
-@inline mat_local_h!(r::Float64, R::Vector{Float64}, elem::NRLParams, h, temp) =
+@inline mat_local_h!(r::Float64, R::JVecF, elem::NRLParams, h, temp) =
     mat_local!(r, R, elem, h_hop!(r, elem, temp), h)
 
-@inline mat_local_m!(r::Float64, R::Vector{Float64}, elem::NRLParams, h, temp) =
+@inline mat_local_m!(r::Float64, R::JVecF, elem::NRLParams, h, temp) =
     mat_local!(r, R, elem, m_hop!(r, elem, temp), h)
 
 
@@ -458,21 +418,21 @@ generates local hamiltonian and overlap for hopping terms or overlap.
 The size of returnned local matrices are  Norbit x Norbit,
 for example, 4x4 for s&p orbitals and 9x9 for s&p&d orbitals.
 
-**Input**
+### Input
 r: distance
 R: displacement
 elem::NRLParams
 hh : constructed via mat_local_h or mat_local_m
 
-**Output**
+### Output
 h : R^{norb x norb}
 """
-function mat_local!(r::Float64, R::Vector{Float64}, elem::NRLParams,
-                   hh::Vector{Float64}, h::Matrix{Float64})
+function mat_local!(r::Float64, R::JVecF, elem::NRLParams,
+                      hh::Vector{Float64}, h::Matrix{Float64})
     # r = norm(R)
     u = R/r
     dim = 3
-    l,m,n = u[:]
+    l,m,n = u[1], u[2], u[3]
     Norb = elem.Norbital
     Nb = elem.Nbond
     # h = zeros(Norb, Norb)
@@ -615,17 +575,15 @@ end
 
 # generates local matrix for dH and dM
 
-d_mat_local(r::Float64, RR::Vector{Float64}, elem::NRLParams, task) =
-    d_mat_local!(r::Float64, RR::Vector{Float64}, elem::NRLParams, task::Symbol,
-                 zeros(3, elem.Norbital, elem.Norbital) )
+d_mat_local(r::Float64, RR::JVecF, elem::NRLParams, task) =
+    d_mat_local!(r, RR, elem, task, zeros(3, elem.Norbital, elem.Norbital) )
 
-function d_mat_local!(r::Float64, RR::Vector{Float64}, elem::NRLParams,
-                      task::Symbol,
-                      dh::Array{Float64, 3})
+function d_mat_local!(r::Float64, RR::JVecF, elem::NRLParams,
+                     task::Symbol, dh::Array{Float64, 3})
     #r = norm(RR)
     u = RR/r
     dim = 3
-    l,m,n = u[:]
+    l,m,n = u[1], u[2], u[3]
     Norb = elem.Norbital
     Nb = elem.Nbond
     # dh = zeros(dim, Norb, Norb)
@@ -859,7 +817,6 @@ function d_mat_local!(r::Float64, RR::Vector{Float64}, elem::NRLParams,
     end
     return dh
 end
-
 
 
 end

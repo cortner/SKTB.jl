@@ -3,8 +3,6 @@ module TightBinding
 
 using JuLIP
 using JuLIP.Potentials
-using JuLIP.ASE   # TODO: remove ASE dependence???
-
 
 abstract AbstractTBModel <: AbstractCalculator
 
@@ -14,7 +12,7 @@ include("general.jl")
 # perturbation theory module
 # include("perturbation.jl")
 
-# implement the contuour integral variants
+# implement the contour integral variants
 # include("contour.jl")
 
 # a tight binding toy model, mostly for testing
