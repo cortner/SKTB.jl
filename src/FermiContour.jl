@@ -4,10 +4,10 @@ module Transforms
 
 include("JacobiFunc.jl")
 
-import Base.|>
+import Base.(|>)
 
-immutable Sn{M} 
-    m::M 
+immutable Sn{M}
+    m::M
 end
 @inline function |>(p, s::Sn)
     w,z = p
@@ -20,7 +20,7 @@ immutable Möbius{A,B,C,D}
 end
 @inline function |>(p, m::Möbius)
     w,z = p
-    return w*(m.a*(m.c*z+m.d ) - m.c*(m.a*z+m.b))/(m.c*z+m.d)^2, 
+    return w*(m.a*(m.c*z+m.d ) - m.c*(m.a*z+m.b))/(m.c*z+m.d)^2,
           (m.a*z+m.b)/(m.c*z+m.d)
 end
 
@@ -65,8 +65,8 @@ function fermicontour(Emin,Emax,β,μ,n)
             Transforms.Affine(im,0)
 
         # Fermi-Dirac function
-        w[i] *= abs(β*z[i]) < log(realmax(typeof(k))) ? 
-                1/(1 + exp(β*z[i])) : 
+        w[i] *= abs(β*z[i]) < log(realmax(typeof(k))) ?
+                1/(1 + exp(β*z[i])) :
                 0.5*(1-sign(real(z[i])))
         z[i] += μ
     end
