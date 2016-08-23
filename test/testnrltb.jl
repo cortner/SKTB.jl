@@ -1,7 +1,7 @@
 
 TB=TightBinding
 at = Atoms("Si", repeatcell=(1,2,2), pbc=(false,false,false), cubic=true)
-tbm = TB.NRLTB.NRLTBModel(elem=TB.NRLTB.Si_sp)
+tbm = TB.NRLTB.NRLTBModel(elem=TB.NRLTB.Si_sp, nkpoints = (4,2,0))
 
 X = copy(positions(at)) |> mat
 X[:, 2] += [0.123; 0.234; 0.01]

@@ -11,12 +11,10 @@ import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
 export hamiltonian, densitymatrix
 
 
-# TODO: making SmearingFunction a potential is a bit of a hack;
-#       not so pretty really
+# TODO: making SmearingFunction a potential is a bit of a hack:?
+#       or is it? It is energy after all?
 abstract SmearingFunction <: Potential
 
-
-# TODO: generalize to `AbstractAtoms`
 
 # TODO: default evaluate!; should this potentially go into Potentials?
 evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
@@ -103,7 +101,6 @@ cutoff(tbm::TBModel) = tbm.Rcut
 # HJ: not sure this returns right Rcut for NRL ----------------------------------
 # max(cutoff(tbm.hop), cutoff(tbm.onsite), cutoff(tbm.pair))
 # -------------------------------------------- ----------------------------------
-# TODO: this should be working; need to resolve this at some point
 
 
 # """`FermiDiracSmearing`:
@@ -169,9 +166,6 @@ function sorted_eig(H, M)
    return epsn[Isort], C[:, Isort]
 end
 
-# TODO: these set_array! etc should eventually store arrays in an
-#       atoms object, not in the calculator
-
 import Base.setindex!
 setindex!(tbm::TBModel, val, symbol) = set_array!(tbm, symbol, val)
 
@@ -231,12 +225,13 @@ function monkhorstpackgrid(cell::Matrix{Float64},
                 grid so that the Γ-point can be sampled!"))
 	end
 	# compute the lattice vector of reciprocal space
-   B = pinv(cell)
+   B = 2*pi*pinv(cell)
    b1, b2, b3 = JVec(B[:,1]), JVec(B[:,2]), JVec(B[:,3])
 
 	# We can exploit the symmetry of the BZ.
-	# TODO: NOTE THAT this is not necessarily first BZ
-	# and THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
+	# TODO: this is not necessarily first BZ
+	#       and THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
+   #       (is this a problem other than performance?)
 	nx, ny, nz = nn = max(kx, 1), max(ky, 1), max(kz, 1)
    kxs, kys, kzs = (kx==0 ? nx : (kx/2)), (ky==0 ? ny : (ky/2)), (kz==0 ? nz : (kz/2))
 	N = nx * ny * nz
@@ -248,6 +243,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
    for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
       # TODO: use `sub2ind` here
       k = k1 + (k2-1) * nx + (k3-1) * nx * ny
+      @assert k == sub2ind((nx, ny, nz), k1, k2, k3)
       # check when kx==0 or ky==0 or kz==0
       K[k] = (k1 - kxs) * b1/nx + (k2 - kys) * b2/ny + (k3 - kzs) * b3/nz
       weight[k] = 1.0 / ( nx * ny * nz )
@@ -258,10 +254,11 @@ end
 
 
 """
-`monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel)` : extracts cell and grid
+`monkhorstpackgrid(atm::AbstractAtoms, tbm::TBModel)` : extracts cell and grid
 information and returns an MP grid.
 """
-monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) = monkhorstpackgrid(cell(atm), tbm.nkpoints)
+monkhorstpackgrid(atm::AbstractAtoms, tbm::TBModel) =
+                     monkhorstpackgrid(cell(atm), tbm.nkpoints)
 
 
 
@@ -270,10 +267,10 @@ monkhorstpackgrid(atm::ASEAtoms, tbm::TBModel) = monkhorstpackgrid(cell(atm), tb
 
 
 """
-`update_eig!(atm::ASEAtoms, tbm::TBModel)` : updates the hamiltonians
+`update_eig!(atm::AbstractAtoms, tbm::TBModel)` : updates the hamiltonians
 and spectral decompositions on the MP grid.
 """
-function update_eig!(atm::ASEAtoms, tbm::TBModel)
+function update_eig!(atm::AbstractAtoms, tbm::TBModel)
     K, weight = monkhorstpackgrid(atm, tbm)
     nlist = neighbourlist(atm, cutoff(tbm))
     nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
@@ -293,14 +290,14 @@ end
 
 
 """
-`update!(atm::ASEAtoms, tbm:TBModel)`: checks whether the precomputed
+`update!(atm::AbstractAtoms, tbm:TBModel)`: checks whether the precomputed
 data stored in `tbm` needs to be updated (by comparing atom positions) and
 if so, does all necessary updates. At the moment, the following are updated:
 
 * spectral decompositions (`update_eig!`)
 * the fermi-level (`update_eF!`)
 """
-function update!(atm::ASEAtoms, tbm::TBModel)
+function update!(atm::AbstractAtoms, tbm::TBModel)
    Xnew = positions(atm)
    Xold = tbm[:X]   # (returns nothing if X has not been stored previously)
    if Xnew != Xold
@@ -316,7 +313,7 @@ end
 `update_eF!(tbm::TBModel)`: recompute the correct
 fermi-level; using the precomputed data in `tbm.arrays`
 """
-function update_eF!(atm::ASEAtoms, tbm::TBModel)
+function update_eF!(atm::AbstractAtoms, tbm::TBModel)
    if tbm.fixed_eF
       set_eF!(tbm.smearing, tbm.eF)
       return
@@ -364,7 +361,7 @@ binding model.
 
 #### Parameters:
 
-* `atm::ASEAtoms`
+* `atm::AbstractAtoms`
 * `tbm::TBModel`
 * `k = k=[0.;0.;0.]` : k-point at which the hamiltonian is evaluated
 
@@ -373,7 +370,7 @@ binding model.
 * `H` : hamiltoian in CSC format
 * `M` : overlap matrix in CSC format
 """
-function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
+function hamiltonian(atm::AbstractAtoms, tbm::TBModel, k)
    nlist = neighbourlist(atm, cutoff(tbm))
    nnz_est = length(nlist) * tbm.norbitals^2 + length(atm) * tbm.norbitals^2
    It = zeros(Int32, nnz_est)
@@ -384,8 +381,8 @@ function hamiltonian(atm::ASEAtoms, tbm::TBModel, k)
    return hamiltonian!( tbm, k, It, Jt, Ht, Mt, nlist, X)
 end
 
-hamiltonian(tbm::TBModel, atm::ASEAtoms) =
-   hamiltonian(atm::ASEAtoms, tbm::TBModel, JVec([0.;0.;0.]))
+hamiltonian(tbm::TBModel, atm::AbstractAtoms) =
+   hamiltonian(atm::AbstractAtoms, tbm::TBModel, JVec([0.;0.;0.]))
 
 
 
@@ -420,12 +417,12 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       In = indexblock(n, tbm)   # index-block for atom index n
       # loop through the neighbours of the current atom
       for m = 1:length(neigs)
-         # TODO: check is this not what the S array is all about?????
+         # note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
+         #       but this would actually be less efficient, and less clear
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
 
          Im = TightBinding.indexblock(neigs[m], tbm)
          # compute hamiltonian block
-         # TODO: we are not yet converting NRLTB, so we cast R into a Vector
          H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
          # compute overlap block
          M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
@@ -435,7 +432,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       # now compute the on-site terms
       # TODO: we could move these to be done in-place???
       # (first test: with small vectors and matrices in-place operations
-      #  should become unnecessary)
+      #              may become unnecessary)
       H_nn = tbm.onsite(r, R)
       M_nn = tbm.overlap(0.0)
       # add into sparse matrix
@@ -443,7 +440,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
    end
 
    # convert M, H into Sparse CCS and return
-   #   TODO: The conversion to sparse format accounts for about 1/2 of the
+   #   NOTE: The conversion to sparse format accounts for about 1/2 of the
    #         total cost. Since It, Jt are in an ordered format, it should be
    #         possible to write a specialised code that converts it to
    #         CCS much faster, possibly with less additional allocation?
@@ -457,10 +454,10 @@ end
 
 
 
-"""`densitymatrix(at::ASEAtoms, tbm::TBModel) -> rho`:
+"""`densitymatrix(at::AbstractAtoms, tbm::TBModel) -> rho`:
 
 ### Input
-* `at::ASEAtoms` : configuration
+* `at::AbstractAtoms` : configuration
 * `tbm::TBModel` : calculator
 
 ### Output
@@ -469,7 +466,7 @@ end
 where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
     ρ = ∑_k w^k ∑_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
 """
-function densitymatrix(at::ASEAtoms, tbm::TBModel)
+function densitymatrix(at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(atm, tbm)
    rho = 0.0
@@ -491,7 +488,7 @@ end
 ### Standard Calculator Functions
 
 
-function energy(tbm::TBModel, at::ASEAtoms)
+function energy(tbm::TBModel, at::AbstractAtoms)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(at, tbm)
    E = 0.0
@@ -505,7 +502,7 @@ end
 
 
 
-function band_structure_all(at::ASEAtoms, tbm::TBModel)
+function band_structure_all(at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    na = length(at) * tbm.norbitals
    K, weight = monkhorstpackgrid(at, tbm)
@@ -524,7 +521,7 @@ end
 
 
 # get 2*Nb+1 bands around the fermi level
-function band_structure_near_eF(Nb, at::ASEAtoms, tbm::TBModel)
+function band_structure_near_eF(Nb, at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(at, tbm)
    E = zeros(2*Nb+1, size(K,2))
@@ -611,7 +608,7 @@ end
 
 
 
-function forces(tbm::TBModel, atm::ASEAtoms)
+function forces(tbm::TBModel, atm::AbstractAtoms)
    update!(atm, tbm)
    nlist = neighbourlist(atm, cutoff(tbm))
    K, weight = monkhorstpackgrid(atm, tbm)
