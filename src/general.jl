@@ -8,7 +8,7 @@ import JuLIP: energy, forces
 import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
 
 
-export hamiltonian, densitymatrix
+export hamiltonian, densitymatrix, TBModel
 
 
 # TODO: making SmearingFunction a potential is a bit of a hack:?
@@ -88,7 +88,6 @@ TBModel(;onsite = ZeroSitePotential(),
         arrays = Dict()) =
    TBModel(onsite, hop, overlap, pair, Rcut, smearing, norbitals,
            fixed_eF, eF, nkpoints, hfd, needupdate, arrays)
-
 
 """
 `indexblock`:
@@ -330,6 +329,7 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
       epsn_k = get_k_array(tbm, :epsn, k)
       μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
    end
+   @show μ
    # iteration by Newton algorithm
    err = 1.0
    while abs(err) > 1.0e-8
@@ -344,6 +344,7 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
       err = Ne - Ni
       #println("\n err=");  print(err)
       μ = μ - err / gi
+      @show μ
    end
    tbm.eF = μ
    set_eF!(tbm.smearing, tbm.eF)
@@ -421,7 +422,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          #       but this would actually be less efficient, and less clear
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
 
-         Im = TightBinding.indexblock(neigs[m], tbm)
+         Im = indexblock(neigs[m], tbm)
          # compute hamiltonian block
          H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
          # compute overlap block
