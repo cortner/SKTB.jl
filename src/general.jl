@@ -1,4 +1,5 @@
 
+using JuLIP
 using JuLIP.Potentials
 # using FixedSizeArrays
 
