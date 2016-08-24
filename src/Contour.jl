@@ -63,7 +63,8 @@ end
 en(n::Int, N::Int) = full( sparsevec([n], [1.0], N) )
 
 
-function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
+function site_energy(calc::ContourCalculator, at::AbstractAtoms,
+                     n0::Integer; deriv=false)
    tbm = calc.tbm
 
    # assume that the fermi-level is fixed
@@ -84,16 +85,42 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
    # compute site energy
    # define the right-hand side in the linear solver at each quad-point
    In0 = indexblock(n0, tbm) |> Vector
-   rhs = full(M[:, In0])
+   rhsM = full(M[:, In0])
+   rhs = zeros(size(H,1), length(In0))
+   rhs[In0, :] = eye(In0)
+
    Esite = 0.0
+   Esite_d = zerovecs(length(at))
+
    for (wi, zi) in zip(w, z)
-      res = (H - zi * M) \ rhs
+      LU = lufact(H - zi * M)
+      resM = LU \ rhsM
       # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
-      Esite += 2.0 * real(wi * zi * trace(res[In0, :]))
+      Esite += 2.0 * real(wi * zi * trace(resM[In0, :]))
+
+      # TODO: the call to mult_H_d! will very likely dominate this;
+      #       since we are recomputing H_{,n} and H_{,m} many times here
+      #       it will probably be better to first precompute all residuals
+      #       `res`, store them, and then start a new loop over the contour
+      if deriv
+         res = conj(LU \ rhs)
+         for n = 1:length(at)
+            # we need rM = M_{,m} * res and rH = H_{,m} * res
+            rM, rH = mult_H_d!(tbm, at, res)
+            Esite_d[n] += conj(rM[n]) + zi * dot(rM,
+         end
+         end
+      end
    end
    # --------------------------------------------
 
    return Esite
+end
+
+
+
+function mult_H_d!(tbm, at, v)
+
 end
 
 
