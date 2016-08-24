@@ -20,7 +20,7 @@ module Contour
 
 using JuLIP
 using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
-                     update!, band_structure_all
+                     update!, band_structure_all, indexblock
 using FermiContour
 
 export site_energy
@@ -49,13 +49,11 @@ function calibrate!(calc::ContourCalculator, at::AbstractAtoms,
    tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
    # this computes the spectrum and fermi-level
    update!(at, tbm)
-   @show tbm.smearing.eF
-   @show tbm.eF
    @assert tbm.eF == tbm.smearing.eF
    tbm.fixed_eF = true
    tbm.nkpoints = nkpoints_old
    # get the spectrum and compute Emin, Emax
-   epsn = band_structure_all(at, tbm)
+   _, epsn = band_structure_all(at, tbm)
    calc.Emin, calc.Emax = extrema( abs(epsn - tbm.eF) )
    return calc
 end
@@ -64,40 +62,37 @@ end
 "create a canonical basis vector"
 en(n::Int, N::Int) = full( sparsevec([n], [1.0], N) )
 
+
 function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
    tbm = calc.tbm
 
    # assume that the fermi-level is fixed
-   @assert fixed_eF
+   @assert tbm.fixed_eF
    # assume that the smearing function is FermiDiracSmearing
-   @assert isa(tbm, FermiDiracSmearing)
-
-   # extract contour parameters
-   eF = tbm.eF
-   beta = tbm.smearing.beta
-
-
+   @assert isa(tbm.smearing, FermiDiracSmearing)
    # assume that we have only one k-point
    # TODO: we will need BZ  integration in at least one coordinate direction
    K, w = monkhorstpackgrid(at, tbm)
    @assert length(K) == 1
 
+   # --------------------------------------------
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
-
    # get the Fermi-contour
-   w, z = fermicontour(calc.Emin, calc.Emax, beta, eF, calc.nquad)
-
+   w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
    # compute site energy
-   en = en(n0, size(H,1))
-   Esite = 0.0
-   residuals = Vector{Complex128}[]
+   # define the right-hand side in the linear solver at each quad-point
+   In0 = indexblock(n0, tbm) |> Vector
+   rhs = zeros(size(H,1), length(In0))
+   rhs[In0, :] = eye(length(In0))
 
+   Esite = 0.0
    for (wi, zi) in zip(w, z)
-      res = (H - zi * M) \ en
-      push!(residuals, res)
-      Esite += real(wi * zi * res[n0])
+      res = (H - zi * M) \ rhs
+      # TODO: this is wrong; use columns of M instead! 
+      Esite += real(wi * zi * trace(res[In0, :]))
    end
+   # --------------------------------------------
 
    return Esite
 end
@@ -108,15 +103,8 @@ end
 
 
 
-#
-# type Esite_data
-#     n0::Int
-#     w::Vector{Complex128}
-#     z::Vector{Complex128}
-#     residuals::Vector{Vector{Complex128}}
-#     H::SparseMatrixCSC{Float64,Int}
-# end
-#
+
+
 # # contour integral version
 # function siteE_contour(tb::TBSystem,
 #                         n0::Int,   # site index

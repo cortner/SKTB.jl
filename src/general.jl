@@ -329,7 +329,6 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
       epsn_k = get_k_array(tbm, :epsn, k)
       μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
    end
-   @show μ
    # iteration by Newton algorithm
    err = 1.0
    while abs(err) > 1.0e-8
@@ -344,7 +343,6 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
       err = Ne - Ni
       #println("\n err=");  print(err)
       μ = μ - err / gi
-      @show μ
    end
    tbm.eF = μ
    set_eF!(tbm.smearing, tbm.eF)
