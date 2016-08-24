@@ -83,13 +83,10 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
    # compute site energy
    # define the right-hand side in the linear solver at each quad-point
    In0 = indexblock(n0, tbm) |> Vector
-   rhs = zeros(size(H,1), length(In0))
-   rhs[In0, :] = eye(length(In0))
-
+   rhs = full(M[:, In0])
    Esite = 0.0
    for (wi, zi) in zip(w, z)
       res = (H - zi * M) \ rhs
-      # TODO: this is wrong; use columns of M instead! 
       Esite += real(wi * zi * trace(res[In0, :]))
    end
    # --------------------------------------------

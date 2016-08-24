@@ -282,6 +282,8 @@ function update_eig!(atm::AbstractAtoms, tbm::TBModel)
         k = K[n]
         H, M = hamiltonian!(tbm, k, It, Jt, Ht, Mt, nlist, X)
         epsn, C = sorted_eig(H, M)
+        set_k_array!(tbm, M, :M, k)
+        set_k_array!(tbm, H, :H, k)
         set_k_array!(tbm, epsn, :epsn, k)
         set_k_array!(tbm, C, :C, k)
     end
