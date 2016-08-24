@@ -78,6 +78,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
    # --------------------------------------------
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
+   H = full(H); M = full(M)
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
    # compute site energy
@@ -87,7 +88,8 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
    Esite = 0.0
    for (wi, zi) in zip(w, z)
       res = (H - zi * M) \ rhs
-      Esite += real(wi * zi * trace(res[In0, :]))
+      # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
+      Esite += 2.0 * real(wi * zi * trace(res[In0, :]))
    end
    # --------------------------------------------
 
