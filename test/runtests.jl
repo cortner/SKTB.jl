@@ -7,5 +7,6 @@ println("============================================")
 println("    TightBinding Tests  ")
 println("============================================")
 
-include("testtoymodel.jl")
-include("testnrltb.jl")
+# include("testtoymodel.jl")
+# include("testnrltb.jl")
+include("testsiteE.jl")

@@ -8,7 +8,7 @@ import JuLIP: energy, forces
 import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
 
 
-export hamiltonian, densitymatrix
+export hamiltonian, densitymatrix, TBModel
 
 
 # TODO: making SmearingFunction a potential is a bit of a hack:?
@@ -88,7 +88,6 @@ TBModel(;onsite = ZeroSitePotential(),
         arrays = Dict()) =
    TBModel(onsite, hop, overlap, pair, Rcut, smearing, norbitals,
            fixed_eF, eF, nkpoints, hfd, needupdate, arrays)
-
 
 """
 `indexblock`:
@@ -279,10 +278,12 @@ function update_eig!(atm::AbstractAtoms, tbm::TBModel)
     Ht = zeros(Complex{Float64}, nnz_est)
     Mt = zeros(Complex{Float64}, nnz_est)
     X = positions(atm)
-    for n = 1:size(K, 2)
+    for n = 1:length(K)
         k = K[n]
         H, M = hamiltonian!(tbm, k, It, Jt, Ht, Mt, nlist, X)
         epsn, C = sorted_eig(H, M)
+        set_k_array!(tbm, M, :M, k)
+        set_k_array!(tbm, H, :H, k)
         set_k_array!(tbm, epsn, :epsn, k)
         set_k_array!(tbm, C, :C, k)
     end
@@ -325,7 +326,7 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
    # update_eig!(atm, tbm)
    # set an initial eF
    μ = 0.0
-   for n = 1:size(K, 2)
+   for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
@@ -335,7 +336,7 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
    while abs(err) > 1.0e-8
       Ni = 0.0
       gi = 0.0
-      for n = 1:size(K,2)
+      for n = 1:length(K)
          k = K[n]
          epsn_k = get_k_array(tbm, :epsn, k)
          Ni += weight[n] * sum_kbn( tbm.smearing(epsn_k, μ) )
@@ -421,7 +422,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          #       but this would actually be less efficient, and less clear
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
 
-         Im = TightBinding.indexblock(neigs[m], tbm)
+         Im = indexblock(neigs[m], tbm)
          # compute hamiltonian block
          H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
          # compute overlap block
@@ -470,7 +471,7 @@ function densitymatrix(at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(atm, tbm)
    rho = 0.0
-   for n = 1:size(K, 2)
+   for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       C_k = get_k_array(tbm, :C, k)
@@ -492,7 +493,7 @@ function energy(tbm::TBModel, at::AbstractAtoms)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(at, tbm)
    E = 0.0
-   for n = 1:size(K, 2)
+   for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       E += weight[n] * sum_kbn(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
@@ -506,10 +507,10 @@ function band_structure_all(at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    na = length(at) * tbm.norbitals
    K, weight = monkhorstpackgrid(at, tbm)
-   E = zeros(na, size(K,2))
+   E = zeros(na, length(K))
    Ne = tbm.norbitals * length(at)
    nf = round(Int, ceil(Ne/2))
-   for n = 1:size(K, 2)
+   for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       for j = 1:na
@@ -524,10 +525,10 @@ end
 function band_structure_near_eF(Nb, at::AbstractAtoms, tbm::TBModel)
    update!(at, tbm)
    K, weight = monkhorstpackgrid(at, tbm)
-   E = zeros(2*Nb+1, size(K,2))
+   E = zeros(2*Nb+1, length(K))
    Ne = tbm.norbitals * length(at)
    nf = round(Int, ceil(Ne/2))
-   for n = 1:size(K, 2)
+   for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       E[Nb+1,n] = epsn_k[nf]
@@ -614,7 +615,7 @@ function forces(tbm::TBModel, atm::AbstractAtoms)
    K, weight = monkhorstpackgrid(atm, tbm)
    X = positions(atm)
    frc = zerovecs(length(atm))
-   for iK = 1:size(K,2)
+   for iK = 1:length(K)
       frc +=  weight[iK] * forces_k(X, tbm, nlist, K[iK])
    end
    return frc
