@@ -21,7 +21,8 @@ module Contour
 using JuLIP
 using JuLIP: cutoff
 using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
-                     update!, band_structure_all, indexblock
+                     update!, band_structure_all, indexblock,
+                     evaluate_d!, grad!
 using FermiContour
 
 export site_energy
@@ -60,9 +61,6 @@ function calibrate!(calc::ContourCalculator, at::AbstractAtoms,
 end
 
 
-"create a canonical basis vector"
-en(n::Int, N::Int) = full( sparsevec([n], [1.0], N) )
-
 # TODO: at the moment we just have a single loop to compute
 #       energy and forces; consider instead to have forces separately
 #       but store precomputed information (the residuals)
@@ -92,7 +90,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    In0 = indexblock(n0, tbm) |> Vector
    rhsM = full(M[:, In0])
    rhs = zeros(size(H,1), length(In0))
-   rhs[In0, :] = eye(In0)
+   rhs[In0, :] = eye(length(In0))
 
    Esite = 0.0
    Esite_d = zerovecs(length(at))
@@ -114,7 +112,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
       #       this is to be tested.
       if deriv
          res = conj(LU \ rhs)
-         Esite_d += wi * site_force_inner(tbm, at, res, resM, zi, n0)
+         Esite_d += 2.0 * site_force_inner(tbm, at, res, resM, zi, wi, n0)
       end
    end
    # --------------------------------------------
@@ -124,17 +122,17 @@ end
 
 # TODO: this is probably both inelegant and inefficient
 #       just want correctness for now
-_dot_(a, b) = real(sum(a_*b_ for (a_,b_) in zip(a,b)))
+_dot_(a, b) = sum( a_*b_ for (a_,b_) in zip(a,b) )
 function _dot_{T}(a, M::Matrix{T}, b)
    out = zero(T)
    for i=1:length(a), j = 1:length(b)
       out += (conj(a[j])* b[j]) * M[i,j]
    end
-   return real(out)
+   return out
 end
 
 
-function site_force_inner(tbm, at, res, resM, zi, n0)
+function site_force_inner(tbm, at, res, resM, zi, wi, n0)
 
    # count the maximum number of neighbours
    maxneigs = 0
@@ -150,20 +148,20 @@ function site_force_inner(tbm, at, res, resM, zi, n0)
    # creates references to these arrays; when dH_nn etc get new data
    # written into them, then vdH_nn etc are automatically updated.
    vdH_nn = dH_nn |> vecs   # no x no x ... array with each entry a JVecF
-   vdH_nm = dH_nn |> vecs   # no x no matrix  of JVecF
-   vdM_nm = dH_nn |> vecs   # no x no matrix  of JVecF
+   vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
+   vdM_nm = dM_nm |> vecs   # no x no matrix  of JVecF
 
    # allocate force vector
    frc = zerovecs(length(at))
    X = positions(at)
 
    for (n, neigs, r, R, _) in sites(nlist)
-      In = indexblock(n, tbm)
+      In = indexblock(n, tbm) |> Array
       # on-site terms
       evaluate_d!(tbm.onsite, r, R, dH_nn)
-      for i = 1:length(neigs)
+      for i_n = 1:length(neigs)
          m = neigs[i_n]
-         Im = indexblock(m, tbm)
+         Im = indexblock(m, tbm) |> Array
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
          grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
@@ -178,19 +176,20 @@ function site_force_inner(tbm, at, res, resM, zi, n0)
             f1 = _dot_(res[In,a], vdH_nm, resM[Im,a])
             f2 = _dot_(res[In,a], vdM_nm, resM[Im,a])
             f3 = _dot_(res[In,a], vdM_nm[:,a])
-            frc[n] += f3 - zi * f2 + f1
-            frc[m] -= f3 - zi * f2 + f1
 
             # on-site term
             f4 = _dot_(res[In,a], vdH_nn[:,:,m], resM[Im,a])
-            frc[n] += f4
-            frc[m] -= f4
+
+            # write contributions into global force vector
+            #           f3         f2           f1 + f4
+            #       Rz M_{,n} - (z M_{,n} M - H_{,n} M)
+            fall = real( wi * (f3 - zi * f2 + f1 + f4) )
+            frc[n] += fall
+            frc[m] -= fall
          end
       end
-
+   end
+   return frc
 end   # site_force_inner
-
-
-
 
 end
