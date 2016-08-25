@@ -48,6 +48,29 @@ element-wise conjugation operator, then
     r_H := H_{,m} {\rm conj}(R_z e_n)$$
   and can then assemble
 $$\partial_{x_m} \big[ R_z M \big]_{nn}
-   = (r_M)^* e_n + (z^* r_M - r_H)^* (R_z m_n).$$
+   = (r_M)^* e_n - (z^* r_M - r_H)^* (R_z m_n).$$
 
  **Question:** what about Krylov methods?
+
+ ### Algorithm
+
+To do the actual assembly we need to use how we compute the derivatives
+of $H, M$.
+```julia
+for (n, . . .) in sites
+   dH_nn, dM_nn = . . .   # on-site terms
+   for m in neigs(n)
+      dH_nm, dM_nm = . . .  # hopping terms
+      # continue here
+   end
+end
+```
+`dH_nn` just contains contributions similar to `dH_nm` so we ignore it.
+The matrix `dH_nm` (actually tensor) represents
+$\partial H_{nm} / \partial y_n = - \partial H_{nm} / \partial y_m$. Thus, we
+can compute in the inner loop:
+
+```julia
+dot( conj(Rz en), Rz mn )
+```
+and add this to the forces $f_n$ and $f_m$.

@@ -1,9 +1,10 @@
 
 # test parameters
 beta = 10.0        # temperature / smearing paramter
+                     # 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
 NQUAD = (4, 6, 8, 10)     # number of contour points
-
+DIM = (1,4,4)
 
 TB=TightBinding
 
@@ -15,8 +16,8 @@ calc = TB.Contour.ContourCalculator(tbm, 0)
 at = Atoms("Si", pbc=(true,true,true))
 TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
 
-# now go to the real system
-at = (3,3,3) * Atoms("Si", pbc=(true,true,true), cubic=true)
+# now the real system to test on
+at = DIM * Atoms("Si", pbc=(true,true,true), cubic=true)
 JuLIP.rattle!(at, 0.02)
 
 # compute the site energy the old way
@@ -30,7 +31,6 @@ Es = [TB.site_energy(tbm, at, n) for n = 1:length(at)]
 @show Etot - sum(Es)
 @assert abs(Etot - sum(Es)) < 1e-10
 
-
 # now try the new one
 println("Convergence of Contour integral implementation")
 for nquad in NQUAD
@@ -38,10 +38,3 @@ for nquad in NQUAD
    Enew = TB.Contour.site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
-
-
-# # timing test
-# println("timing with nquad = ", calc.nquad, "  (ca. 6 digits)")
-# @time TB.Contour.site_energy(calc, at, n0)
-# @time TB.Contour.site_energy(calc, at, n0)
-# @show length(at) * tbm.norbitals

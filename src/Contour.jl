@@ -19,6 +19,7 @@ In fact, the current implementation uses naive direct solvers.
 module Contour
 
 using JuLIP
+using JuLIP: cutoff
 using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
                      update!, band_structure_all, indexblock
 using FermiContour
@@ -62,11 +63,15 @@ end
 "create a canonical basis vector"
 en(n::Int, N::Int) = full( sparsevec([n], [1.0], N) )
 
+# TODO: at the moment we just have a single loop to compute
+#       energy and forces; consider instead to have forces separately
+#       but store precomputed information (the residuals)
 
 function site_energy(calc::ContourCalculator, at::AbstractAtoms,
                      n0::Integer; deriv=false)
    tbm = calc.tbm
 
+   # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
    @assert tbm.fixed_eF
    # assume that the smearing function is FermiDiracSmearing
@@ -76,7 +81,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    K, w = monkhorstpackgrid(at, tbm)
    @assert length(K) == 1
 
-   # --------------------------------------------
+   # ------------------ main part of the assembly stars here
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
    H = full(H); M = full(M)
@@ -94,87 +99,98 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
    for (wi, zi) in zip(w, z)
       LU = lufact(H - zi * M)
+
+      # --------------- assemble energy -----------
       resM = LU \ rhsM
       # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
       Esite += 2.0 * real(wi * zi * trace(resM[In0, :]))
 
-      # TODO: the call to mult_H_d! will very likely dominate this;
+      # --------------- assemble forces -----------
+      # TODO: the call to site_force_inner will very likely dominate this;
       #       since we are recomputing H_{,n} and H_{,m} many times here
+      #       (for each quadrature point)
       #       it will probably be better to first precompute all residuals
       #       `res`, store them, and then start a new loop over the contour
+      #       this is to be tested.
       if deriv
          res = conj(LU \ rhs)
-         for n = 1:length(at)
-            # we need rM = M_{,m} * res and rH = H_{,m} * res
-            rM, rH = mult_H_d!(tbm, at, res)
-            Esite_d[n] += conj(rM[n]) + zi * dot(rM,
-         end
-         end
+         Esite_d += wi * site_force_inner(tbm, at, res, resM, zi, n0)
       end
    end
    # --------------------------------------------
 
-   return Esite
+   return Esite, Esite_d
+end
+
+# TODO: this is probably both inelegant and inefficient
+#       just want correctness for now
+_dot_(a, b) = real(sum(a_*b_ for (a_,b_) in zip(a,b)))
+function _dot_{T}(a, M::Matrix{T}, b)
+   out = zero(T)
+   for i=1:length(a), j = 1:length(b)
+      out += (conj(a[j])* b[j]) * M[i,j]
+   end
+   return real(out)
 end
 
 
+function site_force_inner(tbm, at, res, resM, zi, n0)
 
-function mult_H_d!(tbm, at, v)
+   # count the maximum number of neighbours
+   maxneigs = 0
+   nlist = neighbourlist(at, cutoff(tbm))
+   for (_, neigs, _, _, _) in sites(nlist)
+      maxneigs += length(neigs)
+   end
+
+   # pre-allocate dH, dM arrays
+   dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, maxneigs)
+   dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   # creates references to these arrays; when dH_nn etc get new data
+   # written into them, then vdH_nn etc are automatically updated.
+   vdH_nn = dH_nn |> vecs   # no x no x ... array with each entry a JVecF
+   vdH_nm = dH_nn |> vecs   # no x no matrix  of JVecF
+   vdM_nm = dH_nn |> vecs   # no x no matrix  of JVecF
+
+   # allocate force vector
+   frc = zerovecs(length(at))
+   X = positions(at)
+
+   for (n, neigs, r, R, _) in sites(nlist)
+      In = indexblock(n, tbm)
+      # on-site terms
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
+      for i = 1:length(neigs)
+         m = neigs[i_n]
+         Im = indexblock(m, tbm)
+         # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+         grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
+         grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
+
+         # TODO:
+         # * move this a-loop into _dot_
+         # * replace copies with views
+         # * WARNING: when we add k-point integration we will need eik multipliers
+         #            in this loop; check that _dot_ handles this correctly
+         for a = 1:tbm.norbitals
+            # hopping terms
+            f1 = _dot_(res[In,a], vdH_nm, resM[Im,a])
+            f2 = _dot_(res[In,a], vdM_nm, resM[Im,a])
+            f3 = _dot_(res[In,a], vdM_nm[:,a])
+            frc[n] += f3 - zi * f2 + f1
+            frc[m] -= f3 - zi * f2 + f1
+
+            # on-site term
+            f4 = _dot_(res[In,a], vdH_nn[:,:,m], resM[Im,a])
+            frc[n] += f4
+            frc[m] -= f4
+         end
+      end
+
+end   # site_force_inner
+
+
+
 
 end
-
-
-end
-
-
-
-
-
-
-# # contour integral version
-# function siteE_contour(tb::TBSystem,
-#                         n0::Int,   # site index
-#                         Emin::Float64, Emax::Float64,  # spectrum bounds
-#                         nquad::Int)     # number of quadrature points
-#     H = hamiltonian(tb)
-#     w, z = fermicontour(Emin, Emax, tb.β, tb.μ, nquad)
-#     en = full_en(n0, size(H,1))
-#     Esite = 0.0
-#     residuals = Vector{Complex128}[]
-#     for (wi, zi) in zip(w, z)
-#         res = (H - zi * speye(H)) \ en
-#         push!(residuals, res)
-#         Esite += real(wi * zi * res[n0])
-#     end
-#     return Esite, Esite_data(n0, w, z, residuals, H)
-# end
-#
-# "extract the indices and values for a single column"
-# col(A::SparseMatrixCSC{Float64,Int}, i) = A.rowval[A.colptr[i]:A.colptr[i+1]-1], A.nzval[A.colptr[i]:A.colptr[i+1]-1]
-#
-# function siteE_d_contour(tb::TBSystem, dat::Esite_data)
-#     dH = hamiltonian_d(tb)::SparseMatrixCSC{Float64,Int}
-#     N = size(dH, 1)
-#     const y = zeros(2)
-#     const dEs = zeros(size(tb.Y))::Matrix{Float64}
-#     for (wi, zi, r) in zip(dat.w, dat.z, dat.residuals) # sum over contour points
-#         for i = 1:N                     # sum over sites on which to compute the force
-#             jj, hh = col(dH, i)         # get the i-th column of dH, which contains D_{ji} = D_{ij}
-#             for (j, h) in zip(jj, hh)   # loop through non-zero column entries
-#                 # make sure this is fast (in practise we should use FixedSizeArrays)
-#                 y[1] = tb.Y[1,i] - tb.Y[1,j]
-#                 y[2] = tb.Y[2,i] - tb.Y[2,j]
-#                 # wrap around
-#                 for a = 1:2; y[a] = mod(y[a] + tb.R, 2*tb.R) - tb.R; end
-#                 nrm = sqrt(y[1]*y[1]+y[2]*y[2])
-#                 a = (2.0 * real(wi * zi * r[i] * r[j]) * dH[i,j]/nrm)
-#                 dEs[1, i] -= a * y[1]
-#                 dEs[2, i] -= a * y[2]
-#             end
-#         end
-#     end
-#     return dEs
-# end
-#
-# Base.println(tb::TBSystem) = println("R = ", tb.R, "; # sites = ", size(tb.Y,2), "; # bonds = ", length(tb.B[1]));
-#
