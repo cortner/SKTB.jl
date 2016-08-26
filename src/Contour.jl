@@ -160,7 +160,7 @@ function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
-      # evaluate_d!(tbm.onsite, r, R, dH_nn)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
 
       for i_n = 1:length(neigs)
          m = neigs[i_n]
@@ -169,14 +169,17 @@ function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
          grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
          f1 = JVec(0.0)
          for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            f1 += - (wi * res[In[a]] * resM[Im[b]]) *  # vdH_nm[a,b]
+            f1 += - (wi * res[In[a]] * resM[Im[b]]) *
                                ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
+            f1 += - (wi * res[In[a]] * resM[In[b]]) * vdH_nn[a,b,i_n]
          end
          frc[n] -= real(f1)
          frc[m] += real(f1)
 
          # the e_0^T R_z M_{,n} e_0 term
+         # TODO: this needs to be fixed for general n0
          if n0 == m
+            @assert length(find(Im .== n0)) == 1
             f2 = JVec(0.0)
             for a = 1:tbm.norbitals
                f2 += wi * res[In[a]] * vdM_nm[a, 1]
@@ -184,38 +187,9 @@ function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
             frc[n] -= real(f2)
             frc[m] += real(f2)
          end
-
       end
    end
    return frc
 end   # site_force_inner
 
 end
-
-
-
-
-
-
-
-
-# function ham(tbm::TBModel, at::AbstractAtoms)
-#    I = Int[]
-#    J = Int[]
-#    Z = Float64[]
-#    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
-#       In = indexblock(n, tbm)
-#       for i_n = 1:length(neigs)
-#          m = neigs[i_n]
-#          Im = indexblock(m, tbm)
-#          Hnm = evaluate(tbm.hop, r[i_n], R[i_n])
-#          for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-#             push!(I, In[a])
-#             push!(J, Im[b])
-#             push!(Z, Hnm[a,b])
-#          end
-#       end
-#    end
-#    N = length(at) * tbm.norbitals
-#    return sparse(I, J, Z, N, N), speye(N)
-# end

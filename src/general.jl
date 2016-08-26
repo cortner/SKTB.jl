@@ -435,9 +435,9 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       # TODO: we could move these to be done in-place???
       # (first test: with small vectors and matrices in-place operations
       #              may become unnecessary)
-      # H_nn = tbm.onsite(r, R)
+      H_nn = tbm.onsite(r, R)
       M_nn = tbm.overlap(0.0)
-      H_nn = zeros(M_nn)
+      # H_nn = zeros(M_nn)
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nn, M_nn, 1.0, tbm.norbitals, idx)
    end
