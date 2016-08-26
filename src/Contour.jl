@@ -73,8 +73,8 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    tbm.eF = 0.0
    tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
    # this computes the spectrum and fermi-level
-   H, M = ham(calc.tbm, at)
-   e = eigvals(full(H))
+   H, M = hamiltonian(calc.tbm, at)
+   e = eigvals(full(H), full(M))
    tbm.eF = 0.5 * sum(extrema(e))
    tbm.smearing.eF = tbm.eF
    tbm.fixed_eF = true
@@ -83,28 +83,6 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    return calc
 end
 
-
-
-function ham(tbm::TBModel, at::AbstractAtoms)
-   I = Int[]
-   J = Int[]
-   Z = Float64[]
-   for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
-      In = indexblock(n, tbm)
-      for i_n = 1:length(neigs)
-         m = neigs[i_n]
-         Im = indexblock(m, tbm)
-         Hnm = evaluate(tbm.hop, r[i_n], R[i_n])
-         for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            push!(I, In[a])
-            push!(J, Im[b])
-            push!(Z, Hnm[a,b])
-         end
-      end
-   end
-   N = length(at) * tbm.norbitals
-   return sparse(I, J, Z, N, N), speye(N)
-end
 
 
 
@@ -129,12 +107,12 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
    # ------------------ main part of the assembly stars here
    # get the hamiltonian for the Gamma point
-   H, M = hamiltonian(tbm, at) 
+   H, M = hamiltonian(tbm, at)
    H = full(H); M = full(M)
 
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
-   # compute site energy
+
    # define the right-hand side in the linear solver at each quad-point
    rhsM = M[:, n0]
    rhs = zeros(size(H,1)); rhs[n0] = 1.0
@@ -152,7 +130,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
       # --------------- assemble forces -----------
       if deriv
-         Esite_d += site_grad_inner(tbm, at, res, resM, 2.0*wi*zi)
+         Esite_d += site_grad_inner(tbm, at, res, resM, 2.0*wi*zi, zi, n0)
       end
    end
    # --------------------------------------------
@@ -161,29 +139,83 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 end
 
 
-function site_grad_inner(tbm, at, res, resM, wi)
+function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
 
+   # count the maximum number of neighbours
+   nlist = neighbourlist(at, cutoff(tbm))
+   maxneigs = maximum( length(s[2]) for s in sites(nlist) )
+
+   # pre-allocate dH, dM arrays
+   dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, maxneigs)
    dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   # creates references to these arrays; when dH_nn etc get new data
+   # written into them, then vdH_nn etc are automatically updated.
+   vdH_nn = dH_nn |> vecs   # no x no x maxneigs array with each entry a JVecF
    vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
+   vdM_nm = dM_nm |> vecs   # no x no matrix  of JVecF
 
    # allocate force vector
    frc = zerovecs(length(at))
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
+      # evaluate_d!(tbm.onsite, r, R, dH_nn)
+
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
          grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
+         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
          f1 = JVec(0.0)
          for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            f1 += - (wi * res[In[a]] * resM[Im[b]]) * vdH_nm[a,b]
+            f1 += - (wi * res[In[a]] * resM[Im[b]]) *  # vdH_nm[a,b]
+                               ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
          end
          frc[n] -= real(f1)
          frc[m] += real(f1)
+
+         # the e_0^T R_z M_{,n} e_0 term
+         if n0 == m
+            f2 = JVec(0.0)
+            for a = 1:tbm.norbitals
+               f2 += wi * res[In[a]] * vdM_nm[a, 1]
+            end
+            frc[n] -= real(f2)
+            frc[m] += real(f2)
+         end
+
       end
    end
    return frc
 end   # site_force_inner
 
 end
+
+
+
+
+
+
+
+
+# function ham(tbm::TBModel, at::AbstractAtoms)
+#    I = Int[]
+#    J = Int[]
+#    Z = Float64[]
+#    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
+#       In = indexblock(n, tbm)
+#       for i_n = 1:length(neigs)
+#          m = neigs[i_n]
+#          Im = indexblock(m, tbm)
+#          Hnm = evaluate(tbm.hop, r[i_n], R[i_n])
+#          for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+#             push!(I, In[a])
+#             push!(J, Im[b])
+#             push!(Z, Hnm[a,b])
+#          end
+#       end
+#    end
+#    N = length(at) * tbm.norbitals
+#    return sparse(I, J, Z, N, N), speye(N)
+# end

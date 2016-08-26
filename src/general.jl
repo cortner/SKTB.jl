@@ -427,7 +427,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          # compute hamiltonian block
          H_nm = evaluate!(tbm.hop, r[m], R[m], H_nm)
          # compute overlap block
-         # M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
+         M_nm = evaluate!(tbm.overlap, r[m], R[m], M_nm)
          # add new indices into the sparse matrix
          idx = append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, tbm.norbitals, idx)
       end
