@@ -436,6 +436,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       #              may become unnecessary)
       H_nn = tbm.onsite(r, R)
       M_nn = tbm.overlap(0.0)
+      # H_nn = zeros(M_nn)    # for debugging
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nn, M_nn, 1.0, tbm.norbitals, idx)
    end
@@ -573,7 +574,7 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
       if length(neigs) > size(dH_nn, 4)
          dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, ceil(Int, 1.5*length(neigs)))
       end
-      evaluate_d!(tbm.onsite, r, R, dH_nn)
+      # evaluate_d!(tbm.onsite, r, R, dH_nn)
 
       for i_n = 1:length(neigs)
          m = neigs[i_n]
@@ -583,7 +584,7 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
          eikr = exp(im * kR)::Complex{Float64}
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
-         grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
+         # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
 
          # the following is a hack to put the on-site assembly into the
          # innermost loop

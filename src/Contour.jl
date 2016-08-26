@@ -19,8 +19,10 @@ In fact, the current implementation uses naive direct solvers.
 module Contour
 
 using JuLIP
+using JuLIP: cutoff
 using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
-                     update!, band_structure_all, indexblock
+                     update!, band_structure_all, indexblock,
+                     evaluate, evaluate_d!, grad!
 using FermiContour
 
 export site_energy
@@ -41,7 +43,7 @@ uses spectral decomposition to compute Emin, Emax, eF
 for the configuration `at` and stores it in `calc`
 """
 function calibrate!(calc::ContourCalculator, at::AbstractAtoms,
-                     beta::Float64; nkpoints=(5,5,5) )
+                     beta::Float64; nkpoints=(4,4,4) )
    tbm = calc.tbm
    tbm.smearing = FermiDiracSmearing(beta)
    tbm.fixed_eF = false
@@ -59,95 +61,133 @@ function calibrate!(calc::ContourCalculator, at::AbstractAtoms,
 end
 
 
-"create a canonical basis vector"
-en(n::Int, N::Int) = full( sparsevec([n], [1.0], N) )
+"""
+uses spectral decomposition to compute Emin, Emax, eF
+for the configuration `at` and stores it in `calc`
+"""
+function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
+                     beta::Float64; nkpoints=(4,4,4) )
+   tbm = calc.tbm
+   tbm.smearing = FermiDiracSmearing(beta)
+   tbm.fixed_eF = false
+   tbm.eF = 0.0
+   tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
+   # this computes the spectrum and fermi-level
+   H, M = hamiltonian(calc.tbm, at)
+   e = eigvals(full(H), full(M))
+   tbm.eF = 0.5 * sum(extrema(e))
+   tbm.smearing.eF = tbm.eF
+   tbm.fixed_eF = true
+   calc.Emin = 0.0
+   calc.Emax = maximum( abs(e - tbm.eF) )
+   return calc
+end
 
 
-function site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer)
+
+
+
+# TODO: at the moment we just have a single loop to compute
+#       energy and forces; consider instead to have forces separately
+#       but store precomputed information (the residuals)
+
+function site_energy(calc::ContourCalculator, at::AbstractAtoms,
+                     n0::Integer; deriv=false)
    tbm = calc.tbm
 
+   # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
    @assert tbm.fixed_eF
    # assume that the smearing function is FermiDiracSmearing
    @assert isa(tbm.smearing, FermiDiracSmearing)
    # assume that we have only one k-point
    # TODO: we will need BZ  integration in at least one coordinate direction
-   K, w = monkhorstpackgrid(at, tbm)
-   @assert length(K) == 1
+   # K, w = monkhorstpackgrid(at, tbm)
+   # @assert length(K) == 1
 
-   # --------------------------------------------
+   # ------------------ main part of the assembly starts here
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
    H = full(H); M = full(M)
+
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
-   # compute site energy
+
    # define the right-hand side in the linear solver at each quad-point
    In0 = indexblock(n0, tbm) |> Vector
-   rhs = full(M[:, In0])
+   rhsM = M[:, In0]
+   rhs = zeros(size(H,1),length(In0)); rhs[In0,:] = eye(length(In0))
+
    Esite = 0.0
+   Esite_d = zerovecs(length(at))
+
    for (wi, zi) in zip(w, z)
-      res = (H - zi * M) \ rhs
+      LU = lufact(H - zi * M)
+
+      # --------------- assemble energy -----------
+      resM = LU \ rhsM
       # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
-      Esite += 2.0 * real(wi * zi * trace(res[In0, :]))
+      Esite += 2.0 * real(wi * zi * trace(resM[In0,:]))
+
+      # --------------- assemble forces -----------
+      # TODO: the call to site_force_inner will very likely dominate this;
+      #       since we are recomputing H_{,n} and H_{,m} many times here
+      #       (for each quadrature point on the contour)
+      #       it will probably be better to first precompute all residuals
+      #       `res`, store them, and then start a new loop over the contour
+      #       this is to be tested.
+      if deriv
+         res = LU \ rhs
+         Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
+      end
    end
    # --------------------------------------------
 
-   return Esite
+   return Esite, Esite_d
 end
 
 
+function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
+
+   @assert size(res) == size(resM) == size(e0)
+
+   # count the maximum number of neighbours
+   nlist = neighbourlist(at, cutoff(tbm))
+   maxneigs = maximum( length(s[2]) for s in sites(nlist) )
+
+   # pre-allocate dH, dM arrays
+   dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, maxneigs)
+   dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
+   # creates references to these arrays; when dH_nn etc get new data
+   # written into them, then vdH_nn etc are automatically updated.
+   vdH_nn = dH_nn |> vecs   # no x no x maxneigs array with each entry a JVecF
+   vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
+   vdM_nm = dM_nm |> vecs   # no x no matrix  of JVecF
+
+   # allocate force vector
+   frc = zerovecs(length(at))
+
+   for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
+      In = indexblock(n, tbm)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
+      for i_n = 1:length(neigs)
+         m = neigs[i_n]
+         Im = indexblock(m, tbm)
+         grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
+         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
+         f1 = JVec(0.0)
+         for t = 1:size(res,2), a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            f1 += - (wi * res[In[a], t] * resM[Im[b], t]) *
+                               ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
+            f1 += - (wi * res[In[a], t] * resM[In[b], t]) * vdH_nn[a,b,i_n]
+            f1 += (wi * res[In[a], t] * e0[Im[b], t]) * vdM_nm[a,b]
+         end
+         frc[m] += real(f1)
+         frc[n] -= real(f1)
+      end
+   end
+   return frc
+end   # site_force_inner
+
 end
-
-
-
-
-
-
-# # contour integral version
-# function siteE_contour(tb::TBSystem,
-#                         n0::Int,   # site index
-#                         Emin::Float64, Emax::Float64,  # spectrum bounds
-#                         nquad::Int)     # number of quadrature points
-#     H = hamiltonian(tb)
-#     w, z = fermicontour(Emin, Emax, tb.β, tb.μ, nquad)
-#     en = full_en(n0, size(H,1))
-#     Esite = 0.0
-#     residuals = Vector{Complex128}[]
-#     for (wi, zi) in zip(w, z)
-#         res = (H - zi * speye(H)) \ en
-#         push!(residuals, res)
-#         Esite += real(wi * zi * res[n0])
-#     end
-#     return Esite, Esite_data(n0, w, z, residuals, H)
-# end
-#
-# "extract the indices and values for a single column"
-# col(A::SparseMatrixCSC{Float64,Int}, i) = A.rowval[A.colptr[i]:A.colptr[i+1]-1], A.nzval[A.colptr[i]:A.colptr[i+1]-1]
-#
-# function siteE_d_contour(tb::TBSystem, dat::Esite_data)
-#     dH = hamiltonian_d(tb)::SparseMatrixCSC{Float64,Int}
-#     N = size(dH, 1)
-#     const y = zeros(2)
-#     const dEs = zeros(size(tb.Y))::Matrix{Float64}
-#     for (wi, zi, r) in zip(dat.w, dat.z, dat.residuals) # sum over contour points
-#         for i = 1:N                     # sum over sites on which to compute the force
-#             jj, hh = col(dH, i)         # get the i-th column of dH, which contains D_{ji} = D_{ij}
-#             for (j, h) in zip(jj, hh)   # loop through non-zero column entries
-#                 # make sure this is fast (in practise we should use FixedSizeArrays)
-#                 y[1] = tb.Y[1,i] - tb.Y[1,j]
-#                 y[2] = tb.Y[2,i] - tb.Y[2,j]
-#                 # wrap around
-#                 for a = 1:2; y[a] = mod(y[a] + tb.R, 2*tb.R) - tb.R; end
-#                 nrm = sqrt(y[1]*y[1]+y[2]*y[2])
-#                 a = (2.0 * real(wi * zi * r[i] * r[j]) * dH[i,j]/nrm)
-#                 dEs[1, i] -= a * y[1]
-#                 dEs[2, i] -= a * y[2]
-#             end
-#         end
-#     end
-#     return dEs
-# end
-#
-# Base.println(tb::TBSystem) = println("R = ", tb.R, "; # sites = ", size(tb.Y,2), "; # bonds = ", length(tb.B[1]));
-#

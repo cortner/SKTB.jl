@@ -1,9 +1,10 @@
 
 # test parameters
-beta = 10.0        # temperature / smearing paramter
+beta = 20.0        # temperature / smearing paramter
+                     # 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
 NQUAD = (4, 6, 8, 10)     # number of contour points
-
+DIM = (1,2,3)
 
 TB=TightBinding
 
@@ -12,12 +13,17 @@ tbm = TB.NRLTB.NRLTBModel(elem = TB.NRLTB.Si_sp, nkpoints = (0,0,0))
 calc = TB.Contour.ContourCalculator(tbm, 0)
 
 # use a mini-system to pre-compute the Fermi-level and energy bounds
+print("calibrating . . . ")
 at = Atoms("Si", pbc=(true,true,true))
 TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
+println("done.")
 
-# now go to the real system
-at = (3,3,3) * Atoms("Si", pbc=(true,true,true), cubic=true)
+# now the real system to test on
+at = DIM * Atoms("Si", pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
+# TB.Contour.calibrate2!(calc, at, beta, nkpoints=(6,6,6))
+@show length(at)
+
 
 # compute the site energy the old way
 Eold = TB.site_energy(tbm, at, n0)
@@ -30,18 +36,33 @@ Es = [TB.site_energy(tbm, at, n) for n = 1:length(at)]
 @show Etot - sum(Es)
 @assert abs(Etot - sum(Es)) < 1e-10
 
-
 # now try the new one
 println("Convergence of Contour integral implementation")
 for nquad in NQUAD
    calc.nquad = nquad
-   Enew = TB.Contour.site_energy(calc, at, n0)
+   Enew, _ = TB.Contour.site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
 
 
-# # timing test
-# println("timing with nquad = ", calc.nquad, "  (ca. 6 digits)")
-# @time TB.Contour.site_energy(calc, at, n0)
-# @time TB.Contour.site_energy(calc, at, n0)
-# @show length(at) * tbm.norbitals
+println("Test consistency of site forces")
+
+calc.nquad = 10
+X = copy( positions(at) |> mat )
+Es, dEs = TB.Contour.site_energy(calc, at, n0, deriv=true)
+dEs = dEs |> mat
+dEsh = []
+
+println(" p  |  error ")
+for p = 2:9
+   h = 0.1^p
+   dEsh = zeros(dEs)
+   for n = 1:length(X)
+      X[n] += h
+      set_positions!(at, X)
+      Esh, _ = TB.Contour.site_energy(calc,at,n0)
+      dEsh[n] = (Esh - Es) / h
+      X[n] -= h
+   end
+   println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
+end

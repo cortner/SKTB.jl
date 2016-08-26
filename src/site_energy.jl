@@ -3,6 +3,7 @@
 
 function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
    update!(at, tbm)
+   # In0 = (indexblock(n0, tbm) |> Vector)[1:1]   # (DEBUG)
    In0 = indexblock(n0, tbm) |> Vector
    K, weight = monkhorstpackgrid(at, tbm)
    Esite = 0.0
