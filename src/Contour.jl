@@ -105,7 +105,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    # K, w = monkhorstpackgrid(at, tbm)
    # @assert length(K) == 1
 
-   # ------------------ main part of the assembly stars here
+   # ------------------ main part of the assembly starts here
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
    H = full(H); M = full(M)
@@ -114,8 +114,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
 
    # define the right-hand side in the linear solver at each quad-point
-   # In0 = indexblock(n0, tbm) |> Vector
-   In0 = [1]
+   In0 = indexblock(n0, tbm) |> Vector
    rhsM = M[:, In0]
    rhs = zeros(size(H,1),length(In0)); rhs[In0,:] = eye(length(In0))
 
@@ -128,7 +127,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
       # --------------- assemble energy -----------
       resM = LU \ rhsM
       # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
-      Esite += 2.0 * real(wi * zi * resM[n0])
+      Esite += 2.0 * real(wi * zi * trace(resM[In0,:]))
 
       # --------------- assemble forces -----------
       # TODO: the call to site_force_inner will very likely dominate this;
@@ -147,12 +146,10 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    return Esite, Esite_d
 end
 
-±{T1,T2}(a::Tuple{T1,T2}, b) = (a[1]+b, a[2]-b)
 
 function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
 
-   @assert size(res) == size(resM)
-   @assert size(res) == size(e0)
+   @assert size(res) == size(resM) == size(e0)
 
    # count the maximum number of neighbours
    nlist = neighbourlist(at, cutoff(tbm))
@@ -174,14 +171,13 @@ function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
       evaluate_d!(tbm.onsite, r, R, dH_nn)
-
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
          grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
-         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)    # DEBUG
+         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
          f1 = JVec(0.0)
-         for t = 1:1, a = 1:tbm.norbitals, b = 1:tbm.norbitals
+         for t = 1:size(res,2), a = 1:tbm.norbitals, b = 1:tbm.norbitals
             f1 += - (wi * res[In[a], t] * resM[Im[b], t]) *
                                ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
             f1 += - (wi * res[In[a], t] * resM[In[b], t]) * vdH_nn[a,b,i_n]

@@ -421,7 +421,6 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          # note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
          #       but this would actually be less efficient, and less clear
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-         @assert exp_i_kR == 1.0
 
          Im = indexblock(neigs[m], tbm)
          # compute hamiltonian block
@@ -437,7 +436,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
       #              may become unnecessary)
       H_nn = tbm.onsite(r, R)
       M_nn = tbm.overlap(0.0)
-      # H_nn = zeros(M_nn)
+      # H_nn = zeros(M_nn)    # for debugging
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nn, M_nn, 1.0, tbm.norbitals, idx)
    end
