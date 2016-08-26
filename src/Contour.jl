@@ -114,8 +114,10 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
 
    # define the right-hand side in the linear solver at each quad-point
-   rhsM = M[:, n0]
-   rhs = zeros(size(H,1)); rhs[n0] = 1.0
+   # In0 = indexblock(n0, tbm) |> Vector
+   In0 = [1]
+   rhsM = M[:, In0]
+   rhs = zeros(size(H,1),length(In0)); rhs[In0,:] = eye(length(In0))
 
    Esite = 0.0
    Esite_d = zerovecs(length(at))
@@ -124,13 +126,20 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
       LU = lufact(H - zi * M)
 
       # --------------- assemble energy -----------
-      res = LU \ rhs
       resM = LU \ rhsM
+      # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
       Esite += 2.0 * real(wi * zi * resM[n0])
 
       # --------------- assemble forces -----------
+      # TODO: the call to site_force_inner will very likely dominate this;
+      #       since we are recomputing H_{,n} and H_{,m} many times here
+      #       (for each quadrature point on the contour)
+      #       it will probably be better to first precompute all residuals
+      #       `res`, store them, and then start a new loop over the contour
+      #       this is to be tested.
       if deriv
-         Esite_d += site_grad_inner(tbm, at, res, resM, 2.0*wi*zi, zi, n0)
+         res = LU \ rhs
+         Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
       end
    end
    # --------------------------------------------
@@ -138,8 +147,12 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    return Esite, Esite_d
 end
 
+±{T1,T2}(a::Tuple{T1,T2}, b) = (a[1]+b, a[2]-b)
 
-function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
+function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
+
+   @assert size(res) == size(resM)
+   @assert size(res) == size(e0)
 
    # count the maximum number of neighbours
    nlist = neighbourlist(at, cutoff(tbm))
@@ -166,27 +179,16 @@ function site_grad_inner(tbm, at, res, resM, wi, zi, n0)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
          grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
-         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
+         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)    # DEBUG
          f1 = JVec(0.0)
-         for a = 1:tbm.norbitals, b = 1:tbm.norbitals
-            f1 += - (wi * res[In[a]] * resM[Im[b]]) *
+         for t = 1:1, a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            f1 += - (wi * res[In[a], t] * resM[Im[b], t]) *
                                ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
-            f1 += - (wi * res[In[a]] * resM[In[b]]) * vdH_nn[a,b,i_n]
+            f1 += - (wi * res[In[a], t] * resM[In[b], t]) * vdH_nn[a,b,i_n]
+            f1 += (wi * res[In[a], t] * e0[Im[b], t]) * vdM_nm[a,b]
          end
-         frc[n] -= real(f1)
          frc[m] += real(f1)
-
-         # the e_0^T R_z M_{,n} e_0 term
-         # TODO: this needs to be fixed for general n0
-         if n0 == m
-            @assert length(find(Im .== n0)) == 1
-            f2 = JVec(0.0)
-            for a = 1:tbm.norbitals
-               f2 += wi * res[In[a]] * vdM_nm[a, 1]
-            end
-            frc[n] -= real(f2)
-            frc[m] += real(f2)
-         end
+         frc[n] -= real(f1)
       end
    end
    return frc
