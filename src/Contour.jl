@@ -22,7 +22,7 @@ using JuLIP
 using JuLIP: cutoff
 using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
                      update!, band_structure_all, indexblock,
-                     evaluate_d!, grad!
+                     evaluate, evaluate_d!, grad!
 using FermiContour
 
 export site_energy
@@ -92,6 +92,13 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    rhs = zeros(size(H,1), length(In0))
    rhs[In0, :] = eye(length(In0))
 
+   # ****************
+   # DEBUG: restrict to first orbital index
+   rhs = rhs[:, 1]
+   rhsM = rhsM[:, 1]
+   In0 = In0[1]
+   # ****************
+
    Esite = 0.0
    Esite_d = zerovecs(length(at))
 
@@ -100,8 +107,11 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
       # --------------- assemble energy -----------
       resM = LU \ rhsM
+      res = LU \ rhs
       # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
-      Esite += 2.0 * real(wi * zi * trace(resM[In0, :]))
+      # Esite += 2.0 * real(wi * zi * trace(resM[In0, :]))
+      # DEBUG
+      Esite += 2.0 * real(wi * zi * res[In0])
 
       # --------------- assemble forces -----------
       # TODO: the call to site_force_inner will very likely dominate this;
@@ -111,8 +121,8 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
       #       `res`, store them, and then start a new loop over the contour
       #       this is to be tested.
       if deriv
-         res = conj(LU \ rhs)
-         Esite_d += 2.0 * site_force_inner(tbm, at, res, resM, zi, wi, n0)
+         # res = LU \ rhs
+         Esite_d += site_force_inner(tbm, at, res, resM, zi, 2.0*wi*zi)
       end
    end
    # --------------------------------------------
@@ -132,14 +142,11 @@ function _dot_{T}(a, M::Matrix{T}, b)
 end
 
 
-function site_force_inner(tbm, at, res, resM, zi, wi, n0)
+function site_force_inner(tbm, at, res, resM, zi, wi)
 
    # count the maximum number of neighbours
-   maxneigs = 0
    nlist = neighbourlist(at, cutoff(tbm))
-   for (_, neigs, _, _, _) in sites(nlist)
-      maxneigs += length(neigs)
-   end
+   maxneigs = maximum( length(s[2]) for s in sites(nlist) )
 
    # pre-allocate dH, dM arrays
    dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, maxneigs)
@@ -147,7 +154,7 @@ function site_force_inner(tbm, at, res, resM, zi, wi, n0)
    dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
    # creates references to these arrays; when dH_nn etc get new data
    # written into them, then vdH_nn etc are automatically updated.
-   vdH_nn = dH_nn |> vecs   # no x no x ... array with each entry a JVecF
+   vdH_nn = dH_nn |> vecs   # no x no x maxneigs array with each entry a JVecF
    vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
    vdM_nm = dM_nm |> vecs   # no x no matrix  of JVecF
 
@@ -158,38 +165,67 @@ function site_force_inner(tbm, at, res, resM, zi, wi, n0)
    for (n, neigs, r, R, _) in sites(nlist)
       In = indexblock(n, tbm) |> Array
       # on-site terms
-      evaluate_d!(tbm.onsite, r, R, dH_nn)
+      # evaluate_d!(tbm.onsite, r, R, dH_nn)
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm) |> Array
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-         grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
-         grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
+         grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
+         # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
 
-         # TODO:
-         # * move this a-loop into _dot_
-         # * replace copies with views
-         # * WARNING: when we add k-point integration we will need eik multipliers
-         #            in this loop; check that _dot_ handles this correctly
-         for a = 1:tbm.norbitals
-            # hopping terms
-            f1 = _dot_(res[In,a], vdH_nm, resM[Im,a])
-            f2 = _dot_(res[In,a], vdM_nm, resM[Im,a])
-            f3 = _dot_(res[In,a], vdM_nm[:,a])
-
-            # on-site term
-            f4 = _dot_(res[In,a], vdH_nn[:,:,m], resM[Im,a])
-
-            # write contributions into global force vector
-            #           f3         f2           f1 + f4
-            #       Rz M_{,n} - (z M_{,n} M - H_{,n} M)
-            fall = real( wi * (f3 - zi * f2 + f1 + f4) )
-            frc[n] += fall
-            frc[m] -= fall
+         # >>>>>>>>> START DEBUG >>>>>>>>
+         f1 = zero(JVecF)
+         for a = 1:length(In), b = 1:length(m)
+            f1 += res[In[a]] * res[Im[b]] * vdH_nm[a,b]
          end
+         frc[n] += real(wi*f1)
+         frc[m] -= real(wi*f1)
+         # <<<<<<<<< END DEBUG <<<<<<<<<
+
+         # # TODO:
+         # # * move this a-loop into _dot_
+         # # * replace copies with views
+         # # * WARNING: when we add k-point integration we will need eik multipliers
+         # #            in this loop; check that _dot_ handles this correctly
+         # for a = 1:tbm.norbitals
+         #    # hopping terms
+         #    f1 = _dot_(res[In,a], vdH_nm, resM[Im,a])
+         #    # f2 = _dot_(res[In,a], vdM_nm, resM[Im,a])
+         #    # f3 = _dot_(res[In,a], vdM_nm[:,a])
+         #
+         #    # on-site term
+         #    # f4 = _dot_(res[In,a], vdH_nn[:,:,m], resM[Im,a])
+         #
+         #    # write contributions into global force vector
+         #    #           f3         f2           f1 + f4
+         #    #       Rz M_{,n} - (z M_{,n} M - H_{,n} M)
+         #    # fall = real( wi * (f3 - zi * f2 + f1 + f4) )
+         #    fall = real( wi * f1 )
+         #    frc[n] += fall
+         #    frc[m] -= fall
+         # end
       end
    end
    return frc
 end   # site_force_inner
 
 end
+
+
+
+# # >>>>>>>>> START DEBUG >>>>>>>>
+# S = R[i_n] |> Vector
+# Hnm = evaluate(tbm.hop, norm(S), S |> JVec)
+# for p = 2:12
+#    h = 0.1^p
+#    dHh = zeros(dH_nm)
+#    for i = 1:3
+#       S[i] += h
+#       dHh[i,:,:] = (evaluate(tbm.hop, norm(S), S |> JVec) - Hnm) / h
+#       S[i] -= h
+#    end
+#    println(vecnorm(dHh - dH_nm, Inf))
+# end
+#
+# quit()
+# # <<<<<<<<< END DEBUG <<<<<<<<<
