@@ -90,15 +90,20 @@ function ham(tbm::TBModel, at::AbstractAtoms)
    J = Int[]
    Z = Float64[]
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
+      In = indexblock(n, tbm)
       for i_n = 1:length(neigs)
          m = neigs[i_n]
+         Im = indexblock(m, tbm)
          Hnm = evaluate(tbm.hop, r[i_n], R[i_n])
-         push!(I, n)
-         push!(J, m)
-         push!(Z, Hnm[1,1])
+         for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            push!(I, In[a])
+            push!(J, Im[b])
+            push!(Z, Hnm[a,b])
+         end
       end
    end
-   return sparse(I, J, Z, length(at), length(at)), speye(length(at))
+   N = length(at) * tbm.norbitals
+   return sparse(I, J, Z, N, N), speye(N)
 end
 
 
@@ -124,13 +129,15 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
    # ------------------ main part of the assembly stars here
    # get the hamiltonian for the Gamma point
-   H, M = ham(tbm, at)
+   H, M = hamiltonian(tbm, at) 
    H = full(H); M = full(M)
+
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
    # compute site energy
    # define the right-hand side in the linear solver at each quad-point
-   rhs = zeros(length(at)); rhs[n0] = 1.0
+   rhsM = M[:, n0]
+   rhs = zeros(size(H,1)); rhs[n0] = 1.0
 
    Esite = 0.0
    Esite_d = zerovecs(length(at))
@@ -140,11 +147,12 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 
       # --------------- assemble energy -----------
       res = LU \ rhs
-      Esite += 2.0 * real(wi * zi * res[n0])
+      resM = LU \ rhsM
+      Esite += 2.0 * real(wi * zi * resM[n0])
 
       # --------------- assemble forces -----------
       if deriv
-         Esite_d += site_grad_inner(tbm, at, res, 2.0*wi*zi)
+         Esite_d += site_grad_inner(tbm, at, res, resM, 2.0*wi*zi)
       end
    end
    # --------------------------------------------
@@ -153,7 +161,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
 end
 
 
-function site_grad_inner(tbm, at, res, wi)
+function site_grad_inner(tbm, at, res, resM, wi)
 
    dH_nm = zeros(3, tbm.norbitals, tbm.norbitals)
    vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
@@ -162,10 +170,15 @@ function site_grad_inner(tbm, at, res, wi)
    frc = zerovecs(length(at))
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
+      In = indexblock(n, tbm)
       for i_n = 1:length(neigs)
          m = neigs[i_n]
+         Im = indexblock(m, tbm)
          grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
-         f1 = - (wi * res[n] * res[m]) * vdH_nm[1,1]
+         f1 = JVec(0.0)
+         for a = 1:tbm.norbitals, b = 1:tbm.norbitals
+            f1 += - (wi * res[In[a]] * resM[Im[b]]) * vdH_nm[a,b]
+         end
          frc[n] -= real(f1)
          frc[m] += real(f1)
       end

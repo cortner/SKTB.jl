@@ -65,7 +65,3 @@ for p = 2:5
    end
    println( "p = ", p, " | ", vecnorm(dEs-dEsh, Inf) )
 end
-
-@show dEs[:,1:5]
-@show dEsh[:,1:5]
-@show dEs[:,1:5] - dEsh[:,1:5]

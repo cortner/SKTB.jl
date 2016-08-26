@@ -421,6 +421,7 @@ function hamiltonian!(tbm::TBModel, k, It, Jt, Ht, Mt, nlist, X)
          # note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
          #       but this would actually be less efficient, and less clear
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
+         @assert exp_i_kR == 1.0
 
          Im = indexblock(neigs[m], tbm)
          # compute hamiltonian block
