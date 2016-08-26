@@ -12,15 +12,17 @@ TB=TightBinding
 tbm = TB.NRLTB.NRLTBModel(elem = TB.NRLTB.Si_sp, nkpoints = (0,0,0))
 calc = TB.Contour.ContourCalculator(tbm, 0)
 
-# use a mini-system to pre-compute the Fermi-level and energy bounds
-print("calibrating . . . ")
-at = Atoms("Si", pbc=(true,true,true))
-TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
-println("done.")
+# # use a mini-system to pre-compute the Fermi-level and energy bounds
+# print("calibrating . . . ")
+# at = Atoms("Si", pbc=(true,true,true))
+# TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
+# println("done.")
+
 
 # now the real system to test on
 at = DIM * Atoms("Si", pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
+TB.Contour.calibrate2!(calc, at, beta, nkpoints=(6,6,6))
 @show length(at)
 
 # # compute the site energy the old way
