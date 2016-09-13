@@ -17,7 +17,8 @@ export NRLTBModel
 
 
 const BOHR = 0.52917721092::Float64  # atomic unit of length 1 Bohr = 0.52917721092 Å
-const _hh_ = zeros(10)
+const _hh_ = zeros(10)::Vector{Float64}
+const _dhh_ = zeros(10)::Vector{Float64}
 
 """
 `NRLParams`: collects all the parameters for NRL tight-binding model.
@@ -116,8 +117,9 @@ evaluate(p::NRLoverlap, r, R) =
 grad(p::NRLoverlap, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dM)/BOHR
 # cutoff(p::NRLoverlap) = p.elem.Rc
 function grad!(p::NRLoverlap, r, R, dM::Array{Float64, 3})
-    d_mat_local!(r/BOHR, R/BOHR, p.elem, :dM, dM)
-    scale!(dM, 1.0/BOHR)
+   BOHR1 = 0.52917721092
+   d_mat_local!(r/BOHR1, R/BOHR1, p.elem, :dM, dM)
+   scale!(dM, 1.0/BOHR1)
 end
 
 
@@ -190,13 +192,13 @@ end
 #    return fcut
 #end
 
-function cutoff_NRL(r, Rc, lc; Mc=10.0)
+function cutoff_NRL(r, Rc, lc, Mc=5.0)
     fcut = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc)
     return fcut
 end
 
 # first order derivative
-function d_cutoff_NRL(r, Rc, lc; Mc=10.0)
+function d_cutoff_NRL(r, Rc, lc, Mc=5.0)
     temp = exp( (r-Rc) ./ lc + Mc )
     d_fcut = - 1.0 ./ ( 1.0 + temp ).^2 .* temp ./ lc .* (r .<= Rc)
     return d_fcut
@@ -430,9 +432,9 @@ h : R^{norb x norb}
 function mat_local!(r::Float64, R::JVecF, elem::NRLParams,
                       hh::Vector{Float64}, h::Matrix{Float64})
     # r = norm(R)
-    u = R/r
+    # u = R/r
     dim = 3
-    l,m,n = u[1], u[2], u[3]
+    l,m,n = R[1]/r, R[2]/r, R[3]/r # u[1], u[2], u[3]
     Norb = elem.Norbital
     Nb = elem.Nbond
     # h = zeros(Norb, Norb)
@@ -578,12 +580,13 @@ end
 d_mat_local(r::Float64, RR::JVecF, elem::NRLParams, task) =
     d_mat_local!(r, RR, elem, task, zeros(3, elem.Norbital, elem.Norbital) )
 
+
 function d_mat_local!(r::Float64, RR::JVecF, elem::NRLParams,
                      task::Symbol, dh::Array{Float64, 3})
     #r = norm(RR)
-    u = RR/r
+   #  u = RR/r
     dim = 3
-    l,m,n = u[1], u[2], u[3]
+    l,m,n = RR[1]/r, RR[2]/r, RR[3]/r # u[1], u[2], u[3]
     Norb = elem.Norbital
     Nb = elem.Nbond
     # dh = zeros(dim, Norb, Norb)
@@ -593,18 +596,24 @@ function d_mat_local!(r::Float64, RR::JVecF, elem::NRLParams,
     # dl/dx = 1/R - x^2/R^3 = 1/R - l^2/R, dl/dy = -xy/R^3 = -lm/R, dl/dz = -xz/R^3 = -ln/R
 
     R = r
-    dR = [l, m, n]
-    dl = [1/R - l*l/R , - l*m/R , - l*n/R]
-    dm = [- l*m/R , 1/R - m*m/R , - m*n/R]
-    dn = [- l*n/R , - m*n/R , 1/R - n*n/R]
+    dR = (l, m, n)
+    dl = (1./R - l*l/R , - l*m/R , - l*n/R)
+    dm = (- l*m/R , 1./R - m*m/R , - m*n/R)
+    dn = (- l*n/R , - m*n/R , 1./R - n*n/R)
 
     # use different functions for different tasks
     if task == :dH
         hh = Float64[ h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
         dhh = Float64[ dR_h_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
     elseif task == :dM
-        hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
-        dhh = Float64[ dR_m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
+      hh = zeros(Nb)
+      dhh = zeros(Nb)
+      for bond_type = 1:Nb
+         hh[bond_type] = m_hop(r, bond_type, elem)
+         dhh[bond_type] = dR_m_hop(r, bond_type, elem)
+      end
+      #   hh = Float64[ m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
+      #   dhh = Float64[ dR_m_hop(r, bond_type, elem)  for bond_type = 1:Nb ]
     else
         throw(ArgumentError("this task has not been implemented yet"))
     end

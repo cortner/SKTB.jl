@@ -4,7 +4,7 @@ tbm = TightBinding.ToyModels.ToyTBModel(r0=2.5, rcut=8.0)
 
 X = copy(positions(at)) |> mat
 X[:, 2] += [0.123; 0.234; 0.01]
-set_positions!(at, pts(X))
+set_positions!(at, vecs(X))
 # @show length(at)
 
 println("-------------------------------------------")

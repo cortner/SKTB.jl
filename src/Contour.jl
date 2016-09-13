@@ -92,7 +92,7 @@ end
 #       but store precomputed information (the residuals)
 
 function site_energy(calc::ContourCalculator, at::AbstractAtoms,
-                     n0::Integer; deriv=false)
+                     n0::Integer, deriv=false)
    tbm = calc.tbm
 
    # ----------- some temporary things to check simplifying assumptions
@@ -101,20 +101,21 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    # assume that the smearing function is FermiDiracSmearing
    @assert isa(tbm.smearing, FermiDiracSmearing)
    # assume that we have only one k-point
-   # TODO: we will need BZ  integration in at least one coordinate direction
+   # TODO: we will need BZ integration in at least one coordinate direction
    # K, w = monkhorstpackgrid(at, tbm)
    # @assert length(K) == 1
 
    # ------------------ main part of the assembly starts here
    # get the hamiltonian for the Gamma point
    H, M = hamiltonian(tbm, at)
-   H = full(H); M = full(M)
+   H = full(H)
+   M = full(M)
 
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
 
-   # define the right-hand side in the linear solver at each quad-point
-   In0 = indexblock(n0, tbm) |> Vector
+   # define the right-hand sides in the linear solver at each quad-point
+   In0 = indexblock(n0, tbm)
    rhsM = M[:, In0]
    rhs = zeros(size(H,1),length(In0)); rhs[In0,:] = eye(length(In0))
 
@@ -139,6 +140,12 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
       if deriv
          res = LU \ rhs
          Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
+         # # >>>>>>>>> START DEBUG >>>>>>>>
+         # Profile.clear()
+         # @profile  Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
+         # Profile.print()
+         # quit()
+         # # <<<<<<<<< END DEBUG <<<<<<<<<
       end
    end
    # --------------------------------------------
@@ -149,7 +156,7 @@ end
 
 function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
 
-   @assert size(res) == size(resM) == size(e0)
+   # @assert size(res) == size(resM) == size(e0)
 
    # count the maximum number of neighbours
    nlist = neighbourlist(at, cutoff(tbm))
@@ -161,23 +168,23 @@ function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
    dM_nm = zeros(3, tbm.norbitals, tbm.norbitals)
    # creates references to these arrays; when dH_nn etc get new data
    # written into them, then vdH_nn etc are automatically updated.
-   vdH_nn = dH_nn |> vecs   # no x no x maxneigs array with each entry a JVecF
-   vdH_nm = dH_nm |> vecs   # no x no matrix  of JVecF
-   vdM_nm = dM_nm |> vecs   # no x no matrix  of JVecF
+   vdH_nn = vecs(dH_nn)::Array{JVecF, 3}   # no x no x maxneigs array with each entry a JVecF
+   vdH_nm = vecs(dH_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
+   vdM_nm = vecs(dM_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
 
    # allocate force vector
    frc = zerovecs(length(at))
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
-      evaluate_d!(tbm.onsite, r, R, dH_nn)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)    # 2100
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
-         grad!(tbm.hop, r[i_n], R[i_n], dH_nm)
-         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)
-         f1 = JVec(0.0)
-         for t = 1:size(res,2), a = 1:tbm.norbitals, b = 1:tbm.norbitals
+         grad!(tbm.hop, r[i_n], R[i_n], dH_nm)    #  2600
+         grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)   # 2800
+         f1 = JVec(0.0im,0.0im,0.0im)
+         for t = 1:size(res,2), a = 1:tbm.norbitals, b = 1:tbm.norbitals   # 2500
             f1 += - (wi * res[In[a], t] * resM[Im[b], t]) *
                                ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
             f1 += - (wi * res[In[a], t] * resM[In[b], t]) * vdH_nn[a,b,i_n]

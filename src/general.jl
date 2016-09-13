@@ -94,7 +94,7 @@ TBModel(;onsite = ZeroSitePotential(),
 a little auxiliary function to compute indices for several orbitals
 """
 indexblock{T <: Integer}(n::T, tbm::TBModel) =
-      Vec( T[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals] )
+      T[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals]
 
 cutoff(tbm::TBModel) = tbm.Rcut
 # HJ: not sure this returns right Rcut for NRL ----------------------------------
@@ -383,7 +383,7 @@ function hamiltonian(atm::AbstractAtoms, tbm::TBModel, k)
 end
 
 hamiltonian(tbm::TBModel, atm::AbstractAtoms) =
-   hamiltonian(atm::AbstractAtoms, tbm::TBModel, JVec([0.;0.;0.]))
+   hamiltonian(atm::AbstractAtoms, tbm::TBModel, JVecF(0.0,0.0,0.0))
 
 
 
@@ -542,7 +542,7 @@ function band_structure_near_eF(Nb, at::AbstractAtoms, tbm::TBModel)
 end
 
 # TODO: check the S thing and probably don't pass X !!!!!
-function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
+function forces_k(X::JVecsF, tbm::TBModel, nlist, k::JVecF)
    # obtain the precomputed arrays
    epsn = get_k_array(tbm, :epsn, k)
    C = get_k_array(tbm, :C, k)
@@ -574,7 +574,7 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
       if length(neigs) > size(dH_nn, 4)
          dH_nn = zeros(3, tbm.norbitals, tbm.norbitals, ceil(Int, 1.5*length(neigs)))
       end
-      # evaluate_d!(tbm.onsite, r, R, dH_nn)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)
 
       for i_n = 1:length(neigs)
          m = neigs[i_n]
@@ -584,7 +584,7 @@ function forces_k(X::JPtsF, tbm::TBModel, nlist, k::JVecF)
          eikr = exp(im * kR)::Complex{Float64}
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
-         # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
+         grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
 
          # the following is a hack to put the on-site assembly into the
          # innermost loop
