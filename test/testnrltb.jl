@@ -5,7 +5,7 @@ tbm = TB.NRLTB.NRLTBModel(elem=TB.NRLTB.Si_sp, nkpoints = (4,2,0))
 
 X = copy(positions(at)) |> mat
 X[:, 2] += [0.123; 0.234; 0.01]
-set_positions!(at, pts(X))
+set_positions!(at, vecs(X))
 
 println("-------------------------------------------")
 println("Testing NRLTBModel: ")

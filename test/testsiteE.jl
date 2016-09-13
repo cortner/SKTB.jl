@@ -49,7 +49,7 @@ println("Test consistency of site forces")
 
 calc.nquad = 10
 X = copy( positions(at) |> mat )
-Es, dEs = TB.Contour.site_energy(calc, at, n0, deriv=true)
+Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
 dEs = dEs |> mat
 dEsh = []
 
