@@ -40,11 +40,36 @@ Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
 # around (1,10,10) in 2D and  smaller in 3D
 
 
-# for n in (4,8,16)
+for n in (4,8,16)
+   @show n
+
+   # now go to the real system
+   at = (1,n,n) * bulk("Si", pbc=(true,true,true), cubic=false)
+   JuLIP.rattle!(at, 0.02)
+
+   H, M = TB.hamiltonian(tbm, at)
+   Hf = full(H); Mf = full(M)
+
+   rhs = rand(size(H,1), size(H,1) ÷ 3)
+
+   println("sparse")
+   @time LU=lufact(H - 0.1im * M)
+   @time LU=lufact(H - 0.1im * M)
+   @time LU \ rhs
+   @time LU \ rhs
+   println("full")
+   @time LU=lufact(Hf - 0.1im * Mf)
+   @time LU=lufact(Hf - 0.1im * Mf)
+   @time LU \ rhs
+   @time LU \ rhs
+end
+
+
+# for n in (4,6,8)
 #    @show n
 #
 #    # now go to the real system
-#    at = (1,n,n) * bulk("Si", pbc=(true,true,true), cubic=false)
+#    at = (n,n,n) * bulk("Si", pbc=(true,true,true), cubic=false)
 #    JuLIP.rattle!(at, 0.02)
 #
 #    H, M = TB.hamiltonian(tbm, at)
@@ -63,31 +88,6 @@ Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
 #    @time LU \ rhs
 #    @time LU \ rhs
 # end
-
-
-for n in (4,6,8)
-   @show n
-
-   # now go to the real system
-   at = (n,n,n) * bulk("Si", pbc=(true,true,true), cubic=false)
-   JuLIP.rattle!(at, 0.02)
-
-   H, M = TB.hamiltonian(tbm, at)
-   Hf = full(H); Mf = full(M)
-
-   rhs = rand(size(H,1))
-
-   println("sparse")
-   @time LU=lufact(H - 0.1im * M)
-   @time LU=lufact(H - 0.1im * M)
-   @time LU \ rhs
-   @time LU \ rhs
-   println("full")
-   @time LU=lufact(Hf - 0.1im * Mf)
-   @time LU=lufact(Hf - 0.1im * Mf)
-   @time LU \ rhs
-   @time LU \ rhs
-end
 
 
 
