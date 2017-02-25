@@ -96,6 +96,16 @@ a little auxiliary function to compute indices for several orbitals
 indexblock{T <: Integer}(n::T, tbm::TBModel) =
       T[(n-1) * tbm.norbitals + j for j = 1:tbm.norbitals]
 
+
+function indexblock{T <: Integer}(Iat::AbstractVector{T}, tbm::TBModel)
+   out = T[]
+   for n in Iat
+      # TODO: where did we screw up append!  ???
+      Base.append!(out, indexblock(n, tbm))
+   end
+   return out
+end
+
 cutoff(tbm::TBModel) = tbm.Rcut
 # HJ: not sure this returns right Rcut for NRL ----------------------------------
 # max(cutoff(tbm.hop), cutoff(tbm.onsite), cutoff(tbm.pair))

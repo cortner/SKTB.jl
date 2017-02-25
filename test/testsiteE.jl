@@ -4,6 +4,7 @@ beta = 20.0        # temperature / smearing paramter
                      # 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
 NQUAD = (4, 6, 8, 10)     # number of contour points
+
 DIM = (1,2,3)
 
 TB=TightBinding
@@ -35,6 +36,7 @@ Etot = TB.energy(tbm, at)
 Es = [TB.site_energy(tbm, at, n) for n = 1:length(at)]
 @show Etot - sum(Es)
 @assert abs(Etot - sum(Es)) < 1e-10
+
 
 # now try the new one
 println("Convergence of Contour integral implementation")

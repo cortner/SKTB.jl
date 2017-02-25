@@ -112,7 +112,6 @@ will never be relevant.
 function partial_energy{TI <: Integer}(
                      calc::ContourCalculator, at::AbstractAtoms,
                      Is::AbstractVector{TI}, deriv=false)
-   n0 = Is[1]
    tbm = calc.tbm
 
    # ----------- some temporary things to check simplifying assumptions
@@ -135,21 +134,31 @@ function partial_energy{TI <: Integer}(
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
 
+   # collect all the orbital-indices corresponding to the site-indices
+   # into a long vector
+   Iorb = indexblock(Is, tbm)
+   Norb = length(Iorb)
    # define the right-hand sides in the linear solver at each quad-point
-   In0 = indexblock(n0, tbm)
-   rhsM = M[:, In0]
-   rhs = zeros(size(H,1),length(In0)); rhs[In0,:] = eye(length(In0))
+   rhsM = M[:, Iorb]
+   rhs = zeros(size(H,1), Norb);
+   rhs[Iorb,:] = eye(Norb)
 
-   Esite = 0.0
-   Esite_d = zerovecs(length(at))
+   E = 0.0
+   ∇E = zerovecs(length(at))
 
+
+   # *** CONTINUE HERE ***
+
+   # integrate over the contour
    for (wi, zi) in zip(w, z)
+      # compute the Green's function
       LU = lufact(H - zi * M)
 
       # --------------- assemble energy -----------
       resM = LU \ rhsM
-      # TODO: why is there a 2.0 here? It wasn't needed in the initial tests !!!
-      Esite += 2.0 * real(wi * zi * trace(resM[In0,:]))
+      # TODO: this 2.0 is to account for an error in the basic TB implementation
+      #       where we forgot to account for double-occupancy???
+      E += 2.0 * real(wi * zi * trace(resM[Iorb,:]))
 
       # --------------- assemble forces -----------
       # TODO: the call to site_force_inner will very likely dominate this;
@@ -157,12 +166,13 @@ function partial_energy{TI <: Integer}(
       #       (for each quadrature point on the contour)
       #       it will probably be better to first precompute all residuals
       #       `res`, store them, and then start a new loop over the contour
-      #       this is to be tested.
+      #       this is to be tested. For 1_000 atoms, 4 orbitals per atom
+      #       and 20 quadrature points, this would amount to ca. 4GB of data
       if deriv
-         res = LU \ rhs
-         Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
+         res = LU \ rhs   # this should cost a fraction of the LU-factorisation
+         ∇E += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # # >>>>>>>>> START DEBUG >>>>>>>>
-         # keep this code for performance testing
+         # # keep this code for performance testing
          # Profile.clear()
          # @profile  Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # Profile.print()
@@ -172,7 +182,7 @@ function partial_energy{TI <: Integer}(
    end
    # --------------------------------------------
 
-   return Esite, Esite_d
+   return E, ∇E
 end
 
 
@@ -200,7 +210,7 @@ function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
-      evaluate_d!(tbm.onsite, r, R, dH_nn)    # 2100 (performance notes)
+      evaluate_d!(tbm.onsite, r, R, dH_nn)    # 2100 (performance)
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
