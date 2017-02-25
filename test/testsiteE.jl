@@ -4,6 +4,7 @@ beta = 20.0        # temperature / smearing paramter
                      # 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
 NQUAD = (4, 6, 8, 10)     # number of contour points
+
 DIM = (1,2,3)
 
 TB=TightBinding
@@ -14,12 +15,12 @@ calc = TB.Contour.ContourCalculator(tbm, 0)
 
 # use a mini-system to pre-compute the Fermi-level and energy bounds
 print("calibrating . . . ")
-at = Atoms("Si", pbc=(true,true,true))
+at = bulk("Si", pbc=(true,true,true))
 TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
 println("done.")
 
 # now the real system to test on
-at = DIM * Atoms("Si", pbc=(false,false,false), cubic=true)
+at = DIM * bulk("Si", pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
 # TB.Contour.calibrate2!(calc, at, beta, nkpoints=(6,6,6))
 @show length(at)
@@ -35,6 +36,7 @@ Etot = TB.energy(tbm, at)
 Es = [TB.site_energy(tbm, at, n) for n = 1:length(at)]
 @show Etot - sum(Es)
 @assert abs(Etot - sum(Es)) < 1e-10
+
 
 # now try the new one
 println("Convergence of Contour integral implementation")
