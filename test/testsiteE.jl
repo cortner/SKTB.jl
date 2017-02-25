@@ -14,12 +14,12 @@ calc = TB.Contour.ContourCalculator(tbm, 0)
 
 # use a mini-system to pre-compute the Fermi-level and energy bounds
 print("calibrating . . . ")
-at = Atoms("Si", pbc=(true,true,true))
+at = bulk("Si", pbc=(true,true,true))
 TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
 println("done.")
 
 # now the real system to test on
-at = DIM * Atoms("Si", pbc=(false,false,false), cubic=true)
+at = DIM * bulk("Si", pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
 # TB.Contour.calibrate2!(calc, at, beta, nkpoints=(6,6,6))
 @show length(at)

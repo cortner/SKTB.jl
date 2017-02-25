@@ -8,13 +8,12 @@ functionality and is therefore still experimental.
 Parts of this is based on [PEXSI](https://math.berkeley.edu/~linlin/pexsi/index.html),
 but we deviate in various ways. For example, we don't use selected inversion,
 but rather (in the future) want to move towards an iterative solver instead.
-
-In fact, the current implementation uses naive direct solvers.
+The current implementation uses naive direct solvers.
 
 ### TODO:
-[ ] automatically determine Emin, Emax
-[ ] need a 0T contour
-[ ] in general: allow different energies, e.g. including entropy
+* [ ] automatically determine Emin, Emax
+* [ ] need a 0T contour
+* [ ] in general: allow different energies, e.g. including entropy
 """
 module Contour
 
@@ -91,8 +90,29 @@ end
 #       energy and forces; consider instead to have forces separately
 #       but store precomputed information (the residuals)
 
-function site_energy(calc::ContourCalculator, at::AbstractAtoms,
-                     n0::Integer, deriv=false)
+
+site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer, deriv=false) =
+  partial_energy(calc, at, [n0], deriv)
+
+"""
+partial_energy(calc::ContourCalculator, at, Is, deriv=false)
+
+Instead of the total energy of a QM system this computes the energy stored in
+a sub-domain defined by `Is`.
+
+* `calc`: a `ContourCalculator`, defining a tight-binding model
+* `at`: an atoms object
+* `Is`: a list (`AbstractVector`) of indices specifying the subdomain
+* `deriv`: whether or not to compute derivatives as well
+
+Note that as a result of the `deriv` parameters, this function is not
+type-stable. But very likely - due to its high computational cost - this
+will never be relevant.
+"""
+function partial_energy{TI <: Integer}(
+                     calc::ContourCalculator, at::AbstractAtoms,
+                     Is::AbstractVector{TI}, deriv=false)
+   n0 = Is[1]
    tbm = calc.tbm
 
    # ----------- some temporary things to check simplifying assumptions
@@ -101,7 +121,8 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
    # assume that the smearing function is FermiDiracSmearing
    @assert isa(tbm.smearing, FermiDiracSmearing)
    # assume that we have only one k-point
-   # TODO: we will need BZ integration in at least one coordinate direction
+   # TODO: eventually (when implementing dislocations) we will need BZ
+   #       integration in at least one coordinate direction
    # K, w = monkhorstpackgrid(at, tbm)
    # @assert length(K) == 1
 
@@ -141,6 +162,7 @@ function site_energy(calc::ContourCalculator, at::AbstractAtoms,
          res = LU \ rhs
          Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # # >>>>>>>>> START DEBUG >>>>>>>>
+         # keep this code for performance testing
          # Profile.clear()
          # @profile  Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # Profile.print()
@@ -160,6 +182,7 @@ function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
 
    # count the maximum number of neighbours
    nlist = neighbourlist(at, cutoff(tbm))
+   # this is a long loop, but it costs nothing compared to the for-loop below
    maxneigs = maximum( length(s[2]) for s in sites(nlist) )
 
    # pre-allocate dH, dM arrays
@@ -177,7 +200,7 @@ function site_grad_inner(tbm, at, res, resM, e0, wi, zi)
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm))
       In = indexblock(n, tbm)
-      evaluate_d!(tbm.onsite, r, R, dH_nn)    # 2100
+      evaluate_d!(tbm.onsite, r, R, dH_nn)    # 2100 (performance notes)
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, tbm)
