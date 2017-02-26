@@ -1,5 +1,5 @@
 
-at = Atoms("Al", repeatcell=(1,2,3), pbc=(false,false,false), cubic=true)
+at = (1,2,3) * bulk("Al", pbc=false, cubic=true)
 tbm = TightBinding.ToyModels.ToyTBModel(r0=2.5, rcut=8.0)
 
 X = copy(positions(at)) |> mat

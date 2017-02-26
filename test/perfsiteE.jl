@@ -21,15 +21,19 @@ JuLIP.rattle!(at, 0.02)
 TB.Contour.calibrate2!(calc, at, beta, nkpoints=(6,6,6))
 @show length(at)
 
-# @time Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
-# @time Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
-# @time Es, dEs = TB.Contour.site_energy(calc, at, n0, true);
+Nat = length(at)
+Isub = 1:(Nat ÷ 3)
+
+@time Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
+@time Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
+@time Es, dEs = TB.Contour.partial_energy(calc, at, Isub, true)
+@time Es, dEs = TB.Contour.partial_energy(calc, at, Isub, true);
 
 # @code_warntype TB.Contour.site_energy(calc, at, n0, true);
 
 
-Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
-;
+# Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
+# ;
 
 
 

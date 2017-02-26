@@ -1,6 +1,6 @@
 
 TB=TightBinding
-at = (1,2,2) * Atoms("Si", pbc=(false,false,false), cubic=true)
+at = (1,2,2) * bulk("Si", pbc=false, cubic=true)
 tbm = TB.NRLTB.NRLTBModel(elem=TB.NRLTB.Si_sp, nkpoints = (4,2,0))
 
 X = copy(positions(at)) |> mat
