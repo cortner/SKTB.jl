@@ -86,11 +86,13 @@ end
 @pot type NRLhop <: PairPotential
     elem :: NRLParams
 end
+
 evaluate!(p::NRLhop, r::Float64, R::JVecF, H, temp) =
     mat_local_h!(r/BOHR, R/BOHR, p.elem, H, temp)
+
 evaluate(p::NRLhop, r::Float64, R::JVecF) =
     mat_local_h!(r/BOHR, R/BOHR, p.elem, zeros(p.elem.Norbital, p.elem.Norbital), zeros(10))
-# evaluate_d(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, "dH")
+
 grad(p::NRLhop, r, R) = d_mat_local(r/BOHR, R/BOHR, p.elem, :dH)/BOHR
 function grad!(p::NRLhop, r::Float64, R::JVecF, dH::Array{Float64, 3})
    d_mat_local!(r/BOHR, R/BOHR, p.elem, :dH, dH)
@@ -582,7 +584,7 @@ d_mat_local(r::Float64, RR::JVecF, elem::NRLParams, task) =
 
 
 function d_mat_local!(r::Float64, RR::JVecF, elem::NRLParams,
-                     task::Symbol, dh::Array{Float64, 3})
+                  task::Symbol, dh::Array{Float64, 3})
     #r = norm(RR)
    #  u = RR/r
     dim = 3

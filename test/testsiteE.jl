@@ -48,13 +48,11 @@ end
 
 
 println("Test consistency of site forces")
-
 calc.nquad = 10
 X = copy( positions(at) |> mat )
 Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
 dEs = dEs |> mat
 dEsh = []
-
 println(" p  |  error ")
 for p = 2:9
    h = 0.1^p
@@ -63,6 +61,38 @@ for p = 2:9
       X[n] += h
       set_positions!(at, X)
       Esh, _ = TB.Contour.site_energy(calc,at,n0)
+      dEsh[n] = (Esh - Es) / h
+      X[n] -= h
+   end
+   println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
+end
+
+
+println("Test consistency of ContourCalculator for multiple sites")
+Is = unique(mod(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Eold = sum( TB.site_energy(tbm, at, n0) for n0 in Is )
+for nquad in NQUAD
+   calc.nquad = nquad
+   Enew, _ = TB.Contour.partial_energy(calc, at, Is)
+   println("nquad = ", nquad, "; rel-error = ", abs(Enew - Eold) / abs(Eold))
+end
+
+
+println("Test consistency of multiple site forces")
+calc.nquad = 10
+X = copy( positions(at) |> mat )
+Is = unique(mod(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Es, dEs = TB.Contour.partial_energy(calc, at, Is, true)
+dEs = dEs |> mat
+dEsh = []
+println(" p  |  error ")
+for p = 2:9
+   h = 0.1^p
+   dEsh = zeros(dEs)
+   for n = 1:length(X)
+      X[n] += h
+      set_positions!(at, X)
+      Esh, _ = TB.Contour.partial_energy(calc, at, Is)
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end
