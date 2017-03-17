@@ -419,7 +419,7 @@ end
 
 """
 generates local hamiltonian and overlap for hopping terms or overlap.
-The size of returnned local matrices are  Norbit x Norbit,
+The size of returned local matrices are  Norbit x Norbit,
 for example, 4x4 for s&p orbitals and 9x9 for s&p&d orbitals.
 
 ### Input

@@ -24,17 +24,30 @@ using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
                      evaluate, evaluate_d!, grad!
 using FermiContour
 
-export site_energy
+import JuLIP: energy, forces
 
 
 type ContourCalculator{P_os, P_hop, P_ol, P_p}
    tbm::TBModel{P_os, P_hop, P_ol, P_p}
    nquad::Int
+   Idom::Vector{Int}
    Emin::Float64
    Emax::Float64
 end
 
-ContourCalculator(tbm, nquad) = ContourCalculator(tbm, nquad, 0.0, 0.0)
+ContourCalculator(tbm, nquad) = ContourCalculator(tbm, nquad, Int[])
+ContourCalculator(tbm, nquad, Idom) = ContourCalculator(tbm, nquad, Idom, 0.0, 0.0)
+
+function set_domain!(calc::ContourCalculator, Idom::Vector{Int})
+   calc.Idom = Idom
+   return calc
+end
+
+energy(calc::ContourCalculator, at::AbstractAtoms) =
+         partial_energy(calc, at, calc.Idom, false)[1]
+
+forces(calc::ContourCalculator, at::AbstractAtoms) =
+         partial_energy(calc, at, calc.Idom, true)[2]
 
 
 """
@@ -73,26 +86,27 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
    # this computes the spectrum and fermi-level
    H, M = hamiltonian(calc.tbm, at)
-   e = eigvals(full(H), full(M))
-   tbm.eF = 0.5 * sum(extrema(e))
+   ϵ = eigvals(full(H), full(M))
+   tbm.eF = 0.5 * sum(extrema(ϵ))
    tbm.smearing.eF = tbm.eF
    tbm.fixed_eF = true
    calc.Emin = 0.0
-   calc.Emax = maximum( abs(e - tbm.eF) )
+   calc.Emax = maximum( abs(ϵ - tbm.eF) )
    return calc
 end
 
 
 
+site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer, deriv=false) =
+  partial_energy(calc, at, [n0], deriv)
 
 
 # TODO: at the moment we just have a single loop to compute
 #       energy and forces; consider instead to have forces separately
 #       but store precomputed information (the residuals)
-
-
-site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer, deriv=false) =
-  partial_energy(calc, at, [n0], deriv)
+#       right now it looks like this would take too much storage?!?!?
+#       on the other hand, if we parallelise, maybe it is ok?
+#       >> discuss with Simon
 
 """
 partial_energy(calc::ContourCalculator, at, Is, deriv=false)
@@ -146,9 +160,6 @@ function partial_energy{TI <: Integer}(
    E = 0.0
    ∇E = zerovecs(length(at))
 
-
-   # *** CONTINUE HERE ***
-
    # integrate over the contour
    for (wi, zi) in zip(w, z)
       # compute the Green's function
@@ -172,7 +183,7 @@ function partial_energy{TI <: Integer}(
          res = LU \ rhs   # this should cost a fraction of the LU-factorisation
          ∇E += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # # >>>>>>>>> START DEBUG >>>>>>>>
-         # # keep this code for performance testing
+         # # (keep this code for performance testing)
          # Profile.clear()
          # @profile  Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
          # Profile.print()
@@ -181,7 +192,6 @@ function partial_energy{TI <: Integer}(
       end
    end
    # --------------------------------------------
-
    return E, ∇E
 end
 
