@@ -48,7 +48,7 @@ energy(calc::ContourCalculator, at::AbstractAtoms) =
          partial_energy(calc, at, calc.Idom, false)[1]
 
 forces(calc::ContourCalculator, at::AbstractAtoms) =
-         partial_energy(calc, at, calc.Idom, true)[2]
+         - partial_energy(calc, at, calc.Idom, true)[2]
 
 
 """
@@ -79,7 +79,7 @@ uses spectral decomposition to compute Emin, Emax, eF
 for the configuration `at` and stores it in `calc`
 """
 function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
-                     beta::Float64; nkpoints=(4,4,4) )
+                     beta::Float64; nkpoints=(4,4,4), eF = :auto )
    tbm = calc.tbm
    tbm.smearing = FermiDiracSmearing(beta)
    tbm.fixed_eF = false
@@ -88,7 +88,11 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    # this computes the spectrum and fermi-level
    H, M = hamiltonian(calc.tbm, at)
    ϵ = eigvals(full(H), full(M))
-   tbm.eF = 0.5 * sum(extrema(ϵ))
+   if eF == :auto
+      tbm.eF = 0.5 * sum(extrema(ϵ))
+   else
+      tbm.eF = eF
+   end
    tbm.smearing.eF = tbm.eF
    tbm.fixed_eF = true
    calc.Emin = 0.0
