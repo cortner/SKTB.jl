@@ -25,9 +25,10 @@ using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
 using FermiContour
 
 import JuLIP: energy, forces
+import JuLIP.Potentials: site_energy, site_energy_d
 
 
-type ContourCalculator{P_os, P_hop, P_ol, P_p}
+type ContourCalculator{P_os, P_hop, P_ol, P_p} <: AbstractCalculator
    tbm::TBModel{P_os, P_hop, P_ol, P_p}
    nquad::Int
    Idom::Vector{Int}
@@ -95,10 +96,31 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    return calc
 end
 
+"""
+uses spectral decomposition to compute Emin, Emax, eF
+for the configuration `at` and stores it in `calc`
+"""
+function calibrate3!(calc::ContourCalculator, at::AbstractAtoms, beta::Float64)
+   tbm = calc.tbm
+   tbm.smearing = FermiDiracSmearing(beta)
+   tbm.fixed_eF = true
+   tbm.eF = 0.0
+   tbm.smearing.eF = tbm.eF
+   # this computes the spectrum and fermi-level
+   H, M = hamiltonian(calc.tbm, at)
+   ϵ = eigvals(full(H), full(M))
+   calc.Emin = 0.0
+   calc.Emax = maximum( abs(ϵ - tbm.eF) )
+   return calc
+end
 
 
-site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer, deriv=false) =
-  partial_energy(calc, at, [n0], deriv)
+site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer) =
+  partial_energy(calc, at, [n0], false)[1]
+
+site_energy_d(calc::ContourCalculator, at::AbstractAtoms, n0::Integer) =
+  partial_energy(calc, at, [n0], true)[2]
+
 
 
 # TODO: at the moment we just have a single loop to compute
