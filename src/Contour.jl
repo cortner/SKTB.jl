@@ -100,23 +100,23 @@ function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
    return calc
 end
 
-"""
-uses spectral decomposition to compute Emin, Emax, eF
-for the configuration `at` and stores it in `calc`
-"""
-function calibrate3!(calc::ContourCalculator, at::AbstractAtoms, beta::Float64)
-   tbm = calc.tbm
-   tbm.smearing = FermiDiracSmearing(beta)
-   tbm.fixed_eF = true
-   tbm.eF = 0.0
-   tbm.smearing.eF = tbm.eF
-   # this computes the spectrum and fermi-level
-   H, M = hamiltonian(calc.tbm, at)
-   ϵ = eigvals(full(H), full(M))
-   calc.Emin = 0.0
-   calc.Emax = maximum( abs(ϵ - tbm.eF) )
-   return calc
-end
+# """
+# uses spectral decomposition to compute Emin, Emax, eF
+# for the configuration `at` and stores it in `calc`
+# """
+# function calibrate3!(calc::ContourCalculator, at::AbstractAtoms, beta::Float64)
+#    tbm = calc.tbm
+#    tbm.smearing = FermiDiracSmearing(beta)
+#    tbm.fixed_eF = true
+#    tbm.eF = 0.0
+#    tbm.smearing.eF = tbm.eF
+#    # this computes the spectrum and fermi-level
+#    H, M = hamiltonian(calc.tbm, at)
+#    ϵ = eigvals(full(H), full(M))
+#    calc.Emin = 0.0
+#    calc.Emax = maximum( abs(ϵ - tbm.eF) )
+#    return calc
+# end
 
 
 site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer) =
