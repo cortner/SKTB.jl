@@ -13,4 +13,4 @@ println("============================================")
 # include("perfsiteE.jl")
 # include("comparequip.jl")
 
-include("compareatoms.jl")
+# include("compareatoms.jl")

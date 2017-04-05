@@ -1,22 +1,19 @@
 
-
 using JuLIP
+using JuLIP.Potentials
 
-using JuLIP.Potentials: @pot, evaluate, evaluate_d, SitePotential
+using FixedSizeArrays
 
-import JuLIP: energy, forces, cutoff
-
-# using FixedSizeArrays
-
-export hamiltonian, densitymatrix
+import JuLIP: energy, forces
+import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
 
 
+export hamiltonian, densitymatrix, TBModel
 
-abstract SmearingFunction
 
-abstract AbstractTBModel
-
-abstract TBHamiltonian
+# TODO: making SmearingFunction a potential is a bit of a hack:?
+#       or is it? It is energy after all?
+abstract SmearingFunction <: Potential
 
 
 # TODO: default evaluate!; should this potentially go into Potentials?
@@ -24,22 +21,6 @@ evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
 evaluate_d!(pot, r, R, target)  = copy!(target, evaluate_d(pot, r, R))
 grad(pot, r, R) = R .* (evaluate_d(pot, r, R) ./ r)'
 grad!(p, r, R, G) = copy!(G, grad(p, r, R))
-
-
-# ============= Orthogonal vs Non-Orthogonal TB ===================
-
-const ORTHOGONAL = Val{:orth}
-const NONORTH = Val{:nonorth}
-
-isorthogonal(::Val{:orth}) = true
-isorthogonal(::Val{:nonorth}) = false
-
-# ================  how many orbitals  =====================
-
-
-
-
-# ===================  TightBinding Calculator =====================
 
 
 """
@@ -53,50 +34,43 @@ i.e. the hopping terms is a pair potential while the on-site terms are
 more general; this is consistent in particular with the NRL TB model.
 This model can only descibe a single species of atoms.
 """
-type TBModel{ISORTH, NORB} <: AbstractCalculator
-   # hamiltonian
-   H::TBHamiltonian{ISORTH, NORB}
-   # additional MM potential (typically but not necessarily pair)
-   Vrep::SitePotential
-   # smearing function / fermi temperature model
-   smearing::SmearingFunction
-   # k-point sampling              TODO: should this really be a tuple?
-   #    0 = open boundary
-   #    1 = Gamma point
-   nkpoints::Tuple{Int, Int, Int}
+type TBModel{P_os, P_hop, P_ol, P_p} <: AbstractTBModel
+    # Hamiltonian parameters
+    onsite::P_os
+    hop::P_hop
+    overlap::P_ol
+    # repulsive potential
+    pair::P_p
 
-   # -------------- a few internals ------------------
-   hfd::Float64           # step used for finite-difference approximations
+    # HJ: add a parameter Rcut
+    # since the functions "cutoff" in Potentials.jl and NRLTB.jl may conflict
+    # TODO: this should not happen; need to resolve this issue
+    Rcut::Float64
+
+    # remaining model parameters
+    smearing::SmearingFunction
+    norbitals::Int
+
+    #  WHERE DOES THIS GO?
+    #  morally this is really part of the smearing function
+    fixed_eF::Bool
+    eF::Float64
+    # beta::Float64
+
+    # k-point sampling information:
+    #    0 = open boundary
+    #    1 = Gamma point
+    nkpoints::Tuple{Int, Int, Int}
+
+    # internals
+    hfd::Float64           # step used for finite-difference approximations
+    needupdate::Bool       # tells whether hamiltonian and spectrum are up-to-date
+    arrays::Dict{Any, Any}      # storage for various
+                                 # TODO: this ought to go into Atoms
 end
+
 
 typealias TightBindingModel TBModel
-
-TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(), ZeroTemperature(0.0), (0,0,0))
-
-
-# =======================  Hamiltonian Types =============================
-
-
-abstract TBHamiltonian{ISORTH, NORB}
-
-type SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH, NORB}
-
-   isorth::ISORTH
-end
-
-typealias SlaterKosterHamiltonian SKHamiltonian
-
-
-"""
-An auxiliary hamiltonian that doesn't actually work but allows us to
-construct TBModel instances.
-"""
-type NullHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH, NORB}
-end
-
-NullHamiltonian() = NullHamiltonian{0,0}()
-
-
 
 
 TBModel(;onsite = ZeroSitePotential(),
