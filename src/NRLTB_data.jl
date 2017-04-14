@@ -34,7 +34,7 @@ end
 # SILICON
 # 'Si' : silicon with s&p orbitals
 # reduce Rc = 12.5 to 7.5
-Si_sp  =  NRLParams( 4, 4,			    # norbital, nbond
+Si_sp  =  NRLHamiltonian( 4, 4,			    # norbital, nbond
                     12.5, 0.5,			# Rc, lc
                     1.10356625153,		# λ
                     [-0.053233461902  0.357859715265  0.357859715265  0.357859715265],  	#a
@@ -57,7 +57,7 @@ Si_sp  =  NRLParams( 4, 4,			    # norbital, nbond
 # SILICON
 # 'Si' : silicon with s&p&d orbitals  :BUT: ignore d-d orbital interactions
 # reduce Rc = 12.5 to 7.5
-Si_spd  =  NRLParams(9, 10,			# norbital, nbond
+Si_spd  =  NRLHamiltonian(9, 10,			# norbital, nbond
                      12.5, 0.5,		# Rc, lc
                      1.1108,		# λ
                      [-0.0555,  0.4127,   0.4127,   0.4127,
@@ -96,7 +96,7 @@ Si_spd  =  NRLParams(9, 10,			# norbital, nbond
 # CARBON
 # 'C' : carbon with s&p orbitals
 # reduce Rc = 10.5 to 6.0
-C_sp  =  NRLParams( 4, 4,			    # norbital, nbond
+C_sp  =  NRLHamiltonian( 4, 4,			    # norbital, nbond
                     10.5, 0.5,			# Rc, lc
                     1.59901905594,		# λ
                     [-0.102789972814  0.542619178314  0.542619178314  0.542619178314],  	#a
@@ -119,7 +119,7 @@ C_sp  =  NRLParams( 4, 4,			    # norbital, nbond
 # ALUMINIUM
 # 'Al' : Aluminum with s&p&d orbitals
 # reduce Rc = 16.5 to 9.5
-Al_spd  =  NRLParams(9, 10,			        # norbital, nbond
+Al_spd  =  NRLHamiltonian(9, 10,			        # norbital, nbond
                      16.5, 0.5,		    	# Rc, lc
                      1.108515601511,		# λ
                      [-0.0368090795665,  0.394060871550,  0.394060871550,  0.394060871550,

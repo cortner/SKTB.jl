@@ -54,9 +54,9 @@ function sk4!(U, hop, mat)
    # 4 orbitals are s, px, py, pz, these are the mat-indices
    # 4 bond types are : ssσ,spσ,ppσ,ppπ, these are the hop-indices
    mat[1,1] = hop[1]                            # E_ss = V_ssσ
-   mat[2,2] = l*l * hop[3] + (1-l*l) * hop[4]  # E_xx = l² V_ppσ + (1-l²) V_ppπ
-   mat[3,3] = m*m * hop[3] + (1-m*m) * hop[4]  # E_yy = m² V_ppσ + (1-m²) V_ppπ
-   mat[4,4] = n*n * hop[3] + (1-n*n) * hop[4]  # E_zz = n² V_ppσ + (1-n²) V_ppπ
+   mat[2,2] = l*l * hop[3] + (1-l*l) * hop[4]   # E_xx = l² V_ppσ + (1-l²) V_ppπ
+   mat[3,3] = m*m * hop[3] + (1-m*m) * hop[4]   # E_yy = m² V_ppσ + (1-m²) V_ppπ
+   mat[4,4] = n*n * hop[3] + (1-n*n) * hop[4]   # E_zz = n² V_ppσ + (1-n²) V_ppπ
    mat[1,2] = l * hop[2]                        # E_sx = l V_spσ
    mat[1,3] = m * hop[2]                        # E_sy = m V_spσ
    mat[1,4] = n * hop[2]                        # E_sz = n V_spσ
@@ -188,26 +188,18 @@ end
 ############################################################
 ### Hamiltonian entries
 
-# sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds
 
-sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, mat) = sk4!(U, temp, mat)
+sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, temp, out)
 
-sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, mat) = sk9!(U, temp, mat)
-
-function hop!{IO, NORB}(H::SKHamiltonian{IO, NORB}, r, R, out, temp)
-   bonds!(H, r, temp)
-   return sk!(H, R/r, temp, out)
-end
-
-
+sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, temp, out)
 
 
 
 ############################################################
 ### Hamiltonian Evaluation
-# most of this could become a *generic* code!
+#   most of this could become a *generic* code!
+#   it just needs generalising the atom-orbital-dof map.
 
-# nnz(H::SKHamiltonian, nlist::AbstractNeighbourlist) =
 
 function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
    nlist = neighbourlist(atm, cutoff(H))
@@ -223,7 +215,7 @@ function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
       Mt = zeros(Complex{Float64}, nnz_est)
       return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(atm))
    end
-   nothing
+   error("nomansland")
 end
 
 
@@ -236,6 +228,9 @@ import Base.-
 dott(a::JVecF, A::AbstractVector{JVecF}) = JVecF[dot(a, v) for v in A]
 
 import Base.append!
+
+
+# TODO: hide all this sparse matrix crap in a nice type
 
 # append to triplet format: version 1 for H and M (non-orth TB)
 function append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, norbitals, idx)
@@ -260,7 +255,12 @@ function append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, norbitals, idx)
    return idx
 end
 
-# inner Hamiltonian assembly:  non-orthogonal tight-binding
+# inner Hamiltonian assembly:  non-orthogonal SK tight-binding
+#
+# exp_i_kR = complex multiplier needed for BZ integration
+# note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
+#       but this would actually be less efficient, and less clear
+#
 function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
                            k, It, Jt, Ht, Mt, nlist, X)
 
@@ -272,27 +272,23 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
    # loop through sites
    for (n, neigs, r, R, _) in sites(nlist)
       In = indexblock(n, H)     # index-block for atom index n
-      # loop through the neighbours of the current atom
+      # loop through the neighbours of the current atom (i.e. the bonds)
       for m = 1:length(neigs)
-         # exp_i_kR = complex multiplier needed for BZ integration
-         # note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
-         #       but this would actually be less efficient, and less clear
-         exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-
-         Im = indexblock(neigs[m], H)
+         U = R[m]/r[m]
          # compute hamiltonian block
-         H_nm = hop!(H, r[m], R[m], H_nm)
+         H_nm = sk!(H, U, hop!(H, r[m], temp), H_nm)
          # compute overlap block
-         M_nm = overlap!(H, r[m], R[m], M_nm)
+         M_nm = sk!(H, U, overlap!(H, r[m], temp), M_nm)
          # add new indices into the sparse matrix
+         Im = indexblock(neigs[m], H)
+         exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
          idx = append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, NORB, idx)
       end
 
-      # now compute the on-site terms
-      # the diagonal of the overlap matrix is assumed to be independent of R
-      #   >>> however we can give it {R} dependence, this would also distinguish
-      onsite!(H, r, R, H_nm)
-      overlap!(H, M_nm)
+      # now compute the on-site blocks;
+      # TODO: revisit this (can one do the scalar temp trick again?)
+      H_nm = onsite!(H, r, R, H_nm)
+      M_nm = overlap!(H, M_nm)
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, NORB, idx)
    end

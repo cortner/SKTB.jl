@@ -9,7 +9,6 @@ import JuLIP: energy, forces, cutoff
 import JuLIP.Potentials: evaluate, evaluate_d
 
 # using FixedSizeArrays
-
 export hamiltonian, densitymatrix
 
 
@@ -27,12 +26,6 @@ grad!(p, r, R, G) = copy!(G, grad(p, r, R))
 
 # abstractions
 include("types.jl")
-
-# perturbation theory module
-# include("perturbation.jl")
-
-# implements the "classical" site energy
-# include("site_energy.jl")
 
 # basics for slater-koster type hamiltonians
 include("slaterkoster.jl")
@@ -57,6 +50,11 @@ include("smearing.jl")
 
 
 
+# perturbation theory module
+# include("perturbation.jl")
+
+# implements the "classical" site energy
+# include("site_energy.jl")
 
 # implements the "classical" site energy
 # include("site_energy.jl")
@@ -64,12 +62,6 @@ include("smearing.jl")
 # implement the contour integral variants
 # in particular the site energy
 # include("Contour.jl")
-
-# a tight binding toy model, mostly for testing
-# include("toymodel.jl")
-
-# the NRL tight binding model
-# include("NRLTB.jl")
 
 # The model of Kwon et al, PRB 49(11)
 # include("Orthogonal.jl")
