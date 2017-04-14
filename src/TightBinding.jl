@@ -15,7 +15,7 @@ export hamiltonian, densitymatrix
 
 
 # TODO: where does this go?????
-# TODO: default evaluate!; should this potentially go into Potentials?
+# TODO: default evaluate!; should this potentially go into JuLIP.Potentials?
 evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
 evaluate_d!(pot, r, R, target)  = copy!(target, evaluate_d(pot, r, R))
 grad(pot, r, R) = R .* (evaluate_d(pot, r, R) ./ r)'
@@ -27,9 +27,6 @@ grad!(p, r, R, G) = copy!(G, grad(p, r, R))
 
 # abstractions
 include("types.jl")
-
-# basic calculators for energy and forces
-# include("calculators.jl")
 
 # perturbation theory module
 # include("perturbation.jl")
@@ -52,8 +49,11 @@ include("toymodel.jl")
 # define how to go from eigenvalues (energy-levels) to potential energy
 include("smearing.jl")
 
+# basic calculators for energy and forces
+# include("calculators.jl")
+
 # implement the contour integral variants of the TB model
-# include("Contour.jl")
+# include("contour.jl")
 
 
 

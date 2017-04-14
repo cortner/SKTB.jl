@@ -97,8 +97,9 @@ binding model.
 * `H` : hamiltonian in suitable format (typically CSC)
 * `M` : overlap matrix in suitable format (typically CSC or I is orthogonal)
 """
-hamiltonian(at::AbstractAtoms, tbm::TBModel, args...) = evaluate(at, tbm.H, args...)
+hamiltonian(tbm::TBModel, at::AbstractAtoms, args...) = evaluate(tbm.H, at, args...)
 
+evaluate(H::TBHamiltonian, at::AbstractAtoms) = evaluate(H, at, (0,0,0))
 
 
 # ==============================================================================

@@ -1,4 +1,5 @@
 
+import JuLIP.Potentials: evaluate, evaluate_d
 
 # slaterkoster.jl
 #
@@ -206,9 +207,9 @@ end
 ### Hamiltonian Evaluation
 # most of this could become a *generic* code!
 
-nnz(H::SKHamiltonian, nlist::AbstractNeighbourlist)
+# nnz(H::SKHamiltonian, nlist::AbstractNeighbourlist) =
 
-function evaluate(at::AbstractAtoms, H::SKHamiltonian, k::AbstractVector)
+function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
    nlist = neighbourlist(atm, cutoff(H))
    # pre-allocate memory for the triplet format
    norb = norbitals(H)

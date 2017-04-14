@@ -7,7 +7,7 @@
 export ToyTBModel
 export ToyHamiltonian
 
-using JuLIP.Potentials: PairPotential, Morse, SWCutoff
+using JuLIP.Potentials: PairPotential, Morse, SWCutoff, ZeroSitePotential
 
 """
 `ToyHamiltonian`: constructs a simple s-orbital tight binding hamiltonian.
@@ -31,7 +31,7 @@ type ToyHamiltonian{VT <: PairPotential} <: SKHamiltonian{ORTHOGONAL, 1}
 end
 
 ToyHamiltonian(; alpha = 2.0, r0 = 1.0, rcut = 2.5, e0 = 10.0) =
-   Morse(e0=e0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0)
+   ToyHamiltonian(Morse(e0=e0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0))
 
 hop!(H::ToyHamiltonian, r, R, out) = setindex!(out, H.V(r, R), 1)
 
@@ -53,7 +53,9 @@ with the MaterialsScienceTools.TriangularLattice module.
 * eF = 0.0 : chemical potential (if fixed)
 * hfd = 1e-6 : finite difference step for computing hessians
 """
-ToyTBModel(; beta = 1.0, fixed_eF = true, eF = 0.0,
-             hfd = 1e-6, nkpoints = (0,0,0), kwargs...) =
-   TBModel( ToyHamiltonian(;kwargs...), ZeroSitePotential(),
+function ToyTBModel(; beta = 1.0, fixed_eF = true, eF = 0.0,
+             hfd = 1e-6, nkpoints = (0,0,0), kwargs...)
+   H = ToyHamiltonian(;kwargs...)
+   TBModel( H, ZeroSitePotential(),
             FermiDiracSmearing(beta, eF, fixed_eF), nkpoints, hfd )
+end
