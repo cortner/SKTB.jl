@@ -20,7 +20,7 @@ const BOHR = 0.52917721092::Float64  # atomic unit of length 1 Bohr = 0.52917721
 """
 `NRLHamiltonian `: specifies the parameters for the NRLTB hamiltonian
 """
-type NRLHamiltonian{NORB} <: SKHamiltonian{NONORTHOGONAL, NORB}
+immutable NRLHamiltonian{NORB} <: SKHamiltonian{NONORTHOGONAL, NORB}
     Norbital::Int64
     Nbond::Int64
 # cutoff parameters
@@ -70,6 +70,9 @@ NRLTBModel(H::NRLHamiltonian;
          nkpoints = (0,0,0), hfd = 1e-6, beta=1.0, fixed_eF=true, eF = 0.0) =
    TBModel(H, ZeroSitePotential(), FermiDiracSmearing(beta, eF, fixed_eF),
             nkpoints, hfd)
+
+# TODO: remove this constructor, and replace it with a constructor that
+#       loads a parameter file
 
 
 # ================= NRL CUTOFF ===========

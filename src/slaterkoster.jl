@@ -11,6 +11,7 @@ abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
 
 norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
 
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 1}) = 1
 nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
 nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
 
@@ -192,6 +193,7 @@ end
 ############################################################
 ### Hamiltonian entries
 
+sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds, out) = bonds[1]
 
 sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, bonds, out)
 
@@ -284,9 +286,9 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
       for m = 1:length(neigs)
          U = R[m]/r[m]
          # compute hamiltonian block
-         H_nm = sk!(H, U, hop!(H, r[m], bonds), H_nm)
+         sk!(H, U, hop!(H, r[m], bonds), H_nm)
          # compute overlap block
-         M_nm = sk!(H, U, overlap!(H, r[m], bonds), M_nm)
+         sk!(H, U, overlap!(H, r[m], bonds), M_nm)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
@@ -295,8 +297,8 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
 
       # now compute the on-site blocks;
       # TODO: revisit this (can one do the scalar temp trick again?)
-      H_nm = onsite!(H, r, R, H_nm)
-      M_nm = overlap!(H, M_nm)
+      onsite!(H, r, R, H_nm)
+      overlap!(H, M_nm)
       # add into sparse matrix
       idx = append!(It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, NORB, idx)
    end
@@ -321,18 +323,19 @@ function assemble!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
 
    idx = 0                     # initialise index into triplet format
    H_nm = zeros(NORB, NORB)    # temporary arrays for computing H and M entries
-   temp = zeros(10)            # temporary array for storing the potentials
+   bonds = zeros(nbonds(H))     # temporary array for storing the potentials
 
    # loop through sites
    for (n, neigs, r, R, _) in sites(nlist)
       In = indexblock(n, H)   # index-block for atom index n
       # loop through the neighbours of the current atom
       for m = 1:length(neigs)
-         exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-         Im = indexblock(neigs[m], H)
+         U = R[m]/r[m]
          # compute hamiltonian block
-         H_nm = hop!(H, r[m], R[m], H_nm)
+         sk!(H, U, hop!(H, r[m], bonds), H_nm)
          # add new indices into the sparse matrix
+         Im = indexblock(neigs[m], H)
+         exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
          idx = append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, NORB, idx)
       end
       # now compute the on-site terms
