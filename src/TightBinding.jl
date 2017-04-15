@@ -9,7 +9,7 @@ import JuLIP: energy, forces, cutoff
 import JuLIP.Potentials: evaluate, evaluate_d
 
 # using FixedSizeArrays
-export hamiltonian, densitymatrix
+export hamiltonian  #, densitymatrix
 
 
 
@@ -27,6 +27,9 @@ grad!(p, r, R, G) = copy!(G, grad(p, r, R))
 # abstractions
 include("types.jl")
 
+# define how to go from eigenvalues (energy-levels) to potential energy
+include("smearing.jl")
+
 # basics for slater-koster type hamiltonians
 include("slaterkoster.jl")
 
@@ -34,13 +37,11 @@ include("slaterkoster.jl")
 include("toymodel.jl")
 
 # the NRLTB model
-# include("NRLTB.jl")
+include("NRLTB.jl")
 
 # The Kwon model - a simple orthogonal TB model for Silicon
 # include("kwon.jl")
 
-# define how to go from eigenvalues (energy-levels) to potential energy
-include("smearing.jl")
 
 # basic calculators for energy and forces
 # include("calculators.jl")

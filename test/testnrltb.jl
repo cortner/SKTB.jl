@@ -1,11 +1,11 @@
 
 TB=TightBinding
 at = (1,2,2) * bulk("Si", pbc=false, cubic=true)
-tbm = TB.NRLTB.NRLTBModel(elem=TB.NRLTB.Si_sp, nkpoints = (4,2,0))
-tbm.fixed_eF = false
-tbm.smearing = TB.FermiDiracSmearing(100.0)
-TB.update!(at, tbm)
-tbm.fixed_eF = true
+tbm = TB.NRLTB.NRLTBModel(TB.NRLTB.Si_sp, nkpoints = (4,2,0), beta = 1.0)
+# tbm.smearing.fixed_eF = false
+# tbm.smearing = TB.FermiDiracSmearing(100.0)
+# TB.update!(at, tbm)
+# tbm.fixed_eF = true
 
 X = copy(positions(at)) |> mat
 X[:, 2] += [0.123; 0.234; 0.01]

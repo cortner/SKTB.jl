@@ -11,6 +11,10 @@ abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
 
 norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
 
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
+
+
 
 ############################################################
 ### indexing for SKHamiltonians
@@ -189,10 +193,9 @@ end
 ### Hamiltonian entries
 
 
-sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, temp, out)
+sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, bonds, out)
 
-sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, temp, out)
-
+sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, bonds, out)
 
 
 ############################################################
@@ -202,18 +205,18 @@ sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, temp, out)
 
 
 function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
-   nlist = neighbourlist(atm, cutoff(H))
+   nlist = neighbourlist(at, cutoff(H))
    # pre-allocate memory for the triplet format
    norb = norbitals(H)
-   nnz_est = length(nlist) * norb^2 + length(atm) * norb^2
+   nnz_est = length(nlist) * norb^2 + length(at) * norb^2
    It = zeros(Int32, nnz_est)
    Jt = zeros(Int32, nnz_est)
    Ht = zeros(Complex{Float64}, nnz_est)
    if isorthogonal(H)
-      return assemble!( H, k, It, Jt, Ht, nlist, positions(atm))
+      return assemble!( H, k, It, Jt, Ht, nlist, positions(at))
    else
       Mt = zeros(Complex{Float64}, nnz_est)
-      return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(atm))
+      return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(at))
    end
    error("nomansland")
 end
@@ -255,6 +258,11 @@ function append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, norbitals, idx)
    return idx
 end
 
+# prototypes for the functions needed in `assemble!`
+function hop! end
+function overlap!  end
+function onsite! end
+
 # inner Hamiltonian assembly:  non-orthogonal SK tight-binding
 #
 # exp_i_kR = complex multiplier needed for BZ integration
@@ -267,7 +275,7 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
    idx = 0                     # initialise index into triplet format
    H_nm = zeros(NORB, NORB)    # temporary arrays for computing H and M entries
    M_nm = zeros(NORB, NORB)
-   temp = zeros(10)            # temporary array for storing the potentials
+   bonds = zeros(nbonds(H))     # temporary array for storing the potentials
 
    # loop through sites
    for (n, neigs, r, R, _) in sites(nlist)
@@ -276,9 +284,9 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
       for m = 1:length(neigs)
          U = R[m]/r[m]
          # compute hamiltonian block
-         H_nm = sk!(H, U, hop!(H, r[m], temp), H_nm)
+         H_nm = sk!(H, U, hop!(H, r[m], bonds), H_nm)
          # compute overlap block
-         M_nm = sk!(H, U, overlap!(H, r[m], temp), M_nm)
+         M_nm = sk!(H, U, overlap!(H, r[m], bonds), M_nm)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )

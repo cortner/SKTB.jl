@@ -33,6 +33,8 @@ end
 ToyHamiltonian(; alpha = 2.0, r0 = 1.0, rcut = 2.5, e0 = 10.0) =
    ToyHamiltonian(Morse(e0=e0, A=alpha, r0=r0) * SWCutoff(rcut, 1.0))
 
+cutoff(H::ToyHamiltonian) = cutoff(H.V)
+
 hop!(H::ToyHamiltonian, r, R, out) = setindex!(out, H.V(r, R), 1)
 
 onsite!(H::ToyHamiltonian, r, R, out) = setindex!(out, 0.0, 1)

@@ -10,7 +10,7 @@ println("============================================")
 # include("compareatoms.jl")
 
 include("testtoymodel.jl")
-# include("testnrltb.jl")
+include("testnrltb.jl")
 # include("testsiteE.jl")
 # include("perfsiteE.jl")
 # include("comparequip.jl")

@@ -36,7 +36,7 @@ isorthogonal{ISORTH}(::TBHamiltonian{ISORTH}) = ISORTH == ORTHOGONAL
 
 @protofun evaluate(::AbstractAtoms, ::TBHamiltonian, ::AbstractVector)
 
-evaluate(at::AbstractAtoms, H::TBHamiltonian) = evaluate(at, H, JVecF([0.0,0.0,0.0]))
+evaluate(H::TBHamiltonian, at::AbstractAtoms) = evaluate(H, at, JVecF([0.0,0.0,0.0]))
 
 
 # =======================  Smearing Functions =============================
@@ -98,8 +98,6 @@ binding model.
 * `M` : overlap matrix in suitable format (typically CSC or I is orthogonal)
 """
 hamiltonian(tbm::TBModel, at::AbstractAtoms, args...) = evaluate(tbm.H, at, args...)
-
-evaluate(H::TBHamiltonian, at::AbstractAtoms) = evaluate(H, at, (0,0,0))
 
 
 # ==============================================================================
