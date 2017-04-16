@@ -151,6 +151,10 @@ FermiDiracSmearing(beta; eF=0.0) = FermiDiracSmearing(beta, eF)
 occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
 occupancy(fd::FermiDiracSmearing, epsn::AbstractVector) = [occupancy(fd, es) for es in epsn]
 
+energy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta) * epsn
+energy(fd::FermiDiracSmearing, epsn::AbstractVector) = [energy(fd, es) for es in epsn]
+
+
 
 # # Boilerplate to work with the FermiDiracSmearing type
 # evaluate(fd::FermiDiracSmearing, epsn) = fermidirac(epsn, fd.eF, fd.beta, epsn)

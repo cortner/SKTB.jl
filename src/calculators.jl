@@ -118,7 +118,7 @@ end
 
 
 
-# ================ Density Matrix ================
+# ================ Density Matrix and Energy ================
 
 
 """
@@ -146,4 +146,16 @@ function densitymatrix(tbm::TBModel, at::AbstractAtoms)
       end
    end
    return Γ
+end
+
+
+# this is imported from JuLIP
+function energy(tbm::TBModel, at::AbstractAtoms)
+   update!(at, tbm)
+   E = 0.0
+   for (w, k) in tbm.bzquad
+      epsn_k = get_k_array(at, :epsn, k)
+      E += w * sum_kbn(energy(tbm.smearing, epsn_k))
+   end
+   return E
 end

@@ -17,10 +17,9 @@ println("ok.")
 print("check that `densitymatrix` evaluates ... ")
 Γ = densitymatrix(tbm, at)
 println("ok.")
-
-# print("check that `energy` evaluates ... ")
-# E = energy(tbm, at)
-# println("ok : E = ", E, ".")
+print("check that `energy` evaluates ... ")
+E = energy(tbm, at)
+println("ok : E = ", E, ".")
 # print("check that `forces` evaluates ... ")
 # frc = forces(tbm, at) |> mat
 # println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")

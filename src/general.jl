@@ -13,17 +13,6 @@
 ### Standard Calculator Functions
 
 
-function energy(tbm::TBModel, at::AbstractAtoms)
-   update!(at, tbm)
-   K, weight = monkhorstpackgrid(at, tbm)
-   E = 0.0
-   for n = 1:length(K)
-      k = K[n]
-      epsn_k = get_k_array(tbm, :epsn, k)
-      E += weight[n] * sum_kbn(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
-   end
-   return E
-end
 
 
 
