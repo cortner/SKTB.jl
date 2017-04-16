@@ -5,7 +5,7 @@ using JuLIP
 using JuLIP.Potentials
 using JuLIP.ASE
 
-using TightBinding: TBModel, FermiDiracSmearing
+using TightBinding: TBModel, SmearingFunction
 using JuLIP.Potentials: @pot
 
 import JuLIP.Potentials: evaluate, evaluate_d, grad

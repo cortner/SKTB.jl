@@ -204,18 +204,23 @@ sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, bonds, out)
 ### Hamiltonian Evaluation
 #   most of this could become a *generic* code!
 #   it just needs generalising the atom-orbital-dof map.
+#   TODO: do this!
 
+function estimate_nnz(H::SKHamiltonian, at::AbstractAtoms)
+   nlist = neighbourlist(at, cutoff(H))
+   norb = norbitals(H)
+   return length(nlist) * norb^2 + length(at) * norb^2
+end
 
 function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
    nlist = neighbourlist(at, cutoff(H))
    # pre-allocate memory for the triplet format
-   norb = norbitals(H)
-   nnz_est = length(nlist) * norb^2 + length(at) * norb^2
+   nnz_est = estimate_nnz(H, at)
    It = zeros(Int32, nnz_est)
    Jt = zeros(Int32, nnz_est)
    Ht = zeros(Complex{Float64}, nnz_est)
    if isorthogonal(H)
-      return assemble!( H, k, It, Jt, Ht, nlist, positions(at))
+      return assemble!( H, k, It, Jt, Ht, nothing, nlist, positions(at))
    else
       Mt = zeros(Complex{Float64}, nnz_est)
       return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(at))
@@ -232,13 +237,12 @@ import Base.-
 
 dott(a::JVecF, A::AbstractVector{JVecF}) = JVecF[dot(a, v) for v in A]
 
-import Base.append!
-
 
 # TODO: hide all this sparse matrix crap in a nice type
 
 # append to triplet format: version 1 for H and M (non-orth TB)
-function append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, norbitals, idx)
+function _append!(H::TBHamiltonian{NONORTHOGONAL},
+                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, norbitals, idx)
    @inbounds for i = 1:norbitals, j = 1:norbitals
       idx += 1
       It[idx] = In[i]
@@ -250,7 +254,8 @@ function append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, norbitals, idx)
 end
 
 # append to triplet format: version 2 for H only (orthogonal TB)
-function append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, norbitals, idx)
+function _append!(H::TBHamiltonian{ORTHOGONAL},
+                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, norbitals, idx)
    @inbounds for i = 1:norbitals, j = 1:norbitals
       idx += 1
       It[idx] = In[i]
@@ -261,6 +266,7 @@ function append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, norbitals, idx)
 end
 
 # prototypes for the functions needed in `assemble!`
+#  TODO: switch to @protofun
 function hop! end
 function overlap!  end
 function onsite! end
@@ -271,9 +277,10 @@ function onsite! end
 # note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
 #       but this would actually be less efficient, and less clear
 #
-function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
-                           k, It, Jt, Ht, Mt, nlist, X)
+function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
+                                 k, It, Jt, Ht, Mt, nlist, X)
 
+   # TODO: H_nm, M_nm, bonds could all be MArrays
    idx = 0                     # initialise index into triplet format
    H_nm = zeros(NORB, NORB)    # temporary arrays for computing H and M entries
    M_nm = zeros(NORB, NORB)
@@ -287,20 +294,22 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
          U = R[m]/r[m]
          # compute hamiltonian block
          sk!(H, U, hop!(H, r[m], bonds), H_nm)
-         # compute overlap block
-         sk!(H, U, overlap!(H, r[m], bonds), M_nm)
+         # compute overlap block, but only if the model is NONORTHOGONAL
+         ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-         idx = append!(It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, NORB, idx)
+         idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, NORB, idx)
       end
 
       # now compute the on-site blocks;
       # TODO: revisit this (can one do the scalar temp trick again?)
+      # on-site hamiltonian block
       onsite!(H, r, R, H_nm)
-      overlap!(H, M_nm)
+      # on-site overlap matrix block (only if the model is NONORTHOGONAL)
+      ISORTH || overlap!(H, M_nm)
       # add into sparse matrix
-      idx = append!(It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, NORB, idx)
+      idx = _append!(H, It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, NORB, idx)
    end
 
    # convert M, H into Sparse CCS and return
@@ -313,35 +322,6 @@ function assemble!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
    #         these "on-the-fly", depending on whether full or sparse is needed.
    #         but at the moment, eigfact cost MUCH more than the assembly,
    #         so we could choose to stop here.
-   return sparse(It, Jt, Ht), sparse(It, Jt, Mt)
-end
-
-
-# inner Hamiltonian assembly:  orthogonal tight-binding
-function assemble!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
-                         k, It, Jt, Ht, nlist, X)
-
-   idx = 0                     # initialise index into triplet format
-   H_nm = zeros(NORB, NORB)    # temporary arrays for computing H and M entries
-   bonds = zeros(nbonds(H))     # temporary array for storing the potentials
-
-   # loop through sites
-   for (n, neigs, r, R, _) in sites(nlist)
-      In = indexblock(n, H)   # index-block for atom index n
-      # loop through the neighbours of the current atom
-      for m = 1:length(neigs)
-         U = R[m]/r[m]
-         # compute hamiltonian block
-         sk!(H, U, hop!(H, r[m], bonds), H_nm)
-         # add new indices into the sparse matrix
-         Im = indexblock(neigs[m], H)
-         exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-         idx = append!(It, Jt, Ht, In, Im, H_nm, exp_i_kR, NORB, idx)
-      end
-      # now compute the on-site terms
-      onsite!(H, r, R, H_nm)
-      # add into sparse matrix
-      idx = append!(It, Jt, Ht, In, In, H_nm, 1.0, NORB, idx)
-   end
-   return sparse(It, Jt, Ht), I
+   return ISORTH ? (sparse(It, Jt, Ht), I) :
+                   (sparse(It, Jt, Ht), sparse(It, Jt, Mt))
 end

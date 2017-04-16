@@ -30,6 +30,18 @@ include("types.jl")
 # define how to go from eigenvalues (energy-levels) to potential energy
 include("smearing.jl")
 
+# BZ integration: basic prototype; TODO: implement more efficient BZ grids!
+include("bzintegration.jl")
+
+# generic code, such as computing spectral decoposition,
+# energy, forces (given the hamiltonian and hamiltonian derivatives)
+include("calculators.jl")
+
+# implement the contour integral variants of the TB model
+# include("contour.jl")
+
+# ============= SLATER KOSTER TYPE MODELS ================
+
 # basics for slater-koster type hamiltonians
 include("slaterkoster.jl")
 
@@ -43,11 +55,7 @@ include("NRLTB.jl")
 # include("kwon.jl")
 
 
-# basic calculators for energy and forces
-# include("calculators.jl")
 
-# implement the contour integral variants of the TB model
-# include("contour.jl")
 
 
 
@@ -56,16 +64,5 @@ include("NRLTB.jl")
 
 # implements the "classical" site energy
 # include("site_energy.jl")
-
-# implements the "classical" site energy
-# include("site_energy.jl")
-
-# implement the contour integral variants
-# in particular the site energy
-# include("Contour.jl")
-
-# The model of Kwon et al, PRB 49(11)
-# include("Orthogonal.jl")
-
 
 end    # module

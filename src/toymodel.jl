@@ -50,14 +50,14 @@ with the MaterialsScienceTools.TriangularLattice module.
 ### Keyword Parameters
 
 * alpha = 2.0, r0 = 1.0, rcut = 2.7  : Morse potential parameters
-* beta = 1.0 : electronic temperature
+* beta = 1.0 : Fermi temperature
 * fixed_eF = true : if true, then the chemical potential is fixed (default at 0.0)
 * eF = 0.0 : chemical potential (if fixed)
 * hfd = 1e-6 : finite difference step for computing hessians
 """
 function ToyTBModel(; beta = 1.0, fixed_eF = true, eF = 0.0,
-             hfd = 1e-6, nkpoints = (0,0,0), kwargs...)
+             hfd = 1e-6, bzquad = GammaPoint(), kwargs...)
    H = ToyHamiltonian(;kwargs...)
    TBModel( H, ZeroSitePotential(),
-            FermiDiracSmearing(beta, eF, fixed_eF), nkpoints, hfd )
+            FermiDiracSmearing(beta, eF, fixed_eF), bzquad, hfd )
 end

@@ -3,7 +3,8 @@
 module NRLTB
 
 using JuLIP.Potentials.ZeroSitePotential
-using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL, FermiDiracSmearing, norbitals
+using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL,
+                  norbitals, SmearingFunction
 import TightBinding: hop!, overlap!, onsite!
 import JuLIP.Potentials: cutoff
 
@@ -54,6 +55,7 @@ nbonds(H::NRLHamiltonian) = H.Nbond
 include("NRLTB_data.jl")
 
 
+
 """
 `NRLTBModel`: constructs the NRL tight binding model.
 
@@ -66,13 +68,10 @@ include("NRLTB_data.jl")
 * nkpoints : number of k-points at each direction (only (0,0,Int) has been implemented)
 * hfd = 1e-6 : finite difference step for computing hessians
 """
-NRLTBModel(H::NRLHamiltonian;
-         nkpoints = (0,0,0), hfd = 1e-6, beta=1.0, fixed_eF=true, eF = 0.0) =
-   TBModel(H, ZeroSitePotential(), FermiDiracSmearing(beta, eF, fixed_eF),
-            nkpoints, hfd)
-
-# TODO: remove this constructor, and replace it with a constructor that
-#       loads a parameter file
+NRLTBModel(species, fs::SmearingFunction;
+           orbitals=default_orbitals(species), bzquad=GammaPoint(), hfd=1e-6) =
+   TBModel(NRLParams(species, orbitals=orbitals),
+           ZeroSitePotential(), fs, bzquad, hfd)
 
 
 # ================= NRL CUTOFF ===========

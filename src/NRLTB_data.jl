@@ -4,7 +4,8 @@
 
 ############################### DATAS FOR NRL-TB #######################################
 
-function default_orbitals(s::AbstractString)
+function default_orbitals(s)
+   s = string(s)
    if s == "Al"
       return "spd"
    elseif s == "Si"
@@ -16,7 +17,8 @@ function default_orbitals(s::AbstractString)
 end
 
 
-function NRLParams(s::AbstractString; orbitals=default_orbitals(s))
+function NRLParams(s; orbitals=default_orbitals(s))
+   s = string(s)
    if s == "Al"  && orbitals == "spd"
       return Al_spd
    elseif s == "Si" && orbitals == "sp"

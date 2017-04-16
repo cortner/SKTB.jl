@@ -27,6 +27,8 @@ end
 """
 ZeroTemperatureGrand
 
+update!(::AbstractAtoms, ::ZeroTemperatureGrand) = nothing
+
 
 @pot type ZeroTemperature <: SmearingFunction
    Nel::Float64
@@ -36,6 +38,18 @@ end
 (fixed number of particles Nel, variable fermi-level eF)
 """
 ZeroTemperature
+
+update!(::AbstractAtoms, ::ZeroTemperature) = nothing
+
+function set_Nel!(f::ZeroTemperature, Nel::Integer)
+   f.Nel = Nel
+   return f
+end
+
+function set_Nel!(tbm::AbstractTBModel, Nel::Integer)
+   set_Nel!(tbm.smearing, Nel)
+   return tbm
+end
 
 
 
@@ -81,6 +95,12 @@ eval( :( entropy2(f) = $_en2_ ) )
 eval( :( entropy3(f) = $_en3_ ) )
 
 
+function update!(at::AbstractAtoms, f::MerminFreeEnergy)
+   error("`update!` for `MerminFreeEnergy` has not been implemented yet.")
+   # need to solve the nonlinear system that ensures
+   # ∑_k ∑_s f(ϵ_sk) = Nel/2    (or whatever)
+end
+
 
 # ================= Grand Potential ============================
 
@@ -110,7 +130,7 @@ _gr3_ = Calculus.differentiate(_gr2_, :epsn)
 # should still implement it, then deprecate and remove once
 # we have fixed the Atoms.jl - TightBinding.jl equivalence
 
-@pot type FermiDiracSmearing <: SmearingFunction
+@pot type FermiDiracSmearing  <: SmearingFunction
     beta::Float64
     eF::Float64
     fixed_eF::Bool
@@ -134,4 +154,11 @@ evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
 
 function set_eF!(fd::FermiDiracSmearing, eF)
    fd.eF = eF
+end
+
+function update!(at::AbstractAtoms, f::FermiDiracSmearing)
+   if !fixed_eF
+      error("update! for FermiDiracSmearing has not been implemented yet")
+   end
+   return nothing 
 end

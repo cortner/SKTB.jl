@@ -1,7 +1,9 @@
 
 TB=TightBinding
 at = (1,2,2) * bulk("Si", pbc=false, cubic=true)
-tbm = TB.NRLTB.NRLTBModel(TB.NRLTB.Si_sp, nkpoints = (4,2,0), beta = 1.0)
+β, eF, fixed_eF = 1.0, 0.0, true
+tbm = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(β, eF, fixed_eF),
+                             bzquad=TB.MPGrid(at, (4,2,0)) )
 # tbm.smearing.fixed_eF = false
 # tbm.smearing = TB.FermiDiracSmearing(100.0)
 # TB.update!(at, tbm)
