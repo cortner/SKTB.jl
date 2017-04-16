@@ -32,7 +32,6 @@ construct an empty TBModel.
 """
 type NullHamiltonian <: TBHamiltonian{ORTHOGONAL}
 end
-NullHamiltonian() = NullHamiltonian()
 
 isorthogonal{ISORTH}(::TBHamiltonian{ISORTH}) = ISORTH == ORTHOGONAL
 isorth(H::TBHamiltonian) = isorthogonal(H)

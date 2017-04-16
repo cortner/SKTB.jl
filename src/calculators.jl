@@ -11,7 +11,7 @@ using JuLIP: set_transient!, get_transient
 """
 store k-point dependent arrays
 """
-set_k_array!(at::AbstractAtoms, q, symbol, k) = set_transient!(tbm, (symbol, k), q)
+set_k_array!(at::AbstractAtoms, q, symbol, k) = set_transient!(at, (symbol, k), q)
 
 """
 retrieve k-point dependent arrays
@@ -24,6 +24,11 @@ check that a k-array exists
 has_k_array(at::AbstractAtoms, symbol, k) = has_transient(at, (symbol, k))
 
 
+# TODO: we could write a pretty little iterator over
+#   for (w, k, epsn_k, C_k) in BZ(tbm)
+#       ...
+
+
 # ================= diagonalisation ====================
 
 # TODO: should we distinguish k = 0 (Real, Symmetric), k ≠ 0 (Complex, Hermitian)
@@ -34,13 +39,13 @@ has_k_array(at::AbstractAtoms, symbol, k) = has_transient(at, (symbol, k))
 
 # for the standard calculator we need to convert
 # the hamiltonian to full matrices
-function full_hermitian{T <: Complex}(A::Matrix{T})
+function full_hermitian{T <: Complex}(A::AbstractMatrix{T})
    A = 0.5 * (A + A')
    A[diagind(A)] = real(A[diagind(A)])
    return Hermitian(full(A))
 end
 
-function full_hermitian{T <: Real}(A::Matrix{T})
+function full_hermitian{T <: Real}(A::AbstractMatrix{T})
    return Symmetric(full(0.5 * (A + A')))
 end
 
@@ -54,7 +59,7 @@ function sorted_eig(H, M::AbstractMatrix)
    return epsn[Isort], C[:, Isort]
 end
 
-function sorted_eig(H, M::UniformScaling)
+function sorted_eig(H, ::UniformScaling)
    epsn, C = eig(full_hermitian(H))
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
@@ -76,10 +81,10 @@ function update_eig!(atm::AbstractAtoms, tbm::TBModel)
    for (w, k) in tbm.bzquad
       H, M = assemble!(tbm.H, k, It, Jt, Ht, Mt, nlist, X)
       epsn, C = sorted_eig(H, M)
-      set_k_array!(tbm, M, :M, k)
-      set_k_array!(tbm, H, :H, k)
-      set_k_array!(tbm, epsn, :epsn, k)
-      set_k_array!(tbm, C, :C, k)
+      set_k_array!(atm, M, :M, k)
+      set_k_array!(atm, H, :H, k)
+      set_k_array!(atm, epsn, :epsn, k)
+      set_k_array!(atm, C, :C, k)
    end
 end
 
@@ -109,4 +114,36 @@ function update!(at::AbstractAtoms, tbm::TBModel)
    # set the update flag (will be deleted as soon as atom positions change)
    set_transient!(at, :tbupdateflag, 0)
    return nothing
+end
+
+
+
+# ================ Density Matrix ================
+
+
+"""
+`densitymatrix(tbm, at) -> Γ`:
+
+### Input
+
+* `tbm::TBModel` : calculator
+* `at::AbstractAtoms` : configuration
+
+### Output
+
+`Γ::Matrix{Float64}`: density matrix Γ = Σ_k w^k Σ_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
+and f(ϵ) is the occupancy
+"""
+function densitymatrix(tbm::TBModel, at::AbstractAtoms)
+   update!(at, tbm)
+   Γ = 0.0
+   for (w, k) in tbm.bzquad
+      epsn_k = get_k_array(at, :epsn, k)
+      C_k = get_k_array(at, :C, k)
+      for s = 1:length(epsn_k)
+         fs = occupancy(tbm.smearing, epsn_k[s])
+         Γ += (w * fs * C_k[:,s]) * C_k[:, s]'
+      end
+   end
+   return Γ
 end

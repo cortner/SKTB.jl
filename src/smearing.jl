@@ -30,6 +30,10 @@ ZeroTemperatureGrand
 update!(::AbstractAtoms, ::ZeroTemperatureGrand) = nothing
 
 
+# TODO: continue here; need an eF for this one as well
+#       probably write a collect_epsn function to compute and sort all e-vals
+#       then compute eF from those.
+
 @pot type ZeroTemperature <: SmearingFunction
    Nel::Float64
 end
@@ -142,23 +146,71 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 FermiDiracSmearing
 
-FermiDiracSmearing(beta;eF=0.0) = FermiDiracSmearing(beta, eF)
+FermiDiracSmearing(beta; eF=0.0) = FermiDiracSmearing(beta, eF)
+
+occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
+occupancy(fd::FermiDiracSmearing, epsn::AbstractVector) = [occupancy(fd, es) for es in epsn]
 
 
-# Boilerplate to work with the FermiDiracSmearing type
-evaluate(fd::FermiDiracSmearing, epsn) = fermi_dirac(fd.eF, fd.beta, epsn)
-evaluate_d(fd::FermiDiracSmearing, epsn) = fermi_dirac_d(fd.eF, fd.beta, epsn)
-# Boilerplate to work with the FermiDiracSmearing type
-evaluate(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac(eF, fd.beta, epsn)
-evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
+# # Boilerplate to work with the FermiDiracSmearing type
+# evaluate(fd::FermiDiracSmearing, epsn) = fermidirac(epsn, fd.eF, fd.beta, epsn)
+# evaluate_d(fd::FermiDiracSmearing, epsn) = fermidirac1(fd.eF, fd.beta, epsn)
+# # Boilerplate to work with the FermiDiracSmearing type
+# evaluate(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac(eF, fd.beta, epsn)
+# evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
 
 function set_eF!(fd::FermiDiracSmearing, eF)
    fd.eF = eF
 end
 
 function update!(at::AbstractAtoms, f::FermiDiracSmearing)
-   if !fixed_eF
+   if !f.fixed_eF
       error("update! for FermiDiracSmearing has not been implemented yet")
    end
-   return nothing 
+   return nothing
 end
+
+
+
+# TODO: The code below is the eF-solver that needs to be plugged into the
+#       canonical ensemble smearing functions
+
+# """
+# `update_eF!(tbm::TBModel)`: recompute the correct
+# fermi-level; using the precomputed data in `tbm.arrays`
+# """
+# function update_eF!(atm::AbstractAtoms, tbm::TBModel)
+#    if tbm.fixed_eF
+#       set_eF!(tbm.smearing, tbm.eF)
+#       return
+#    end
+#    # the following algorithm works for Fermi-Dirac, not general Smearing
+#    K, weight = monkhorstpackgrid(atm, tbm)
+#    Ne = tbm.norbitals * length(atm)
+#    nf = round(Int, ceil(Ne/2))
+#    # update_eig!(atm, tbm)
+#    # set an initial eF
+#    μ = 0.0
+#    for n = 1:length(K)
+#       k = K[n]
+#       epsn_k = get_k_array(tbm, :epsn, k)
+#       μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
+#    end
+#    # iteration by Newton algorithm
+#    err = 1.0
+#    while abs(err) > 1.0e-8
+#       Ni = 0.0
+#       gi = 0.0
+#       for n = 1:length(K)
+#          k = K[n]
+#          epsn_k = get_k_array(tbm, :epsn, k)
+#          Ni += weight[n] * sum_kbn( tbm.smearing(epsn_k, μ) )
+#          gi += weight[n] * sum_kbn( @D tbm.smearing(epsn_k, μ) )
+#       end
+#       err = Ne - Ni
+#       #println("\n err=");  print(err)
+#       μ = μ - err / gi
+#    end
+#    tbm.eF = μ
+#    set_eF!(tbm.smearing, tbm.eF)
+# end

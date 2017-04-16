@@ -9,7 +9,7 @@ import JuLIP: energy, forces, cutoff
 import JuLIP.Potentials: evaluate, evaluate_d
 
 # using FixedSizeArrays
-export hamiltonian  #, densitymatrix
+export hamiltonian, densitymatrix
 
 
 
