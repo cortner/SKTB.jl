@@ -13,13 +13,6 @@ export hamiltonian, densitymatrix
 
 
 
-# TODO: where does this go?????
-# TODO: default evaluate!; should this potentially go into JuLIP.Potentials?
-evaluate!(pot, r, R, target)  = copy!(target, evaluate(pot, r, R))
-evaluate_d!(pot, r, R, target)  = copy!(target, evaluate_d(pot, r, R))
-grad(pot, r, R) = R .* (evaluate_d(pot, r, R) ./ r)'
-grad!(p, r, R, G) = copy!(G, grad(p, r, R))
-
 
 # ============================================================================
 
