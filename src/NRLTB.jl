@@ -94,8 +94,7 @@ cutoff_NRL(r, Rc, lc, Mc = 5.0) =
 
 nrl_hop(H::NRLHamiltonian, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
 
-hop(H::NRLHamiltonian, r::Real, i::Integer) =
-         nrl_hop(H, r/BOHR, i) * cutoff_NRL(r/BOHR, H.Rc, H.lc)
+hop(H::NRLHamiltonian, r, i) = nrl_hop(H, r/BOHR, i) * cutoff_NRL(r/BOHR, H.Rc, H.lc)
 
 # function hop!(H::NRLHamiltonian, r::Number, temp)
 #    r /= BOHR

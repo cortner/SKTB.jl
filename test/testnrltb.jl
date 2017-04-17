@@ -3,7 +3,8 @@ TB=TightBinding
 at = (1,2,2) * bulk("Si", pbc=false, cubic=true)
 β, eF, fixed_eF = 1.0, 0.0, true
 tbm = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(β, eF, fixed_eF),
-                             bzquad=TB.MPGrid(at, (4,2,0)) )
+                           bzquad = TB.GammaPoint() )
+                           #   bzquad=TB.MPGrid(at, (4,2,0)) )
 # tbm.smearing.fixed_eF = false
 # tbm.smearing = TB.FermiDiracSmearing(100.0)
 # TB.update!(at, tbm)

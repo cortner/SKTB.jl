@@ -73,6 +73,17 @@ sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = _sk4!(U, bonds, out)
 
 sk_d!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout) = _sk4_d!(R/r, r, b, db, dout)
 
+
+function sk_ad!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout)
+   A = zeros(ForwardDiff.Dual{3,Float64}, 4, 4)
+   f = S -> _sk4!(S / norm(S), adhop(H, norm(S)), A)[:]
+   dout[:] = ForwardDiff.jacobian(f, Vector(R))
+   return dout
+end
+
+
+
+
 ######## spd-orbital model
 
 sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = _sk9!(U, bonds, out)
@@ -146,10 +157,10 @@ function _append!(H::TBHamiltonian{ORTHOGONAL},
 end
 
 # prototypes for the functions needed in `assemble!`
-#  TODO: switch to @protofun
-@protofun hop(::SKHamiltonian, ::Real, ::Integer)
 
-hop_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s -> hop(H,s,i), r)
+@protofun hop(::SKHamiltonian, ::Any, ::Any)
+
+hop_d(H::SKHamiltonian, r, i) = ForwardDiff.derivative(s -> hop(H,s,i), r)
 
 function hop!(H::SKHamiltonian, r, bonds)
    for i = 1:nbonds(H)
@@ -157,6 +168,8 @@ function hop!(H::SKHamiltonian, r, bonds)
    end
    return bonds
 end
+
+adhop(H::SKHamiltonian, r) = [hop(H, r, i) for i = 1:nbonds(H)]
 
 function hop_d!(H::SKHamiltonian, r, b, db)
    for i = 1:nbonds(H)
@@ -185,18 +198,22 @@ function overlap_d!(H::SKHamiltonian, r, b, db)
    return b, db
 end
 
-# prototypes for the defaul diagonal on-site terms
-function diagonsite! end
-function diagonsite_d! end
 
-function onsite!(H::SKHamiltonian, r, R, H_nn)
-   diagonsite!(H, r, H_nn)   # this treats H_nn as linear memory
-   for i = 1:size(H_nn, 1)
-      H_nn[i,i] = H_nn[i]    # hence H_nn[i] must be copied to the diagonal
-      H_nn[i] = 0.0
-   end
-   return H_nn
-end
+function onsite! end
+function onsite_grad! end
+
+# # prototypes for the defaul diagonal on-site terms
+# function diagonsite! end
+# function diagonsite_d! end
+#
+# function onsite!(H::SKHamiltonian, r, R, H_nn)
+#    diagonsite!(H, r, H_nn)   # this treats H_nn as linear memory
+#    for i = 1:size(H_nn, 1)
+#       H_nn[i,i] = H_nn[i]    # hence H_nn[i] must be copied to the diagonal
+#       H_nn[i] = 0.0
+#    end
+#    return H_nn
+# end
 
 # function onsite_grad!(H::SKHamiltonian, r, dH_nn)
 #    temp = zeros(
@@ -231,8 +248,10 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
          U = R[m]/r[m]
          # hamiltonian block
          sk!(H, U, hop!(H, r[m], bonds), H_nm)
+         # fill!(H_nm, 0.0)
          # overlap block (only if the model is NONORTHOGONAL)
-         ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
+         # ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
+         fill!(M_nm, 0.0)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
@@ -243,7 +262,6 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       # TODO: revisit this (can one do the scalar temp trick again?) >>> only if we assume diagonal!
       # on-site hamiltonian block
       onsite!(H, r, R, H_nm)
-      # fill!(H_nm, 0.0)
       # on-site overlap matrix block (only if the model is NONORTHOGONAL)
       ISORTH || overlap!(H, M_nm)
       # add into sparse matrix
@@ -278,7 +296,7 @@ end
 # TODO: rewrite this in a type-agnostic way!
 #      (but probably keep this version for performance? or at least comparison?)
 #
-function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel{ISORTH},
+function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
                   H::SKHamiltonian{ISORTH,NORB}, nlist, k::JVecF)
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
@@ -325,16 +343,19 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel{ISOR
          Im = indexblock(m, H)
          kR = dot(R[i_n] - (X[m] - X[n]), k)
          eikr = exp(im * kR)::Complex{Float64}
+
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
-         hop_d!(H, r[i_n], bonds, dbonds)
-         sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
+         # hop_d!(H, r[i_n], bonds, dbonds)
+         sk_ad!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
+         # fill!(dH_nm, 0.0)
 
          # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
-         if !ISORTH
-            overlap_d!(H, r[i_n], bonds, dbonds)
-            sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
-         end
+         # if !ISORTH
+         #    overlap_d!(H, r[i_n], bonds, dbonds)
+         #    sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
+         # end
+         fill!(dM_nm, 0.0)
 
          # the following is a hack to put the on-site assembly into the
          # innermost loop
