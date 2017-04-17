@@ -6,7 +6,7 @@ using ForwardDiff
 # slaterkoster.jl
 #
 # Collect all generic stuff for Slater-Koster-type Tight-binding
-# models (which is 99% of non-selfconsistent TB models)
+# models (which is 99.99% of non-selfconsistent TB models)
 #
 
 abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
@@ -59,8 +59,7 @@ function sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds, out)
    return out
 end
 
-function sk_d!{IO}(H::SKHamiltonian{IO, 1}, r, R, b_db, dH_nm)
-   db = b_db[2]
+function sk_d!{IO}(H::SKHamiltonian{IO, 1}, r, R, b, db, dH_nm)
    # dH_nm is 3 x 1 x 1 so we can just index it linearly    (NORB = 1)
    for a = 1:3
       dH_nm[a] = db[1] * R[a] / r
@@ -70,11 +69,13 @@ end
 
 ######## sp-orbital model
 
-sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, bonds, out)
+sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = _sk4!(U, bonds, out)
+
+sk_d!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout) = _sk4_d!(R/r, r, b, db, dout)
 
 ######## spd-orbital model
 
-sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, bonds, out)
+sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = _sk9!(U, bonds, out)
 
 
 
@@ -152,7 +153,7 @@ hop_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s -> hop(H,s,i), r)
 
 function hop!(H::SKHamiltonian, r, bonds)
    for i = 1:nbonds(H)
-      bonds[i] = hop(H, r[i], i)
+      bonds[i] = hop(H, r, i)
    end
    return bonds
 end
@@ -171,15 +172,15 @@ overlap_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s->overlap(H,s,
 
 function overlap!(H::SKHamiltonian, r, bonds)
    for i = 1:nbonds(H)
-      bonds[i] = overlap(H, r[i], i)
+      bonds[i] = overlap(H, r, i)
    end
-   return b
+   return bonds
 end
 
 function overlap_d!(H::SKHamiltonian, r, b, db)
    for i = 1:nbonds(H)
-      b[i] = overlap(H, r[i], i)
-      db[i] = overlap_d(H, r[i], i)
+      b[i] = overlap(H, r, i)
+      db[i] = overlap_d(H, r, i)
    end
    return b, db
 end
@@ -242,6 +243,7 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       # TODO: revisit this (can one do the scalar temp trick again?) >>> only if we assume diagonal!
       # on-site hamiltonian block
       onsite!(H, r, R, H_nm)
+      # fill!(H_nm, 0.0)
       # on-site overlap matrix block (only if the model is NONORTHOGONAL)
       ISORTH || overlap!(H, M_nm)
       # add into sparse matrix
@@ -326,12 +328,12 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel{ISOR
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
          hop_d!(H, r[i_n], bonds, dbonds)
-         sk_d!(H, r[i_n], R[i_n], (bonds, dbonds), dH_nm)
+         sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
 
          # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
          if !ISORTH
             overlap_d!(H, r[i_n], bonds, dbonds)
-            sk_d!(H, r[i_n], R[i_n], (bonds, dbonds), dM_nm)
+            sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
          end
 
          # the following is a hack to put the on-site assembly into the
@@ -344,8 +346,8 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel{ISOR
             # add contributions to the force
             # TODO: can re-write this as sum over JVecs
             for j = 1:3
-               frc[j,n] += dH_nm[j,a,b] * t1 - dM_nm[j,a,b] * t2 - dH_nn[j,a,b,i_n] * t3
-               frc[j,m] += t3 * dH_nn[j,a,b,i_n]
+               frc[j,n] += dH_nm[j,a,b] * t1 - dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+               frc[j,m] -= t3 * dH_nn[j,a,b,i_n]
             end
          end
 

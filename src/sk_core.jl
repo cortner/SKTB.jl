@@ -17,7 +17,7 @@ hamiltonian, with 4 orbitals (s, p).
 * `hop` : vector of hopping function values, must be a 4-vector
 * `mat` : output matrix, must be at least 4 x 4
 """
-function sk4!(U, hop, mat)
+function _sk4!(U, hop, mat)
    l, m, n = U[1], U[2], U[3]
    # 4 orbitals are s, px, py, pz, these are the mat-indices
    # 4 bond types are : ssσ,spσ,ppσ,ppπ, these are the hop-indices
@@ -49,7 +49,7 @@ hamiltonian, with 9 orbitals (s, p, d).
 * `hop` : hopping functions for bond type, 10-vector
 * `mat` : output matrix 9 x 9
 """
-function sk9!(U, hop, mat)
+function _sk9!(U, hop, mat)
    # fill the [1:4, 1:4] block
    sk4!(U, hop, mat)
    # and then all the rest

@@ -2,10 +2,12 @@
 
 module NRLTB
 
+using ForwardDiff
+
 using JuLIP.Potentials.ZeroSitePotential
 using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL,
                   norbitals, SmearingFunction
-import TightBinding: hop!, overlap!, onsite!
+import TightBinding: hop!, overlap!, onsite!, hop, overlap, onsite_grad!
 import JuLIP.Potentials: cutoff
 
 export NRLTBModel, NRLHamiltonian
@@ -92,29 +94,35 @@ cutoff_NRL(r, Rc, lc, Mc = 5.0) =
 
 nrl_hop(H::NRLHamiltonian, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
 
-function hop!(H::NRLHamiltonian, r::Number, temp)
-   r /= BOHR
-   fcut = cutoff_NRL(r, H.Rc, H.lc)
-   for i = 1:nbonds(H)
-      temp[i] = hop(H, r, i) * fcut
-   end
-   return temp
-end
+hop(H::NRLHamiltonian, r::Real, i::Integer) =
+         nrl_hop(H, r/BOHR, i) * cutoff_NRL(r/BOHR, H.Rc, H.lc)
+
+# function hop!(H::NRLHamiltonian, r::Number, temp)
+#    r /= BOHR
+#    fcut = cutoff_NRL(r, H.Rc, H.lc)
+#    for i = 1:nbonds(H)
+#       temp[i] = hop(H, r, i) * fcut
+#    end
+#    return temp
+# end
 
 
 # ================= OVERLAP INTEGRALS  =====================
 
 nrl_olap(H, r, i) = (H.p[i] + (H.q[i] + (H.r[i] + H.s[i] * r) * r) * r) * exp(-H.t[i]^2 * r)
 
+overlap(H::NRLHamiltonian, r::Real, i::Integer) =
+      nrl_olap(H, r/BOHR, i) * cutoff_NRL(r/BOHR, H.Rc, H.lc)
+
 # off-site overlap block
-function overlap!(H::NRLHamiltonian, r::Number, temp)
-   r /= BOHR
-   fcut = cutoff_NRL(r, H.Rc, H.lc)
-   for i = 1:nbonds(H)
-        temp[i] = nrl_olap(H, r, i) * fcut
-    end
-    return temp
-end
+# function overlap!(H::NRLHamiltonian, r::Number, temp)
+#    r /= BOHR
+#    fcut = cutoff_NRL(r, H.Rc, H.lc)
+#    for i = 1:nbonds(H)
+#         temp[i] = nrl_olap(H, r, i) * fcut
+#     end
+#     return temp
+# end
 
 # on-site overlap block
 function overlap!(H::NRLHamiltonian, M_nn)
@@ -122,6 +130,8 @@ function overlap!(H::NRLHamiltonian, M_nn)
    for i = 1:norbitals(H); M_nn[i,i] = 1.0; end
    return M_nn
 end
+
+# we don't need a derivative of overlap! (onsite) since it is constant
 
 # ================= IMPLEMENTATION OF ONSITE FUNCTION =====================
 
@@ -138,13 +148,26 @@ pseudoDensity(H::NRLHamiltonian, r::AbstractVector) =
 nrl_os(H::NRLHamiltonian, ρ, i) =
    H.a[i] + H.b[i] * ρ^(2/3) + H.c[i] * ρ^(4/3) + H.d[i] * ρ^2
 
+nrl_os_d(H::NRLHamiltonian, ρ, i) =
+   H.b[i] * (2/3) * ρ^(-1/3) + H.c[i] * (4/3) * ρ^(1/3) + H.d[i] * 2 * ρ
+
 function onsite!(H::NRLHamiltonian, r, _, H_nn)
    ρ = pseudoDensity(H, r / BOHR)
    fill!(H_nn, 0.0)
    for i = 1:norbitals(H)
-      H_nn[i,i] = a = nrl_os(H, ρ, i)
+      H_nn[i,i] = nrl_os(H, ρ, i)
    end
    return H_nn
+end
+
+function onsite_grad!(H::NRLHamiltonian, r, R, dH_nn)
+   ρ = pseudoDensity(H, r / BOHR)
+   ∇ρ = ForwardDiff.gradient( r_ -> pseudoDensity(H, r_ / BOHR), r )
+   fill!(dH_nn, 0.0)
+   for i = 1:norbitals(H), a = 1:3, j = 1:length(r)
+      dH_nn[a,i,i,j] = nrl_os_d(H, ρ, i) * ∇ρ[j] * R[j][a] / r[j]
+   end
+   return dH_nn
 end
 
 

@@ -83,9 +83,9 @@ abstract AbstractTBModel <: AbstractCalculator
 """
 `TBModel`: basic non-self consistent tight binding calculator.
 """
-type TBModel{ISORTH} <: AbstractTBModel
+type TBModel{HT <: TBHamiltonian} <: AbstractTBModel
    # hamiltonian
-   H::TBHamiltonian{ISORTH}
+   H::HT
    # additional MM potential (typically but not necessarily pair)
    Vrep::SitePotential
    # smearing function / fermi temperature model   TODO: smearing is not a good name for this?
@@ -102,10 +102,7 @@ typealias TightBindingModel TBModel
 TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
                     NullSmearing(), GammaPoint(), 0.0)
 
-isorthogonal(::TBModel{:orth}) = true
-isorthogonal(::TBModel{:nonorth}) = false
-
-
+isorthogonal(tbm::TBModel) = isorthogonal(tbm.H)
 
 """
 `hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
