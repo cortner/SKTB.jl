@@ -73,21 +73,22 @@ sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = _sk4!(U, bonds, out)
 
 sk_d!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout) = _sk4_d!(R/r, r, b, db, dout)
 
-
-function sk_ad!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout)
-   A = zeros(ForwardDiff.Dual{3,Float64}, 4, 4)
-   f = S -> _sk4!(S / norm(S), adhop(H, norm(S)), A)[:]
-   dout[:] = ForwardDiff.jacobian(f, Vector(R))
-   return dout
-end
-
-
-
-
 ######## spd-orbital model
 
 sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = _sk9!(U, bonds, out)
 
+
+
+function sk_ad!{IO, NORB}(H::SKHamiltonian{IO, NORB}, r, R, b, db, dout)
+   A = zeros(ForwardDiff.Dual{3,Float64}, NORB, NORB)
+   f = S -> sk!(H, S / norm(S), adhop(H, norm(S)), A)
+   dA = ForwardDiff.jacobian(f, Vector(R))
+   dA = reshape(dA, NORB, NORB, 3)
+   for a = 1:3, i = 1:NORB, j = 1:NORB
+      dout[a, i, j] = dA[i, j, a]
+   end
+   return dout
+end
 
 
 
@@ -247,11 +248,10 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       for m = 1:length(neigs)
          U = R[m]/r[m]
          # hamiltonian block
-         sk!(H, U, hop!(H, r[m], bonds), H_nm)
-         # fill!(H_nm, 0.0)
+         # sk!(H, U, hop!(H, r[m], bonds), H_nm)
+         sk!(H, U, adhop(H, r[m]), H_nm)
          # overlap block (only if the model is NONORTHOGONAL)
-         # ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
-         fill!(M_nm, 0.0)
+         ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
@@ -347,15 +347,13 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
          # hop_d!(H, r[i_n], bonds, dbonds)
-         sk_ad!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
-         # fill!(dH_nm, 0.0)
+         sk_ad!(H, r[i_n], -R[i_n], bonds, dbonds, dH_nm)
 
          # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
-         # if !ISORTH
-         #    overlap_d!(H, r[i_n], bonds, dbonds)
-         #    sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
-         # end
-         fill!(dM_nm, 0.0)
+         if !ISORTH
+            overlap_d!(H, r[i_n], bonds, dbonds)
+            sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dM_nm)
+         end
 
          # the following is a hack to put the on-site assembly into the
          # innermost loop
@@ -367,7 +365,7 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
             # add contributions to the force
             # TODO: can re-write this as sum over JVecs
             for j = 1:3
-               frc[j,n] += dH_nm[j,a,b] * t1 - dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
+               frc[j,n] += -dH_nm[j,a,b] * t1 + dM_nm[j,a,b] * t2 + dH_nn[j,a,b,i_n] * t3
                frc[j,m] -= t3 * dH_nn[j,a,b,i_n]
             end
          end
