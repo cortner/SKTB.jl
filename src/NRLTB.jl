@@ -90,13 +90,13 @@ cutoff_NRL(r, Rc, lc, Mc = 5.0) =
 
 # ================= HOPPING INTEGRALS =====================
 
-nrl_hop(H, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
+nrl_hop(H::NRLHamiltonian, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
 
 function hop!(H::NRLHamiltonian, r::Number, temp)
    r /= BOHR
    fcut = cutoff_NRL(r, H.Rc, H.lc)
    for i = 1:nbonds(H)
-      temp[i] = nrl_hop(H, r, i) * fcut
+      temp[i] = hop(H, r, i) * fcut
    end
    return temp
 end

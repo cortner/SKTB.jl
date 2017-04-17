@@ -35,9 +35,11 @@ ToyHamiltonian(; alpha = 2.0, r0 = 1.0, rcut = 2.5, e0 = 10.0) =
 
 cutoff(H::ToyHamiltonian) = cutoff(H.V)
 
-hop!(H::ToyHamiltonian, r, bonds) = setindex!(bonds, H.V(r), 1)
+hop(H::ToyHamiltonian, r::Real, ::Integer) = H.V(r)
 
-onsite!(H::ToyHamiltonian, r, R, H_nn) = setindex!(H_nn, 0.0, 1)
+onsite!(::ToyHamiltonian, _1, _2, H_nn) = setindex!(H_nn, 0.0, 1)
+
+onsite_grad!(::ToyHamiltonian, _1, _2, dH_nn) = fill!(dH_nn, 0.0)
 
 
 

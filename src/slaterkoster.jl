@@ -1,6 +1,8 @@
 
 import JuLIP.Potentials: evaluate, evaluate_d
 
+using ForwardDiff
+
 # slaterkoster.jl
 #
 # Collect all generic stuff for Slater-Koster-type Tight-binding
@@ -15,7 +17,7 @@ nbonds{ISORTH}(::SKHamiltonian{ISORTH, 1}) = 1
 nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
 nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
 
-ndofs(H::TBHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
+ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 
 ############################################################
 ### indexing for SKHamiltonians
@@ -50,11 +52,31 @@ indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian) =
 # the following file contains the real computational core
 include("sk_core.jl")
 
-sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds, out) = bonds[1]
+######## s-orbital model
+
+function sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds, out)
+   setindex!(out, bonds[1], 1)
+   return out
+end
+
+function sk_d!{IO}(H::SKHamiltonian{IO, 1}, r, R, b_db, dH_nm)
+   db = b_db[2]
+   # dH_nm is 3 x 1 x 1 so we can just index it linearly    (NORB = 1)
+   for a = 1:3
+      dH_nm[a] = db[1] * R[a] / r
+   end
+   return dH_nm
+end
+
+######## sp-orbital model
 
 sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = sk4!(U, bonds, out)
 
+######## spd-orbital model
+
 sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = sk9!(U, bonds, out)
+
+
 
 
 ############################################################
@@ -124,15 +146,72 @@ end
 
 # prototypes for the functions needed in `assemble!`
 #  TODO: switch to @protofun
-function hop! end
-function overlap!  end
-function onsite! end
+@protofun hop(::SKHamiltonian, ::Real, ::Integer)
 
-# inner Hamiltonian assembly:  non-orthogonal SK tight-binding
+hop_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s -> hop(H,s,i), r)
+
+function hop!(H::SKHamiltonian, r, bonds)
+   for i = 1:nbonds(H)
+      bonds[i] = hop(H, r[i], i)
+   end
+   return bonds
+end
+
+function hop_d!(H::SKHamiltonian, r, b, db)
+   for i = 1:nbonds(H)
+      b[i] = hop(H, r, i)
+      db[i] = hop_d(H, r, i)
+   end
+   return b, db
+end
+
+@protofun overlap(::SKHamiltonian, ::Real, ::Integer)
+
+overlap_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s->overlap(H,s,i), r)
+
+function overlap!(H::SKHamiltonian, r, bonds)
+   for i = 1:nbonds(H)
+      bonds[i] = overlap(H, r[i], i)
+   end
+   return b
+end
+
+function overlap_d!(H::SKHamiltonian, r, b, db)
+   for i = 1:nbonds(H)
+      b[i] = overlap(H, r[i], i)
+      db[i] = overlap_d(H, r[i], i)
+   end
+   return b, db
+end
+
+# prototypes for the defaul diagonal on-site terms
+function diagonsite! end
+function diagonsite_d! end
+
+function onsite!(H::SKHamiltonian, r, R, H_nn)
+   diagonsite!(H, r, H_nn)   # this treats H_nn as linear memory
+   for i = 1:size(H_nn, 1)
+      H_nn[i,i] = H_nn[i]    # hence H_nn[i] must be copied to the diagonal
+      H_nn[i] = 0.0
+   end
+   return H_nn
+end
+
+# function onsite_grad!(H::SKHamiltonian, r, dH_nn)
+#    temp = zeros(
 #
-# exp_i_kR = complex multiplier needed for BZ integration
-# note: we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
-#       but this would actually be less efficient, and less clear
+# end
+
+
+
+
+# inner SKHamiltonian assembly
+#
+# NOTES:
+#  * exp_i_kR = complex multiplier needed for BZ integration
+#  * we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
+#       but this would actually be less efficient, and less clear to read
+#
 #
 function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
                                  k, It, Jt, Ht, Mt, nlist, X)
@@ -149,9 +228,9 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       # loop through the neighbours of the current atom (i.e. the bonds)
       for m = 1:length(neigs)
          U = R[m]/r[m]
-         # compute hamiltonian block
+         # hamiltonian block
          sk!(H, U, hop!(H, r[m], bonds), H_nm)
-         # compute overlap block, but only if the model is NONORTHOGONAL
+         # overlap block (only if the model is NONORTHOGONAL)
          ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
@@ -160,7 +239,7 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       end
 
       # now compute the on-site blocks;
-      # TODO: revisit this (can one do the scalar temp trick again?)
+      # TODO: revisit this (can one do the scalar temp trick again?) >>> only if we assume diagonal!
       # on-site hamiltonian block
       onsite!(H, r, R, H_nm)
       # on-site overlap matrix block (only if the model is NONORTHOGONAL)
@@ -181,4 +260,111 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
    #         so we could choose to stop here.
    return ISORTH ? (sparse(It, Jt, Ht), I) :
                    (sparse(It, Jt, Ht), sparse(It, Jt, Mt))
+end
+
+
+
+# ============ SPECIALISED SK FORCES IMPLEMENTATION =============
+
+
+#
+# this is an old force computation that *requires* a SKHamiltonian structure
+#  therefore, I added H as an argument so _forces_k dispatches on its type
+#
+# F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+#
+# TODO: rewrite this in a type-agnostic way!
+#      (but probably keep this version for performance? or at least comparison?)
+#
+function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel{ISORTH},
+                  H::SKHamiltonian{ISORTH,NORB}, nlist, k::JVecF)
+   # obtain the precomputed arrays
+   epsn = get_k_array(at, :epsn, k)::Vector{Float64}
+   C = get_k_array(at, :C, k)::Matrix{Complex128}
+   # df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+   df = grad(tbm.smearing, epsn)
+
+   # precompute some products
+   const C_df_Ct = (C * (df' .* C)')               #::Matrix{Complex{Float64}}
+   const C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')   #::Matrix{Complex{Float64}}
+
+   # allocate array for forces
+   const frc = zeros(Complex{Float64}, 3, length(X))
+
+   # pre-allocate dH, with a (dumb) initial guess for the size
+   # TODO:
+   #   * re-interpret these as arrays of JVecs, where the first argument is the JVec
+   #   * move them outside to prevent multiple allocations
+   const dH_nn = zeros(3, NORB, NORB, 6)
+   const dH_nm = zeros(3, NORB, NORB)
+   const dM_nm = zeros(3, NORB, NORB)
+
+   const bonds = zeros(nbonds(H))
+   const dbonds = zeros(nbonds(H))
+
+   # loop through all atoms, to compute the force on atm[n]
+   for (n, neigs, r, R, _) in sites(nlist)
+      # neigs::Vector{Int}   # TODO: put this back in?!?  > PROFILE IT AGAIN
+      # R::Matrix{Float64}  # TODO: put this back in?!?
+      #   IT LOOKS LIKE the type of R might not be inferred!
+
+      # compute the block of indices for the orbitals belonging to n
+      In = indexblock(n, H)
+
+      # compute ∂H_mm/∂y_n (onsite terms) M_nn = const ⇒ dM_nn = 0
+      # dH_nn should be 3 x norbitals x norbitals x nneigs
+      if length(neigs) > size(dH_nn, 4)
+         dH_nn = zeros(3, NORB, NORB, ceil(Int, 1.5*length(neigs)))
+      end
+      onsite_grad!(H, r, R, dH_nn)
+
+      for i_n = 1:length(neigs)
+         m = neigs[i_n]
+         Im = indexblock(m, H)
+         kR = dot(R[i_n] - (X[m] - X[n]), k)
+         eikr = exp(im * kR)::Complex{Float64}
+         # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
+         # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
+         hop_d!(H, r[i_n], bonds, dbonds)
+         sk_d!(H, r[i_n], R[i_n], (bonds, dbonds), dH_nm)
+
+         # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
+         if !ISORTH
+            overlap_d!(H, r[i_n], bonds, dbonds)
+            sk_d!(H, r[i_n], R[i_n], (bonds, dbonds), dM_nm)
+         end
+
+         # the following is a hack to put the on-site assembly into the
+         # innermost loop
+         # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+         for a = 1:NORB, b = 1:NORB
+            t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
+            t2 = 2.0 * real(C_dfepsn_Ct[Im[a], In[b]] * eikr)
+            t3 = C_df_Ct[In[a],In[b]]
+            # add contributions to the force
+            # TODO: can re-write this as sum over JVecs
+            for j = 1:3
+               frc[j,n] += dH_nm[j,a,b] * t1 - dM_nm[j,a,b] * t2 - dH_nn[j,a,b,i_n] * t3
+               frc[j,m] += t3 * dH_nn[j,a,b,i_n]
+            end
+         end
+
+      end  # m in neigs-loop
+   end  #  sites-loop
+
+   # TODO: in the future assemble the forces already in JVecsF format
+   return real(frc) |> vecs
+end
+
+
+# imported from JuLIP
+function forces(tbm::TBModel, atm::AbstractAtoms)
+   update!(atm, tbm)
+   nlist = neighbourlist(atm, cutoff(tbm.H))
+   frc = zerovecs(length(atm))
+   X = positions(atm)
+   for (w, k) in tbm.bzquad
+      frc +=  w * _forces_k(X, atm, tbm, tbm.H, nlist, k)
+   end
+   return frc
 end

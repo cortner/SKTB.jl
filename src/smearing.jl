@@ -15,6 +15,18 @@ export ZeroTemperature,
 #
 # TODO: SmearingFunction is not a great term, what would be a better one?
 
+
+# SmearingFunctions define:
+# * occupancy   n(ϵ)
+# * energy   f(ϵ)
+# * grad     f'(ϵ)
+#     NB: grad is defined via ForwardDiff, but for an efficient implemention
+#         this can of course be overloaded
+
+grad(f::SmearingFunction, epsn::Real) = ForwardDiff.derivative(s->energy(f, s), epsn)
+grad(f::SmearingFunction, epsn::AbstractVector) = [grad(f, s) for s in epsn]
+
+
 # ================= Zero-Temperature Models  ============================
 
 
@@ -153,6 +165,7 @@ occupancy(fd::FermiDiracSmearing, epsn::AbstractVector) = [occupancy(fd, es) for
 
 energy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta) * epsn
 energy(fd::FermiDiracSmearing, epsn::AbstractVector) = [energy(fd, es) for es in epsn]
+
 
 
 
