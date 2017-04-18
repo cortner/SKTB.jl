@@ -12,7 +12,8 @@ import JuLIP.Potentials: cutoff
 
 export NRLTBModel, NRLHamiltonian
 
-const BOHR = 0.52917721092::Float64  # atomic unit of length 1 Bohr = 0.52917721092 Å
+# const BOHR = 0.52917721092::Float64  # atomic unit of length 1 Bohr = 0.52917721092 Å
+const BOHR = 1.0::Float64
 # TODO: insert the BOHR conversion into the hop!, overlap! and onsite! functions
 
 # Norbital: 4 if(s, p) : s, px, py, pz

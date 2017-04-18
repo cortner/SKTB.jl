@@ -79,16 +79,37 @@ sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = _sk9!(U, bonds, out)
 
 
 
-function sk_ad!{IO, NORB}(H::SKHamiltonian{IO, NORB}, r, R, bfun, dout)
+function sk_ad!{IO, NORB}(H::SKHamiltonian{IO, NORB}, R, bfun, dout)
    A = zeros(ForwardDiff.Dual{3, Float64}, NORB, NORB)
+   dA = zeros(NORB*NORB, 3)
    f = S -> sk!(H, S / norm(S), [bfun(H, norm(S), i) for i = 1:nbonds(H)], A)
-   dA = ForwardDiff.jacobian(f, Vector(R))
-   dA = reshape(dA, NORB, NORB, 3)
+   dA = ForwardDiff.jacobian!(dA, f, Vector{Float64}(R))
+   dB = reshape(dA, NORB, NORB, 3)
    for a = 1:3, i = 1:NORB, j = 1:NORB
-      dout[a, i, j] = dA[i, j, a]
+      dout[a, i, j] = dB[i, j, a]
    end
    return dout
 end
+
+
+function bonds_test!{IO, NORB}(H::SKHamiltonian{IO, NORB}, r, bfun, bonds)
+   for i = 1:NORB
+      bonds[i] = bfun(H, r, i)
+   end
+   return bonds
+end
+
+function sk_ad_test!{IO, NORB}(H::SKHamiltonian{IO, NORB}, R, bfun, dout, A, dA, bonds)
+   f = S -> sk!(H, S / norm(S), bonds_test!(H, norm(S), bfun, bonds), A)
+   Rv = Vector{Float64}(R)
+   ForwardDiff.jacobian!(dA, f, Rv)
+   dB = reshape(dA, NORB, NORB, 3)
+   for a = 1:3, i = 1:NORB, j = 1:NORB
+      dout[a, i, j] = dB[i, j, a]
+   end
+   return dout
+end
+
 
 # adhop(H::SKHamiltonian, r) = [hop(H, r, i) for i = 1:nbonds(H)]
 
@@ -342,20 +363,21 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
       for i_n = 1:length(neigs)
          m = neigs[i_n]
          Im = indexblock(m, H)
+         # kR is actually independent of X, so need not be differentiated
          kR = dot(R[i_n] - (X[m] - X[n]), k)
          eikr = exp(im * kR)::Complex{Float64}
 
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
-         # hop_d!(H, r[i_n], bonds, dbonds)
-         # sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dH_nm)
-         sk_ad!(H, r[i_n], -R[i_n], hop, dH_nm)
+         hop_d!(H, r[i_n], bonds, dbonds)
+         sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dH_nm)
+         # sk_ad!(H, -R[i_n], hop, dH_nm)
 
          # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
          if !ISORTH
-         #    # overlap_d!(H, r[i_n], bonds, dbonds)
-         #    # sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dM_nm)
-            sk_ad!(H, r[i_n], -R[i_n], overlap, dM_nm)
+            overlap_d!(H, r[i_n], bonds, dbonds)
+            sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dM_nm)
+            # sk_ad!(H, -R[i_n], overlap, dM_nm)
          end
          # fill!(dM_nm, 0.0)
 
