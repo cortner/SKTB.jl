@@ -165,24 +165,25 @@ end
 function _sk4_d!(U, r, hh, dhh, dmat)
    # U = ∇r, so it appears here both as the orientation and as ∇r
    l, m, n = U[1], U[2], U[3]
-   dl = ( (1.0-l*l)/r ,     - l*m/r ,     - l*n/r )
-   dm = (     - l*m/r , (1.0-m*m)/r ,     - m*n/r )
-   dn = (     - l*n/r ,     - m*n/r , (1.0-n*n)/r )
+   ll, lm, ln, mm, mn, nn = l*l, l*m, l*n, m*m, m*n, n*n
+   dl = ( (1.0-ll)/r ,     - lm/r ,     - ln/r )
+   dm = (     - lm/r , (1.0-mm)/r ,     - mn/r )
+   dn = (     - ln/r ,     - mn/r , (1.0-nn)/r )
 
    for d = 1:3
       dmat[d,1,1] = dhh[1] * U[d]
-      dmat[d,2,2] = l*l * dhh[3] * U[d] + (1.-l*l) * dhh[4] * U[d] + 2*l * hh[3] * dl[d] - 2*l * hh[4] * dl[d]
-      dmat[d,3,3] = m*m * dhh[3] * U[d] + (1.-m*m) * dhh[4] * U[d] + 2*m * hh[3] * dm[d] - 2*m * hh[4] * dm[d]
-      dmat[d,4,4] = n*n * dhh[3] * U[d] + (1.-n*n) * dhh[4] * U[d] + 2*n * hh[3] * dn[d] - 2*n * hh[4] * dn[d]
+      dmat[d,2,2] = (ll * dhh[3] + (1.-ll) * dhh[4]) * U[d] + 2*l * hh[3] * dl[d] - 2*l * hh[4] * dl[d]
+      dmat[d,3,3] = (mm * dhh[3] + (1.-mm) * dhh[4]) * U[d] + 2*m * hh[3] * dm[d] - 2*m * hh[4] * dm[d]
+      dmat[d,4,4] = (nn * dhh[3] + (1.-nn) * dhh[4]) * U[d] + 2*n * hh[3] * dn[d] - 2*n * hh[4] * dn[d]
       dmat[d,1,2] = l * dhh[2] * U[d] + hh[2] * dl[d]
       dmat[d,1,3] = m * dhh[2] * U[d] + hh[2] * dm[d]
       dmat[d,1,4] = n * dhh[2] * U[d] + hh[2] * dn[d]
       dmat[d,2,1] = - dmat[d,1,2]
       dmat[d,3,1] = - dmat[d,1,3]
       dmat[d,4,1] = - dmat[d,1,4]
-      dmat[d,2,3] = l*m * (dhh[3] - dhh[4]) * U[d] + (dl[d] * m + l * dm[d]) * (hh[3] - hh[4])
-      dmat[d,2,4] = l*n * (dhh[3] - dhh[4]) * U[d] + (dl[d] * n + l * dn[d]) * (hh[3] - hh[4])
-      dmat[d,3,4] = m*n * (dhh[3] - dhh[4]) * U[d] + (dm[d] * n + m * dn[d]) * (hh[3] - hh[4])
+      dmat[d,2,3] = lm * (dhh[3] - dhh[4]) * U[d] + (dl[d] * m + l * dm[d]) * (hh[3] - hh[4])
+      dmat[d,2,4] = ln * (dhh[3] - dhh[4]) * U[d] + (dl[d] * n + l * dn[d]) * (hh[3] - hh[4])
+      dmat[d,3,4] = mn * (dhh[3] - dhh[4]) * U[d] + (dm[d] * n + m * dn[d]) * (hh[3] - hh[4])
       dmat[d,3,2] =  dmat[d,2,3]
       dmat[d,4,2] =  dmat[d,2,4]
       dmat[d,4,3] =  dmat[d,3,4]

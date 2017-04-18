@@ -144,41 +144,6 @@ function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
 end
 
 
-# TODO: the following method overload are a bit of a hack
-#       it would be better to implement broadcasting in FixedSizeArrays
-
-import Base.-
--(A::AbstractVector{JVecF}, a::JVecF) = JVecF[v - a for v in A]
-
-dott(a::JVecF, A::AbstractVector{JVecF}) = JVecF[dot(a, v) for v in A]
-
-
-# TODO: hide all this sparse matrix crap in a nice type
-
-# append to triplet format: version 1 for H and M (non-orth TB)
-function _append!(H::TBHamiltonian{NONORTHOGONAL},
-                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, norbitals, idx)
-   @inbounds for i = 1:norbitals, j = 1:norbitals
-      idx += 1
-      It[idx] = In[i]
-      Jt[idx] = Im[j]
-      Ht[idx] = H_nm[i,j] * exp_i_kR
-      Mt[idx] = M_nm[i,j] * exp_i_kR
-   end
-   return idx
-end
-
-# append to triplet format: version 2 for H only (orthogonal TB)
-function _append!(H::TBHamiltonian{ORTHOGONAL},
-                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, norbitals, idx)
-   @inbounds for i = 1:norbitals, j = 1:norbitals
-      idx += 1
-      It[idx] = In[i]
-      Jt[idx] = Im[j]
-      Ht[idx] = H_nm[i,j] * exp_i_kR
-   end
-   return idx
-end
 
 # prototypes for the functions needed in `assemble!`
 
@@ -244,6 +209,44 @@ function onsite_grad! end
 # end
 
 
+# ============ some preliminaries for SKHamiltonian assembly
+
+# TODO: the following method overload are a bit of a hack
+#       it would be better to implement broadcasting in FixedSizeArrays
+
+import Base.-
+-(A::AbstractVector{JVecF}, a::JVecF) = JVecF[v - a for v in A]
+
+dott(a::JVecF, A::AbstractVector{JVecF}) = JVecF[dot(a, v) for v in A]
+
+
+# TODO: hide all this sparse matrix crap in a nice type
+
+# append to triplet format: version 1 for H and M (non-orth TB)
+function _append!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
+                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
+   @inbounds for i = 1:NORB, j = 1:NORB
+      idx += 1
+      It[idx] = In[i]
+      Jt[idx] = Im[j]
+      Ht[idx] = H_nm[i,j] * exp_i_kR
+      Mt[idx] = M_nm[i,j] * exp_i_kR
+   end
+   return idx
+end
+
+# append to triplet format: version 2 for H only (orthogonal TB)
+function _append!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
+                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, idx)
+   @inbounds for i = 1:NORB, j = 1:NORB
+      idx += 1
+      It[idx] = In[i]
+      Jt[idx] = Im[j]
+      Ht[idx] = H_nm[i,j] * exp_i_kR
+   end
+   return idx
+end
+
 
 
 # inner SKHamiltonian assembly
@@ -277,7 +280,7 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-         idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, NORB, idx)
+         idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
       end
 
       # now compute the on-site blocks;
@@ -287,7 +290,7 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       # on-site overlap matrix block (only if the model is NONORTHOGONAL)
       ISORTH || overlap!(H, M_nm)
       # add into sparse matrix
-      idx = _append!(H, It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, NORB, idx)
+      idx = _append!(H, It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, idx)
    end
 
    # convert M, H into Sparse CCS and return
@@ -307,16 +310,14 @@ end
 
 
 # ============ SPECIALISED SK FORCES IMPLEMENTATION =============
-
-
 #
 # this is an old force computation that *requires* a SKHamiltonian structure
-#  therefore, I added H as an argument so _forces_k dispatches on its type
+#    F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+# but instead of computing H,n, M,n as matrices, this assembly loops over
+# the non-zero blocks first and the inner loop is over the derivative ,n.
 #
-# F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
-#
-# TODO: rewrite this in a type-agnostic way!
-#      (but probably keep this version for performance? or at least comparison?)
+# TODO: after rewriting the generic force assembly, compare against this
+#       implementation for performance
 #
 function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
                   H::SKHamiltonian{ISORTH,NORB}, nlist, k::JVecF)
