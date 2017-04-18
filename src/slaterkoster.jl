@@ -114,37 +114,6 @@ end
 # adhop(H::SKHamiltonian, r) = [hop(H, r, i) for i = 1:nbonds(H)]
 
 
-
-############################################################
-### Hamiltonian Evaluation
-#   most of this could become a *generic* code!
-#   it just needs generalising the atom-orbital-dof map.
-#   TODO: do this!
-
-function estimate_nnz(H::SKHamiltonian, at::AbstractAtoms)
-   nlist = neighbourlist(at, cutoff(H))
-   norb = norbitals(H)
-   return length(nlist) * norb^2 + length(at) * norb^2
-end
-
-function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
-   nlist = neighbourlist(at, cutoff(H))
-   # pre-allocate memory for the triplet format
-   nnz_est = estimate_nnz(H, at)
-   It = zeros(Int32, nnz_est)
-   Jt = zeros(Int32, nnz_est)
-   Ht = zeros(Complex{Float64}, nnz_est)
-   if isorthogonal(H)
-      return assemble!( H, k, It, Jt, Ht, nothing, nlist, positions(at))
-   else
-      Mt = zeros(Complex{Float64}, nnz_est)
-      return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(at))
-   end
-   error("nomansland")
-end
-
-
-
 # prototypes for the functions needed in `assemble!`
 
 @protofun hop(::SKHamiltonian, ::Any, ::Any)
@@ -209,7 +178,38 @@ function onsite_grad! end
 # end
 
 
-# ============ some preliminaries for SKHamiltonian assembly
+
+
+############################################################
+### Hamiltonian Evaluation
+#   most of this could become a *generic* code!
+#   it just needs generalising the atom-orbital-dof map.
+#   TODO: do this!
+
+function estimate_nnz(H::SKHamiltonian, at::AbstractAtoms)
+   nlist = neighbourlist(at, cutoff(H))
+   norb = norbitals(H)
+   return length(nlist) * norb^2 + length(at) * norb^2
+end
+
+function evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector)
+   nlist = neighbourlist(at, cutoff(H))
+   # pre-allocate memory for the triplet format
+   nnz_est = estimate_nnz(H, at)
+   It = zeros(Int32, nnz_est)
+   Jt = zeros(Int32, nnz_est)
+   Ht = zeros(Complex{Float64}, nnz_est)
+   if isorthogonal(H)
+      return assemble!( H, k, It, Jt, Ht, nothing, nlist, positions(at))
+   else
+      Mt = zeros(Complex{Float64}, nnz_est)
+      return assemble!( H, k, It, Jt, Ht, Mt, nlist, positions(at))
+   end
+   error("nomansland")
+end
+
+
+
 
 # TODO: the following method overload are a bit of a hack
 #       it would be better to implement broadcasting in FixedSizeArrays
@@ -276,7 +276,6 @@ function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
          sk!(H, U, hop!(H, r[m], bonds), H_nm)
          # overlap block (only if the model is NONORTHOGONAL)
          ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
-         # fill!(M_nm, 0.0)
          # add new indices into the sparse matrix
          Im = indexblock(neigs[m], H)
          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
@@ -320,16 +319,16 @@ end
 #       implementation for performance
 #
 function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
-                  H::SKHamiltonian{ISORTH,NORB}, nlist, k::JVecF)
+                                 H::SKHamiltonian{ISORTH,NORB}, nlist, k::JVecF)
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
    C = get_k_array(at, :C, k)::Matrix{Complex128}
    # df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
-   df = grad(tbm.smearing, epsn)
+   df = grad(tbm.smearing, epsn)::Vector{Float64}
 
    # precompute some products
-   const C_df_Ct = (C * (df' .* C)')               #::Matrix{Complex{Float64}}
-   const C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')   #::Matrix{Complex{Float64}}
+   C_df_Ct = (C * (df' .* C)')
+   C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')
 
    # allocate array for forces
    const frc = zeros(Complex{Float64}, 3, length(X))
@@ -347,10 +346,6 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
 
    # loop through all atoms, to compute the force on atm[n]
    for (n, neigs, r, R, _) in sites(nlist)
-      # neigs::Vector{Int}   # TODO: put this back in?!?  > PROFILE IT AGAIN
-      # R::Matrix{Float64}  # TODO: put this back in?!?
-      #   IT LOOKS LIKE the type of R might not be inferred!
-
       # compute the block of indices for the orbitals belonging to n
       In = indexblock(n, H)
 
@@ -369,21 +364,14 @@ function _forces_k{ISORTH, NORB}(X::JVecsF, at::AbstractAtoms, tbm::TBModel,
          eikr = exp(im * kR)::Complex{Float64}
 
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
-         # grad!(tbm.hop, r[i_n], - R[i_n], dH_nm)
          hop_d!(H, r[i_n], bonds, dbonds)
          sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dH_nm)
-         # sk_ad!(H, -R[i_n], hop, dH_nm)
-
-         # grad!(tbm.overlap, r[i_n], - R[i_n], dM_nm)
          if !ISORTH
             overlap_d!(H, r[i_n], bonds, dbonds)
             sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dM_nm)
-            # sk_ad!(H, -R[i_n], overlap, dM_nm)
          end
-         # fill!(dM_nm, 0.0)
 
-         # the following is a hack to put the on-site assembly into the
-         # innermost loop
+         # the following is a hack to put the on-site assembly into the innermost loop
          # F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
          for a = 1:NORB, b = 1:NORB
             t1 = 2.0 * real(C_df_Ct[Im[a], In[b]] * eikr)
@@ -422,3 +410,45 @@ function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    end
    return frc
 end
+
+
+
+
+# =========================  forces and other kinds of derivatives
+
+
+# typealias SKBlock{NORB} SMatrix{NORB, NORB, Float64}
+#
+# """
+# a sparse matrix kind of thing that stores pre-computed
+# hamiltonian blocks
+# """
+# type SparseSKH{NORB}
+#    i::Vector{Int32}
+#    j::Vector{int32}
+#    first::Vector{Int32}
+#    vH::Vector{SKBlock{NORB}}
+#    vM::Vector{SKBlock{NORB}}
+#    Rcell::Vector{JVecF}
+# end
+#
+#
+#
+#
+# """
+# a sparse-matrix kind of thing that stores pre-computed hamiltonian
+# derivative blocks
+# """
+# type SparseGradSKH
+#
+# end
+#
+#
+# """
+# `pre_derivatives(H::SKHamiltonian, at::AbstractAtoms)`
+#
+# precomputes all the hamiltonian derivatives
+# """
+# function pre_derivatives!(H::SKHamiltonian, at::AbstractAtoms)
+#
+# end
