@@ -22,25 +22,26 @@ ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 ############################################################
 ### indexing for SKHamiltonians
 
-skindexblock(n::Integer, norb::Integer) = Int[(n-1) * norb + j for j = 1:norb]
-
 """
 `indexblock`:
-a little auxiliary function to compute indices of Slater Koster orbitals
+a little auxiliary function to compute indices of Slater Koster orbitals,
+this is returned as an SVector, i.e. it is generated on the stack so that no
+heap memory is allocated.
 """
-indexblock(n::Integer, H::SKHamiltonian) = skindexblock(n, norbitals(H))
+indexblock{IO,NORB}(n::Integer, H::SKHamiltonian{IO,NORB}) =
+   SVector{NORB, Int}( ((n-1)*NORB+1):(n*NORB) )
 
 
-function skindexblock{T <: Integer}(Iat::AbstractVector{T}, norb::Integer)
-   out = T[]
-   for n in Iat
-      append!(out, indexblock(n, norb))
-   end
-   return out
-end
-
-indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian) =
-   skindexblock(Iat, norbitals(H))
+# function skindexblock{T <: Integer}(Iat::AbstractVector{T}, norb::Integer)
+#    out = T[]
+#    for n in Iat
+#       append!(out, indexblock(n, norb))
+#    end
+#    return out
+# end
+#
+# indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian) =
+#    skindexblock(Iat, norbitals(H))
 
 
 
@@ -417,24 +418,107 @@ end
 # =========================  forces and other kinds of derivatives
 
 
-# typealias SKBlock{NORB} SMatrix{NORB, NORB, Float64}
-#
-# """
-# a sparse matrix kind of thing that stores pre-computed
-# hamiltonian blocks
-# """
-# type SparseSKH{NORB}
-#    i::Vector{Int32}
-#    j::Vector{int32}
-#    first::Vector{Int32}
-#    vH::Vector{SKBlock{NORB}}
-#    vM::Vector{SKBlock{NORB}}
-#    Rcell::Vector{JVecF}
-# end
-#
-#
-#
-#
+SKBlock{NORB} = SMatrix{NORB, NORB, Float64}
+
+"""
+a sparse matrix kind of thing that stores pre-computed
+hamiltonian blocks, and can efficiently generate k-dependent Hamiltonians,
+either sparse of full.
+
+### Methods:
+* `full(A::SparseSKH, k)`: returns full `H`, `M` for given `k`-vector.
+
+### Methods to be implemented:
+* `sparse(A::SparseSKH, k)`: same but sparse
+* `collect(A::SparseSKH, k)`: chooses full (small systems) or sparse (large
+                           systems) based on some simple heuristic
+
+### Fields:
+* `H` : the hamiltonian used to construct it
+* `i, j` : row and column indices
+* `first` : `first[n]` is the index in `i, j` for which `i[idx] == n`
+* `vH` : Hamiltonian blocks
+* `vM` : overlap blocks
+* `Rcell` : each hamiltonian block is associated with an e^{i k ⋅ S} multiplier
+            from the Bloch transform; this S is stored in Rcell.
+"""
+immutable SparseSKH{HT, TV}  # v0.6: require that TV <: SKBlock{NORB}
+   H::HT
+   i::Vector{Int32}
+   j::Vector{int32}
+   first::Vector{Int32}
+   vH::Vector{TV}
+   vM::Vector{TV}
+   Rcell::Vector{JVecF}
+end
+
+function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
+   SKB = typeof(zero(SKBlock{NORB}))
+
+   # neighbourlist
+   nlist = neighbourlist(at, cutoff(H))
+   #      off-diagonal + diagonal
+   nnz = length(nlist) + length(at)
+   # allocate space for ordered triplet format
+   i = zeros(Int32, nnz)
+   j = zeros(Int32, nnz)
+   first = zeros(length(at), nnz)
+   vH = zeros(SKB, nnz)
+   vM = ISORTH ? Vector{SKB}() : zeros(SKB, nnz)
+   Rcell = zeros(JVecF, nnz)
+   # index into the triplet format
+   idx = 0
+
+   # allocate space to assemble the hamiltonian blocks, we use MMatrix
+   # here, but is this really necessary? Matrix should do fine?
+   H_nm = zero(MMatrix{NORB, NORB, Float64})
+   M_nm = zero(MMatrix{NORB, NORB, Float64})
+   bonds = zeros(nbonds(H))     # temporary array for storing the potentials
+
+   # loop through sites
+   for (n, neigs, r, R, _) in sites(nlist)
+      first[n] = idx+1          # where do the triplet entries for atom n start?
+
+      # add the diagonal/on-site entries
+      onsite!(H, r, R, H_nm)
+      idx += 1
+      i[idx], j[idx], vH[idx] = n, n, SKB(H_nm)
+      # on-site overlap matrix block (only if the model is NONORTHOGONAL)
+      if !ISORTH
+         overlap!(H, M_nm)
+         vM[idx] = SKB(M_nm)
+      end
+      # compute the Rvector corresponding to this block
+      Rcell[idx] = zero(JVecF)
+
+      # loop through the neighbours of the current atom (i.e. the bonds)
+      for m = 1:length(neigs)
+         U = R[m]/r[m]
+         # hamiltonian block
+         sk!(H, U, hop!(H, r[m], bonds), H_nm)
+         idx += 1
+         i[idx], j[idx], vH[idx] = n, neigs[m], SKB(H_nm)
+         # overlap block (only if the model is NONORTHOGONAL)
+         if !ISORTH
+            sk!(H, U, overlap!(H, r[m], bonds), M_nm)
+            vM[idx] = SKB(M_nm)
+         end
+         # compute the Rcell vector for these blocks
+         Rcell[idx] = R[m] - (X[neigs[m]] - X[n])
+      end
+   end
+   return SparseSKH(H, i, j, first, vH, vM, Rcell)
+end
+
+
+function Base.full(H::SparseSKH, k::AbstractVector)
+   k = JVecF(k)
+   
+end
+
+
+
+
 # """
 # a sparse-matrix kind of thing that stores pre-computed hamiltonian
 # derivative blocks
