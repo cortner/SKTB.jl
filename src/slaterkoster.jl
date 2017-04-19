@@ -418,7 +418,7 @@ end
 # =========================  forces and other kinds of derivatives
 
 
-SKBlock{NORB} = SMatrix{NORB, NORB, Float64}
+typealias SKBlock{NORB} SMatrix{NORB, NORB, Float64}
 
 """
 a sparse matrix kind of thing that stores pre-computed
@@ -427,6 +427,7 @@ either sparse of full.
 
 ### Methods:
 * `full(A::SparseSKH, k)`: returns full `H`, `M` for given `k`-vector.
+* `full!(out, A, k)`: same as `full`, but in-place
 
 ### Methods to be implemented:
 * `sparse(A::SparseSKH, k)`: same but sparse
@@ -444,8 +445,9 @@ either sparse of full.
 """
 immutable SparseSKH{HT, TV}  # v0.6: require that TV <: SKBlock{NORB}
    H::HT
+   at::AbstractAtoms
    i::Vector{Int32}
-   j::Vector{int32}
+   j::Vector{Int32}
    first::Vector{Int32}
    vH::Vector{TV}
    vM::Vector{TV}
@@ -454,6 +456,7 @@ end
 
 function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
    SKB = typeof(zero(SKBlock{NORB}))
+   X = positions(at)
 
    # neighbourlist
    nlist = neighbourlist(at, cutoff(H))
@@ -462,7 +465,7 @@ function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAto
    # allocate space for ordered triplet format
    i = zeros(Int32, nnz)
    j = zeros(Int32, nnz)
-   first = zeros(length(at), nnz)
+   first = zeros(Int32, length(at))
    vH = zeros(SKB, nnz)
    vM = ISORTH ? Vector{SKB}() : zeros(SKB, nnz)
    Rcell = zeros(JVecF, nnz)
@@ -507,13 +510,54 @@ function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAto
          Rcell[idx] = R[m] - (X[neigs[m]] - X[n])
       end
    end
-   return SparseSKH(H, i, j, first, vH, vM, Rcell)
+   return SparseSKH(H, at, i, j, first, vH, vM, Rcell)
+end
+
+_alloc_full(skh::SparseSKH) = _alloc_full(skh.H, skh.at)
+
+_alloc_full(H::SKHamiltonian{NONORTHOGONAL}, at::AbstractAtoms) =
+   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}(ndofs(H, at), ndofs(H, at))
+
+_alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
+   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}()
+
+Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
+   full!(_alloc_full(H), H, k)
+
+full!(out, H::SparseSKH, k::AbstractVector = zero(JVecF)) =
+   _full!(out[1], out[2], H, k, H.H)
+
+function _full!{NORB}(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB})
+   fill!(Hout, 0.0)
+   fill!(Mout, 0.0)
+   k = JVecF(k)
+   for (i, j, H_ij, M_ij, S) in zip(skh.i, skh.j, skh.vH, skh.vM, skh.Rcell)
+      eikR = exp( im * dot(k, S) )
+      Ii, Ij = indexblock(i, H), indexblock(j, H)
+      @inbounds for a = 1:NORB, b = 1:NORB
+         Hout[Ii[a], Ij[b]] += H_ij[a, b] * eikR
+         Mout[Ii[a], Ij[b]] += M_ij[a, b] * eikR
+      end
+   end
+   # TODO: this is a HACK; need to do it in-place
+   Hout[diagind(Hout)] = real(Hout[diagind(Hout)])
+   Mout[diagind(Mout)] = real(Mout[diagind(Mout)])
+   return Hermitian(Hout), Hermitian(Mout)
 end
 
 
-function Base.full(H::SparseSKH, k::AbstractVector)
+function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
+   fill!(Hout, 0.0)
    k = JVecF(k)
-   
+   for (i, j, H_ij, S) in zip(skh.i, skh.j, skh.vH, skh.Rcell)
+      eikR = exp( im * dot(k, S) )
+      Ii, Ij = indexblock(i, H), indexblock(j, H)
+      @inbounds for a = 1:NORB, b = 1:NORB
+         Hout[Ii[a], Ij[b]] += H_ij[a, b] * eikR
+      end
+   end
+   Hout[diagind(Hout)] = real(Hout[diagind(Hout)])
+   return Hermitian(Hout), I
 end
 
 

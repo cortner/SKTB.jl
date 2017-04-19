@@ -144,10 +144,9 @@ Base.next(::BZQuadratureRule, state) =
 
 
 
-# we can replace the double-loop
-#we could write two pretty little iterators over the BZ AND e-vals
+# we can replace the double-loop over bz and then over the eigenvalues with
 #
-#   for (w, k, e, ψ) in BZ(tbm)
+#   for (w, k, e, ψ) in BZiter(tbm)
 #       ...
 # (if ψ is a view of C_k[:, s] then this doesn't require allocation either)
 

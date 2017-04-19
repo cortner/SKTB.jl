@@ -16,57 +16,46 @@ using JuLIP: set_transient!, get_transient
 #       this indicates that we probably shouldn't bother
 
 
-# for the standard calculator we need to convert
-# the hamiltonian to full matrices
-function full_hermitian{T <: Complex}(A::AbstractMatrix{T})
-   A = 0.5 * (A + A')
-   A[diagind(A)] = real(A[diagind(A)])
-   return Hermitian(full(A))
-end
-
-function full_hermitian{T <: Real}(A::AbstractMatrix{T})
-   return Symmetric(full(0.5 * (A + A')))
-end
-
 """
 `sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well.
 """
-function sorted_eig(H, M::AbstractMatrix)
-   epsn, C = eig(full_hermitian(H), full_hermitian(M))
+function sorted_eig(H::Hermitian, M::Hermitian)
+   epsn, C = eig(H, M)
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
 
-function sorted_eig(H, ::UniformScaling)
-   epsn, C = eig(full_hermitian(H))
+function sorted_eig(H::Hermitian, ::UniformScaling)
+   epsn, C = eig(H)
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
 
+# compute and store the SparseSKH thing from the hamiltonian
+function update!(at::AbstractAtoms, H::SKHamiltonian)
+   if has_transient(at, :skh)
+      return get_transient(at, :skh)
+   else
+      skh = SparseSKH(H, at)
+      set_transient!(at, skh, :skh)
+      return skh
+   end
+end
 
 """
 `update_eig!(atm::AbstractAtoms, tbm::TBModel)` : updates the hamiltonians
 and spectral decompositions on the MP grid.
 """
-function update_eig!(atm::AbstractAtoms, tbm::TBModel)
-   nlist = neighbourlist(atm, cutoff(tbm.H))
-   nnz_est = estimate_nnz(tbm.H, atm)
-   It = zeros(Int32, nnz_est)
-   Jt = zeros(Int32, nnz_est)
-   Ht = zeros(Complex{Float64}, nnz_est)
-   Mt = zeros(Complex{Float64}, nnz_est)
-   X = positions(atm)
+function update_eig!{ISORTH}(atm::AbstractAtoms, H::SparseSKH{ISORTH}, tbm::TBModel)
+   wrk = _alloc_full(H)
    for (w, k) in tbm.bzquad
-      H, M = assemble!(tbm.H, k, It, Jt, Ht, Mt, nlist, X)
-      epsn, C = sorted_eig(H, M)
-      set_k_array!(atm, M, :M, k)
-      set_k_array!(atm, H, :H, k)
+      Hf, Mf = full!(wrk, H, k)
+      epsn, C = sorted_eig(Hf, Mf)
       set_k_array!(atm, epsn, :epsn, k)
       set_k_array!(atm, C, :C, k)
    end
 end
-
 
 
 # ==================== update all arrays =================
@@ -88,7 +77,8 @@ function update!(at::AbstractAtoms, tbm::TBModel)
       return nothing
    end
    # if the flag does not exist, then we update everything
-   update_eig!(at, tbm)
+   skh = update!(at, tbm.H)
+   update_eig!(at, skh, tbm)
    update!(at, tbm.smearing)
    # set the update flag (will be deleted as soon as atom positions change)
    set_transient!(at, :tbupdateflag, 0)
@@ -135,4 +125,4 @@ energy(tbm::TBModel, at::AbstractAtoms) =
 
 # ========================== Forces ==========================
 
-# TODO: implement a generic force calculator 
+# TODO: implement a generic force calculator

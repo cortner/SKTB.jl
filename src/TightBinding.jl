@@ -1,7 +1,7 @@
 
 module TightBinding
 
-using JuLIP
+using JuLIP, StaticArrays
 using JuLIP: @protofun
 using JuLIP.Potentials: @pot, SitePotential
 
@@ -26,13 +26,6 @@ include("smearing.jl")
 # BZ integration: basic prototype; TODO: implement more efficient BZ grids!
 include("bzintegration.jl")
 
-# generic code, such as computing spectral decoposition,
-# energy, forces (given the hamiltonian and hamiltonian derivatives)
-include("calculators.jl")
-
-# implement the contour integral variants of the TB model
-# include("contour.jl")
-
 # ============= SLATER KOSTER TYPE MODELS ================
 
 # basics for slater-koster type hamiltonians
@@ -47,7 +40,14 @@ include("NRLTB.jl")
 # The Kwon model - a simple orthogonal TB model for Silicon
 # include("kwon.jl")
 
+# ==================  for now, the calculators get to depend on SK again
 
+# generic code, such as computing spectral decoposition,
+# energy, forces (given the hamiltonian and hamiltonian derivatives)
+include("calculators.jl")
+
+# implement the contour integral variants of the TB model
+# include("contour.jl")
 
 
 
