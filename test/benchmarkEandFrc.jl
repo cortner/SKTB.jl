@@ -32,11 +32,9 @@ tbm2 = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(β, eF, fixed_eF),
 push!(tests, (test2, at2, tbm2))
 
 
-
 # using ProfileView
 # @profile energy(tbm2, at2)
 # ProfileView.view()
-
 
 for (test, at, tbm) in tests
    println("====================================================")
@@ -48,8 +46,61 @@ for (test, at, tbm) in tests
    end
    println("Forces: " )
    for n = 1:4
-      n <= 4 && rattle!(at, 0.001)
+      n <= 2 && rattle!(at, 0.001)
       @time forces(tbm, at)
    end
 end
 println("====================================================")
+
+
+
+####### CONCLUSION OF THIS BENCHMARK:
+#
+#  Basically, the implementation is cleaner and needs less memory
+#  but all the real time is spent in eig - so very little is
+#  gained for large systems. The main advantage of the new framework
+#  is that we can now readily construct block-space matrices,
+#  sparse matrices, full matrices, all without extra cost and less
+#  storage.
+#
+#
+# # skh = TB.update!(at2, tbm2.H)
+# # @time TB.update!(at2, tbm2.H)
+# # @time TB.update!(at2, tbm2.H)
+# # @time TB.update!(at2, tbm2.H)
+#
+# println("Old Hamiltonian > sparse > full")
+# @time map(full, hamiltonian(tbm2, at2))
+# @time map(full, hamiltonian(tbm2, at2))
+# @time map(full, hamiltonian(tbm2, at2))
+#
+# println("SKH")
+# @time skh = TB.SparseSKH(tbm2.H, at2)
+# @time skh = TB.SparseSKH(tbm2.H, at2)
+# @time skh = TB.SparseSKH(tbm2.H, at2)
+#
+# println("alloc")
+# @time wrk = TB._alloc_full(skh)
+# @time wrk = TB._alloc_full(skh)
+# @time wrk = TB._alloc_full(skh)
+# Hout = wrk[1]
+# Mout = wrk[2]
+# k = JVecF(zeros(3))
+#
+# # println("_full!")
+# # @time TB._full!(Hout, Mout, skh, k, tbm.H)
+# # @time TB._full!(Hout, Mout, skh, k, tbm.H)
+# # @time TB._full!(Hout, Mout, skh, k, tbm.H)
+#
+# println("full!")
+# @time TB.full!(wrk, skh)
+# @time TB.full!(wrk, skh)
+# @time TB.full!(wrk, skh)
+#
+# println("eig")
+# @time eig(Hout, Mout)
+# @time eig(Hout, Mout)
+# @time eig(Hout, Mout)
+
+
+# @code_warntype TB._full!(Hout, Mout, skh, k, tbm.H)
