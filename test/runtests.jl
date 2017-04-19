@@ -8,8 +8,8 @@ println("    TightBinding Tests  ")
 println("============================================")
 
 
-include("testtoymodel.jl")
-include("testnrltb.jl")
+# include("testtoymodel.jl")
+# include("testnrltb.jl")
 # include("testsiteE.jl")
 # include("perfsiteE.jl")
 # include("comparequip.jl")
@@ -17,4 +17,4 @@ include("testnrltb.jl")
 # include("compareatoms.jl")
 
 
-# include("benchmarkEandFrc.jl")
+include("benchmarkEandFrc.jl")
