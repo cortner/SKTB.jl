@@ -1,7 +1,7 @@
 
 TB = TightBinding
 at = (1,2,3) * bulk("Al", pbc=false, cubic=true)
-tbm = TightBinding.ToyTBModel(r0=2.5, rcut=5.1)
+tbm = TightBinding.ToyTBModel(r0=2.5, rcut=8.0)
 
 X = copy(positions(at)) |> mat
 X[:, 2] += [0.123; 0.234; 0.01]
