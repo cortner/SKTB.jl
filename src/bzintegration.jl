@@ -104,10 +104,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
    B = 2*pi*pinv(cell)
    b1, b2, b3 = JVec(B[:,1]), JVec(B[:,2]), JVec(B[:,3])
 
-	# We can exploit the symmetry of the BZ.
-	# TODO: this is not necessarily first BZ
-	#       and THE SYMMETRY HAS NOT BEEN FULLY EXPLOITED YET!!
-   #       (is this a problem other than performance?)
+	# We can exploit the symmetry of the BZ (somewhat; more coudl be done here).
 	nx, ny, nz = nn = max(kx, 1), max(ky, 1), max(kz, 1)
    kxs, kys, kzs = (kx==0 ? nx : (kx/2)), (ky==0 ? ny : (ky/2)), (kz==0 ? nz : (kz/2))
 	N = nx * ny * nz

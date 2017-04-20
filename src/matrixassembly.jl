@@ -294,7 +294,6 @@ function _full!{NORB}(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB})
          Mout[Ii[a], Ij[b]] += M_ij[a, b] * eikR
       end
    end
-   # TODO: this is a HACK; need to do it in-place
    Hout[diagind(Hout)] = real(Hout[diagind(Hout)])
    Mout[diagind(Mout)] = real(Mout[diagind(Mout)])
    return Hermitian(Hout), Hermitian(Mout)

@@ -573,8 +573,6 @@ function forces_k(X::JVecsF, tbm::TBModel, nlist, k::JVecF)
 
    # loop through all atoms, to compute the force on atm[n]
    for (n, neigs, r, R, _) in sites(nlist)
-      # neigs::Vector{Int}   # TODO: put this back in?!?  > PROFILE IT AGAIN
-      # R::Matrix{Float64}  # TODO: put this back in?!?
       #   IT LOOKS LIKE the type of R is not inferred!
       # compute the block of indices for the orbitals belonging to n
       In = indexblock(n, tbm)

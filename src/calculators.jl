@@ -180,8 +180,6 @@ end
 #   specific assumptions about the structure of the hamiltonian, hence is
 #   only valid for SK-type hamiltonians.
 #
-# TODO: after implementing the generic force assembly, we need to benchmark
-#       them against each other!
 function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
