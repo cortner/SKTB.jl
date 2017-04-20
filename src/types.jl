@@ -100,7 +100,7 @@ end
 typealias TightBindingModel TBModel
 
 TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
-                    NullSmearing(), GammaPoint(), 0.0)
+                    NullSmearing(), NullBZQ(), 0.0)
 
 isorthogonal(tbm::TBModel) = isorthogonal(tbm.H)
 

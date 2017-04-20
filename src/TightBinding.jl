@@ -6,11 +6,10 @@ using JuLIP: @protofun
 using JuLIP.Potentials: @pot, SitePotential
 
 import JuLIP: energy, forces, cutoff
-import JuLIP.Potentials: evaluate, evaluate_d
+import JuLIP.Potentials: evaluate, evaluate_d, site_energy
 
 # using FixedSizeArrays
-export hamiltonian, densitymatrix
-
+export hamiltonian, densitymatrix, TBModel, TightBindingModel
 
 
 
@@ -24,7 +23,6 @@ include("types.jl")
 include("smearing.jl")
 
 # BZ integration: basic prototype;
-#    TODO: implement more efficient BZ grids that account for symmetry
 include("bzintegration.jl")
 
 # ============= SLATER KOSTER TYPE MODELS ================
@@ -42,8 +40,6 @@ include("NRLTB.jl")
 # The Kwon model - a simple orthogonal TB model for Silicon
 # include("kwon.jl")
 
-# ==================  for now, the calculators get to depend on SK again
-
 # generic code, such as computing spectral decoposition,
 # energy, forces (given the hamiltonian and hamiltonian derivatives)
 # TODO: rename to become eigcalculators or standardcalc
@@ -53,7 +49,7 @@ include("calculators.jl")
 # include("contour.jl")
 
 
-# perturbation theory module
+# TODO: perturbation theory module
 # include("perturbation.jl")
 
 end    # module

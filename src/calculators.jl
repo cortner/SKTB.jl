@@ -5,15 +5,16 @@ using JuLIP: set_transient!, get_transient
 # this file implements the standard spectral decomposition
 # calculator for energy, forces, etc.
 
-
-
 # ================= diagonalisation ====================
-
-# TODO: should we distinguish k = 0 (Real, Symmetric), k ≠ 0 (Complex, Hermitian)
-#       for large systems with only Gamma-point, this might be useful?
-#       but it actually seems that the timings are not so different, e.g., for
-#       a 1000 x 1000 system, Float64 ~ 400ms, Complex128 ~ 500ms per `eig`.
-#       this indicates that we probably shouldn't bother
+#
+# we discussed whether to distinguish k = 0 (Real, Symmetric),
+# k ≠ 0 (Complex, Hermitian). For large systems with only Gamma-point,
+# this might seem useful, but it actually seems that the timings are
+# not so different, e.g., for a 1000 x 1000 system,
+#    Float64 ~ 400ms, Complex128 ~ 500ms per `eig`.
+# this indicates that we probably shouldn't bother.
+# This is difference, btw, for LU decompositions, so for the Contour
+# calculator we will most likely
 
 
 """
@@ -42,6 +43,8 @@ function update_eig!{ISORTH}(atm::AbstractAtoms, H::SparseSKH{ISORTH}, tbm::TBMo
    for (w, k) in tbm.bzquad
       Hf, Mf = full!(wrk, H, k)
       epsn, C = sorted_eig(Hf, Mf)
+      # TODO: probably remove this - but need to rewrite site_energy first
+      set_k_array!(atm, Mf, :M, k)
       set_k_array!(atm, epsn, :epsn, k)
       set_k_array!(atm, C, :C, k)
    end
@@ -132,7 +135,7 @@ energy(tbm::TBModel, at::AbstractAtoms) =
 
 
 # TODO: in the future assemble the forces already in JVecsF format
-function _forcesnew_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
+function _forces_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
                                  H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
                                  skhg)
    # obtain the precomputed arrays
@@ -144,6 +147,7 @@ function _forcesnew_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
    # TODO: optimise these two lines?
    #       note also these are O(N^3) scaling, while overall
    #       force assembly should be just O(N^2)
+   #       (but can we beat the BLAS?)
    C_df_Ct = (C * (df' .* C)')
    C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')
 
@@ -185,27 +189,25 @@ function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    skhg = SparseSKHgrad(tbm.H, atm)
    frc = zerovecs(length(atm))
    for (w, k) in tbm.bzquad
-      frc +=  w * _forcesnew_k(atm, tbm, tbm.H, k, skhg)
+      frc +=  w * _forces_k(atm, tbm, tbm.H, k, skhg)
    end
    return frc
 end
 
 
-# TODO 
-# import JuLIP.Potentials.site_energy
-#
-# function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
-#    update!(at, tbm)
-#    # In0 = (indexblock(n0, tbm) |> Vector)[1:1]   # (DEBUG)
-#    In0 = indexblock(n0, tbm.H)
-#    Esite = 0.0
-#    for (w, k) in tbm.bzquad
-#       epsn_k = get_k_array(tbm, :epsn, k)
-#       M_k = get_k_array(tbm, :M, k)
-#       C_k = get_k_array(tbm, :C, k)
-#       MC_k = M_k[In0, :] * C_k
-#       ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
-#       Esite += w * sum(tbm.smearing(epsn_k, tbm.eF) .* epsn_k  .* ψ²)
-#    end
-#    return real(Esite)
-# end
+
+
+function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
+   update!(at, tbm)
+   In0 = indexblock(n0, tbm.H)
+   Esite = 0.0
+   for (w, k) in tbm.bzquad
+      epsn_k = get_k_array(at, :epsn, k)
+      M_k = get_k_array(at, :M, k)
+      C_k = get_k_array(at, :C, k)
+      MC_k = M_k[In0, :] * C_k
+      ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
+      Esite += w * sum(energy(tbm.smearing, epsn_k)  .* ψ²)
+   end
+   return real(Esite)
+end
