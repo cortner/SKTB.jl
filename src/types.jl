@@ -83,13 +83,13 @@ abstract AbstractTBModel <: AbstractCalculator
 """
 `TBModel`: basic non-self consistent tight binding calculator.
 """
-type TBModel{HT <: TBHamiltonian} <: AbstractTBModel
+type TBModel{HT <: TBHamiltonian, ST <: SmearingFunction} <: AbstractTBModel
    # hamiltonian
    H::HT
    # additional MM potential (typically but not necessarily pair)
    Vrep::SitePotential
    # smearing function / fermi temperature model   TODO: smearing is not a good name for this?
-   smearing::SmearingFunction
+   smearing::ST
    # k-point sampling
    bzquad::BZQuadratureRule
    # -------------- internals ------------------

@@ -1,10 +1,6 @@
 #
 # This File contains the core routines for Slater-Koster type TB models
 #
-# TODO:
-#  * consider replacing sk4! with _sk4! and so forth (they are in some sense
-#    private methods)
-
 ############################################################
 
 
@@ -155,13 +151,12 @@ end
 
 # =============== Derivatives of the sk*! functions ================
 
-# * consider renaming hh >> bond, dhh >> dbond
-
 #
 # hh[i] = V(r)
 # dhh[i] = V'(r)
 #
-
+# in other parts of the code hh ≡ bonds ≡ b  and dhh ≡ dbonds ≡ db
+#
 function _sk4_d!(U, r, hh, dhh, dmat)
    # U = ∇r, so it appears here both as the orientation and as ∇r
    l, m, n = U[1], U[2], U[3]
@@ -190,3 +185,6 @@ function _sk4_d!(U, r, hh, dhh, dmat)
    end
    return dmat
 end
+
+
+# TODO: move _sk9_d! !!!!

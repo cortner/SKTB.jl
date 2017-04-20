@@ -29,7 +29,9 @@ include("bzintegration.jl")
 # ============= SLATER KOSTER TYPE MODELS ================
 
 # basics for slater-koster type hamiltonians
+include("sk_core.jl")
 include("slaterkoster.jl")
+include("matrixassembly.jl")
 
 # the TB toy model for quick tests (a slater-koster s-orbital model)
 include("toymodel.jl")
