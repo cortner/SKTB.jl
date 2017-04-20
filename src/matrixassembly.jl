@@ -264,7 +264,7 @@ function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAto
    end
 
    skh = SparseSKH(H, at, i, j, first, vH, vM, Rcell)
-   set_transient!(at, skh)
+   set_transient!(at, :SKH, skh)
    return skh
 end
 
