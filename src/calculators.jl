@@ -32,16 +32,6 @@ function sorted_eig(H::Hermitian, ::UniformScaling)
    return epsn[Isort], C[:, Isort]
 end
 
-# compute and store the SparseSKH thing from the hamiltonian
-function update!(at::AbstractAtoms, H::SKHamiltonian)
-   if has_transient(at, :skh)
-      return get_transient(at, :skh)
-   else
-      skh = SparseSKH(H, at)
-      set_transient!(at, skh, :skh)
-      return skh
-   end
-end
 
 """
 `update_eig!(atm::AbstractAtoms, tbm::TBModel)` : updates the hamiltonians
@@ -77,7 +67,7 @@ function update!(at::AbstractAtoms, tbm::TBModel)
       return nothing
    end
    # if the flag does not exist, then we update everything
-   skh = update!(at, tbm.H)
+   skh = SparseSKH(tbm.H, at)  # this also stores skh for later use
    update_eig!(at, skh, tbm)
    update!(at, tbm.smearing)
    # set the update flag (will be deleted as soon as atom positions change)
@@ -85,6 +75,16 @@ function update!(at::AbstractAtoms, tbm::TBModel)
    return nothing
 end
 
+
+############################################################
+### Hamiltonian Evaluation
+
+function evaluate(H::SKHamiltonian, at::AbstractAtoms,
+                  k::AbstractVector, T=full)
+   # this retrieves and if necessary computes the SparseSKH thing
+   skh = SparseSKH(H, at)
+   return T(skh, k)
+end
 
 
 # ================ Density Matrix and Energy ================
@@ -125,4 +125,69 @@ energy(tbm::TBModel, at::AbstractAtoms) =
 
 # ========================== Forces ==========================
 
-# TODO: implement a generic force calculator
+# this is an old force computation that *requires* a SKHamiltonian structure
+#    F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
+# but instead of computing H,n, M,n as matrices, this assembly loops over
+# the non-zero blocks first and the inner loop is over the derivative ,n.
+
+
+# TODO: in the future assemble the forces already in JVecsF format
+function _forcesnew_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
+                                 H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
+                                 skhg)
+   # obtain the precomputed arrays
+   epsn = get_k_array(at, :epsn, k)::Vector{Float64}
+   C = get_k_array(at, :C, k)::Matrix{Complex128}
+   df = grad(tbm.smearing, epsn)::Vector{Float64}
+
+   # precompute some products
+   # TODO: optimise these two lines?
+   #       note also these are O(N^3) scaling, while overall
+   #       force assembly should be just O(N^2)
+   C_df_Ct = (C * (df' .* C)')
+   C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')
+
+   # an array replacing dM_ij when the model is orthogonal
+   dM_ij = zero(typeof(skhg.dH[1]))
+
+   # allocate array for forces
+   const frc = zeros(Float64, 3, length(at))
+
+   for n = 1:length(skhg.i)
+      i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
+      if !ISORTH; dM_ij = skhg.dM[n]; end
+      Ii, Ij = indexblock(i, H), indexblock(j, H)
+      eikr = exp(im * dot(S, k))::Complex{Float64}
+
+      @inbounds for a = 1:NORB, b = 1:NORB
+         t1 = 2.0 * real(C_df_Ct[Ij[a], Ii[b]] * eikr)
+         t2 = 2.0 * real(C_dfepsn_Ct[Ij[a], Ii[b]] * eikr)
+         t3 = real(C_df_Ct[Ii[a],Ii[b]])
+
+         for c = 1:3
+            frc[c,i] += -dH_ij[c,a,b] * t1 + dM_ij[c,a,b] * t2 + dH_ii[c,a,b] * t3
+            frc[c,j] -= t3 * dH_ii[c,a,b]
+         end
+      end
+   end
+
+   return real(frc) |> vecs
+end
+
+
+# * `forces` is imported from JuLIP
+# * this implementation is the old version from Atoms.jl, which makes
+#   specific assumptions about the structure of the hamiltonian, hence is
+#   only valid for SK-type hamiltonians.
+#
+# TODO: after implementing the generic force assembly, we need to benchmark
+#       them against each other!
+function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
+   update!(atm, tbm)
+   skhg = SparseSKHgrad(tbm.H, atm)
+   frc = zerovecs(length(atm))
+   for (w, k) in tbm.bzquad
+      frc +=  w * _forcesnew_k(atm, tbm, tbm.H, k, skhg)
+   end
+   return frc
+end

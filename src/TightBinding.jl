@@ -23,14 +23,14 @@ include("types.jl")
 # define how to go from eigenvalues (energy-levels) to potential energy
 include("smearing.jl")
 
-# BZ integration: basic prototype; TODO: implement more efficient BZ grids!
+# BZ integration: basic prototype;
+#    TODO: implement more efficient BZ grids that account for symmetry
 include("bzintegration.jl")
 
 # ============= SLATER KOSTER TYPE MODELS ================
 
 # basics for slater-koster type hamiltonians
 include("sk_core.jl")
-include("slaterkoster.jl")
 include("matrixassembly.jl")
 
 # the TB toy model for quick tests (a slater-koster s-orbital model)
@@ -46,6 +46,7 @@ include("NRLTB.jl")
 
 # generic code, such as computing spectral decoposition,
 # energy, forces (given the hamiltonian and hamiltonian derivatives)
+# TODO: rename to become eigcalculators or standardcalc
 include("calculators.jl")
 
 # implement the contour integral variants of the TB model
