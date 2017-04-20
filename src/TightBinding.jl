@@ -53,12 +53,7 @@ include("calculators.jl")
 # include("contour.jl")
 
 
-
-
 # perturbation theory module
 # include("perturbation.jl")
-
-# implements the "classical" site energy
-# include("site_energy.jl")
 
 end    # module
