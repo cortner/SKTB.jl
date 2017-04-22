@@ -41,12 +41,14 @@ and spectral decompositions on the MP grid.
 function update_eig!{ISORTH}(atm::AbstractAtoms, H::SparseSKH{ISORTH}, tbm::TBModel)
    wrk = _alloc_full(H)
    for (w, k) in tbm.bzquad
-      Hf, Mf = full!(wrk, H, k)
-      epsn, C = sorted_eig(Hf, Mf)
-      # TODO: probably remove this - but need to rewrite site_energy first
-      set_k_array!(atm, Mf, :M, k)
-      set_k_array!(atm, epsn, :epsn, k)
-      set_k_array!(atm, C, :C, k)
+      if !has_k_array(atm, :epsn, k)
+         Hf, Mf = full!(wrk, H, k)
+         epsn, C = sorted_eig(Hf, Mf)
+         # TODO: probably remove this - but need to rewrite site_energy first
+         set_k_array!(atm, Mf, :M, k)
+         set_k_array!(atm, epsn, :epsn, k)
+         set_k_array!(atm, C, :C, k)
+      end
    end
 end
 
@@ -69,12 +71,14 @@ function update!(at::AbstractAtoms, tbm::TBModel)
    if has_transient(at, :tbupdateflag)
       return nothing
    end
+   # set the update flag (will be deleted as soon as atom positions change)
+   # ( we do this *before* the update so that we don't go into an infinite
+   #    loop with the update trying to update; see e.g. BZiter )
+   set_transient!(at, :tbupdateflag, 0)
    # if the flag does not exist, then we update everything
    skh = SparseSKH(tbm.H, at)  # this also stores skh for later use
    update_eig!(at, skh, tbm)
-   update!(at, tbm.smearing)
-   # set the update flag (will be deleted as soon as atom positions change)
-   set_transient!(at, :tbupdateflag, 0)
+   update!(at, tbm.smearing, tbm)
    return nothing
 end
 

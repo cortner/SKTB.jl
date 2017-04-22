@@ -20,7 +20,7 @@ export hamiltonian, densitymatrix, TBModel, TightBindingModel
 include("types.jl")
 
 # define how to go from eigenvalues (energy-levels) to potential energy
-include("smearing.jl")
+include("potentials.jl")
 
 # BZ integration: basic prototype;
 include("bzintegration.jl")

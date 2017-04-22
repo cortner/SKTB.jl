@@ -8,15 +8,6 @@ using ForwardDiff
 # models (which is 99.99% of non-selfconsistent TB models)
 #
 
-abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
-
-norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
-
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 1}) = 1
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
-
-ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 
 """
 `indexblock`:

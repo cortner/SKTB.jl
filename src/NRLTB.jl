@@ -6,7 +6,7 @@ using ForwardDiff
 
 using JuLIP.Potentials.ZeroSitePotential
 using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL,
-                  norbitals, SmearingFunction
+                  norbitals, ChemicalPotential
 import TightBinding: hop!, overlap!, onsite!, hop, overlap, onsite_grad!
 import JuLIP.Potentials: cutoff
 
@@ -71,7 +71,7 @@ include("NRLTB_data.jl")
 * nkpoints : number of k-points at each direction (only (0,0,Int) has been implemented)
 * hfd = 1e-6 : finite difference step for computing hessians
 """
-NRLTBModel(species, fs::SmearingFunction;
+NRLTBModel(species, fs::ChemicalPotential;
            orbitals=default_orbitals(species), bzquad=GammaPoint(), hfd=1e-6) =
    TBModel(NRLParams(species, orbitals=orbitals),
            ZeroSitePotential(), fs, bzquad, hfd)

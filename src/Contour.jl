@@ -6,14 +6,12 @@ instead of spectral decompostions. This module is still missing a lot of
 functionality and is therefore still experimental.
 
 Parts of this is based on [PEXSI](https://math.berkeley.edu/~linlin/pexsi/index.html),
-but we deviate in various ways. For example, we don't use selected inversion,
-but rather (in the future) want to move towards an iterative solver instead.
+but we deviate in various ways. For example, we don't use selected inversion.
 The current implementation uses naive direct solvers.
 
 ### TODO:
 * [ ] automatically determine Emin, Emax
-* [ ] need a 0T contour
-* [ ] in general: allow different energies, e.g. including entropy
+* [ ] 0T contour
 """
 module Contour
 

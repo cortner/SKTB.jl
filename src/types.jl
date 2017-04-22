@@ -7,7 +7,7 @@ export AbstractTBModel,
       TBModel,
       isorthogonal,
       TBHamiltonian,
-      SmearingFunction,
+      ChemicalPotential,
       BZQuadratureRule
 
 
@@ -46,15 +46,43 @@ returns total number of electron dofs
 evaluate(H::TBHamiltonian, at::AbstractAtoms) = evaluate(H, at, JVecF([0.0,0.0,0.0]))
 
 
+"""
+`SKHamiltonian{ISORTH, NORB}`
+
+abstract supertype for all Slater-Koster type TB hamiltonians. Type parameters
+are
+
+* `ISORTH` ∈ {`true`, `false`} : determine whether TB model is orthogonal or non-orthogonal
+* `NORB` ∈ {1,4,9} : integer, number of orbitals.
+"""
+abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
+
+norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
+
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 1}) = 1
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
+nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
+
+ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
+
+
 # =======================  Smearing Functions =============================
 
-abstract SmearingFunction
+"""
+`ChemicalPotential`: abstract supertype for different chemical potentials.
+`TightBinding.jl` implements:
+# TODO: make list
+"""
+abstract ChemicalPotential
+
+abstract FiniteTPotential <: ChemicalPotential
+abstract ZeroTPotential <: ChemicalPotential
 
 """
 auxiliary smearing function that doesn't do anything but lets us construct
 and empty TBModel.
 """
-type NullSmearing <: SmearingFunction end
+type NullSmearing <: ChemicalPotential end
 
 
 # ======================= BZ Quadrature supertype =====================
@@ -83,7 +111,7 @@ abstract AbstractTBModel <: AbstractCalculator
 """
 `TBModel`: basic non-self consistent tight binding calculator.
 """
-type TBModel{HT <: TBHamiltonian, ST <: SmearingFunction} <: AbstractTBModel
+type TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: AbstractTBModel
    # hamiltonian
    H::HT
    # additional MM potential (typically but not necessarily pair)

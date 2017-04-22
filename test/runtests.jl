@@ -9,12 +9,11 @@ println("============================================")
 
 
 # include("testtoymodel.jl")
-# include("testnrltb.jl")
-include("testsiteE.jl")
-
-# include("perfsiteE.jl")
+include("testnrltb.jl")
+# include("testsiteE.jl")
 
 # include("comparequip.jl")
 # include("compareatoms.jl")
 
 # include("benchmarkEandFrc.jl")
+# include("perfsiteE.jl")

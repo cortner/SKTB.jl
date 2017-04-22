@@ -4,7 +4,8 @@ import Calculus
 export ZeroTemperature,
       ZeroTemperatureGrand,
       MerminFreeEnergy,
-      GrandPotential
+      GrandPotential,
+      FermiDiracSmearing
 
 # a smearing function can be
 #  [1] 0T or finite T
@@ -13,24 +14,30 @@ export ZeroTemperature,
 # TODO: consider combining ZeroTemperature with MerminFreeEnergy and
 #       ZeroTemperatureGrand with GrandPotential
 #
-# TODO: SmearingFunction is not a great term, what would be a better one?
+# TODO: ChemicalPotential is not a great term, what would be a better one?
 
 
-# SmearingFunctions define:
+# ChemicalPotentials define:
 # * occupancy   n(ϵ)
 # * energy   f(ϵ)
 # * grad     f'(ϵ)
 #     NB: grad is defined via ForwardDiff, but for an efficient implemention
 #         this can of course be overloaded
 
-grad(f::SmearingFunction, epsn::Real) = ForwardDiff.derivative(s->energy(f, s), epsn)
-grad(f::SmearingFunction, epsn::AbstractVector) = [grad(f, s) for s in epsn]
+grad(f::ChemicalPotential, epsn::Real) = ForwardDiff.derivative(s->energy(f, s), epsn)
+grad(f::ChemicalPotential, epsn::AbstractVector) = [grad(f, s) for s in epsn]
+
+occupancy_d(f::ChemicalPotential, epsn::Real) = ForwardDiff.derivative(s -> occupancy(f, s), epsn)
+occupancy_d(f::ChemicalPotential, epsn::Real, μ::Real) =
+   ForwardDiff.derivative(s -> occupancy(f, s, μ), epsn)
+occupancy_d(f::ChemicalPotential, epsn::AbstractVector, args...) =
+   [occupancy_d(f, s, args...) for s in epsn]
 
 
 # ================= Zero-Temperature Models  ============================
 
 
-@pot type ZeroTemperatureGrand <: SmearingFunction
+@pot type ZeroTemperatureGrand <: ChemicalPotential
    eF::Float64
 end
 """
@@ -46,7 +53,7 @@ update!(::AbstractAtoms, ::ZeroTemperatureGrand) = nothing
 #       probably write a collect_epsn function to compute and sort all e-vals
 #       then compute eF from those.
 
-@pot type ZeroTemperature <: SmearingFunction
+@pot type ZeroTemperature <: ChemicalPotential
    Nel::Float64
 end
 """
@@ -86,7 +93,7 @@ eval( :( fermidirac3(epsn, eF, beta) = $_fd3_ ) )
 
 # ================= Canonical Ensemble (Mermin) ============================
 
-@pot type MerminFreeEnergy <: SmearingFunction
+@pot type MerminFreeEnergy <: ChemicalPotential
    Nel::Float64
    beta::Float64
    eF::Float64
@@ -121,7 +128,7 @@ end
 # ================= Grand Potential ============================
 
 
-@pot type GrandPotential <: SmearingFunction
+@pot type GrandPotential <: ChemicalPotential
    beta::Float64
    eF::Float64
 end
@@ -146,11 +153,15 @@ _gr3_ = Calculus.differentiate(_gr2_, :epsn)
 # should still implement it, then deprecate and remove once
 # we have fixed the Atoms.jl - TightBinding.jl equivalence
 
-@pot type FermiDiracSmearing  <: SmearingFunction
+@pot type FermiDiracSmearing  <: FiniteTPotential
     beta::Float64
     eF::Float64
+    Ne::Float64
     fixed_eF::Bool
 end
+
+get_eF(f::FermiDiracSmearing) = f.eF
+get_Ne(f::FermiDiracSmearing) = f.Ne
 
 """`FermiDiracSmearing`:
 
@@ -158,76 +169,64 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 FermiDiracSmearing
 
-FermiDiracSmearing(beta; eF=0.0) = FermiDiracSmearing(beta, eF)
+FermiDiracSmearing(beta; eF=0.0, Ne = 0, fixed_eF = false) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
 
 occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
-occupancy(fd::FermiDiracSmearing, epsn::AbstractVector) = [occupancy(fd, es) for es in epsn]
+occupancy(fd::FermiDiracSmearing, epsn::Number, eF) = fermidirac(epsn, eF, fd.beta)
+occupancy(fd::FermiDiracSmearing, epsn::AbstractVector, args...) =
+      [occupancy(fd, es, args...) for es in epsn]
 
 energy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta) * epsn
 energy(fd::FermiDiracSmearing, epsn::AbstractVector) = [energy(fd, es) for es in epsn]
 
 
-
-
-# # Boilerplate to work with the FermiDiracSmearing type
-# evaluate(fd::FermiDiracSmearing, epsn) = fermidirac(epsn, fd.eF, fd.beta, epsn)
-# evaluate_d(fd::FermiDiracSmearing, epsn) = fermidirac1(fd.eF, fd.beta, epsn)
-# # Boilerplate to work with the FermiDiracSmearing type
-# evaluate(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac(eF, fd.beta, epsn)
-# evaluate_d(fd::FermiDiracSmearing, epsn, eF) = fermi_dirac_d(eF, fd.beta, epsn)
-
 function set_eF!(fd::FermiDiracSmearing, eF)
    fd.eF = eF
 end
 
-function update!(at::AbstractAtoms, f::FermiDiracSmearing)
+function update!(at::AbstractAtoms, f::FermiDiracSmearing, tbm::TBModel)
    if !f.fixed_eF
-      error("update! for FermiDiracSmearing has not been implemented yet")
+      f.eF = eF_solver(at, f, tbm)
    end
    return nothing
 end
 
 
+occupancy(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
+   sum( w * occupancy(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
 
-# TODO: The code below is the eF-solver that needs to be plugged into the
-#       canonical ensemble smearing functions
+occupancy_d(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
+   sum( w * occupancy_d(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
 
-# """
-# `update_eF!(tbm::TBModel)`: recompute the correct
-# fermi-level; using the precomputed data in `tbm.arrays`
-# """
-# function update_eF!(atm::AbstractAtoms, tbm::TBModel)
-#    if tbm.fixed_eF
-#       set_eF!(tbm.smearing, tbm.eF)
-#       return
-#    end
-#    # the following algorithm works for Fermi-Dirac, not general Smearing
-#    K, weight = monkhorstpackgrid(atm, tbm)
-#    Ne = tbm.norbitals * length(atm)
-#    nf = round(Int, ceil(Ne/2))
-#    # update_eig!(atm, tbm)
-#    # set an initial eF
-#    μ = 0.0
-#    for n = 1:length(K)
-#       k = K[n]
-#       epsn_k = get_k_array(tbm, :epsn, k)
-#       μ += weight[n] * (epsn_k[nf] + epsn_k[nf+1]) /2
-#    end
-#    # iteration by Newton algorithm
-#    err = 1.0
-#    while abs(err) > 1.0e-8
-#       Ni = 0.0
-#       gi = 0.0
-#       for n = 1:length(K)
-#          k = K[n]
-#          epsn_k = get_k_array(tbm, :epsn, k)
-#          Ni += weight[n] * sum_kbn( tbm.smearing(epsn_k, μ) )
-#          gi += weight[n] * sum_kbn( @D tbm.smearing(epsn_k, μ) )
-#       end
-#       err = Ne - Ni
-#       #println("\n err=");  print(err)
-#       μ = μ - err / gi
-#    end
-#    tbm.eF = μ
-#    set_eF!(tbm.smearing, tbm.eF)
-# end
+
+# TODO: make this robust by
+#  * adding bounds on available Ne
+#  * adding a bisection stage
+#
+function eF_solver(at, f, tbm)
+   Ne = get_Ne(f)  # target particle number
+
+   # guess-timate an initial eF (this assumes Fermi-Dirac like behaviour)
+   nf = ceil(Int, Ne)
+   μ = 0.0
+   for (w, k) in tbm.bzquad
+      epsn_k = get_k_array(at, :epsn, k)
+      μ += w * (epsn_k[nf-1] + epsn_k[nf]) / 2
+   end
+
+   # Newton iteration
+   err = 1.0
+   itctr = 0
+   while abs(err) > 1e-8
+      Ni = occupancy(at, f, tbm, μ)
+      gi = occupancy_d(at, f, tbm, μ)
+      err = Ne - Ni
+      μ = μ - err / gi
+      itctr += 1
+      if itctr > 20
+         error("eF_solver Newton iteration failed.")
+      end
+   end
+
+   return μ
+end

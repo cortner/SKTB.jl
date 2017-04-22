@@ -11,9 +11,9 @@ import JuLIP.Potentials: cutoff, @pot, evaluate, evaluate_d
 export hamiltonian, densitymatrix, TBModel
 
 
-# TODO: making SmearingFunction a potential is a bit of a hack:?
+# TODO: making ChemicalPotential a potential is a bit of a hack:?
 #       or is it? It is energy after all?
-abstract SmearingFunction <: Potential
+abstract ChemicalPotential <: Potential
 
 
 # TODO: default evaluate!; should this potentially go into Potentials?
@@ -48,7 +48,7 @@ type TBModel{P_os, P_hop, P_ol, P_p} <: AbstractTBModel
     Rcut::Float64
 
     # remaining model parameters
-    smearing::SmearingFunction
+    smearing::ChemicalPotential
     norbitals::Int
 
     #  WHERE DOES THIS GO?
@@ -117,7 +117,7 @@ cutoff(tbm::TBModel) = tbm.Rcut
 # f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 # """
 
-@pot type FermiDiracSmearing <: SmearingFunction
+@pot type FermiDiracSmearing <: ChemicalPotential
     beta
     eF
 end
@@ -156,7 +156,7 @@ end
 # TODO: write documentation
 # """
 
-@pot type ZeroTemperature <: SmearingFunction
+@pot type ZeroTemperature <: ChemicalPotential
    eF
 end
 
@@ -475,7 +475,7 @@ end
 ### Output
 * `rho::Matrix{Float64}`: density matrix,
     ρ = ∑_s f(ϵ_s) ψ_s ⊗ ψ_s
-where `f` is given by `tbm.SmearingFunction`. With BZ integration, it becomes
+where `f` is given by `tbm.ChemicalPotential`. With BZ integration, it becomes
     ρ = ∑_k w^k ∑_s f(ϵ_s^k) ψ_s^k ⊗ ψ_s^k
 """
 function densitymatrix(at::AbstractAtoms, tbm::TBModel)
