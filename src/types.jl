@@ -37,6 +37,8 @@ isorthogonal{ISORTH}(::TBHamiltonian{ISORTH}) = ISORTH == ORTHOGONAL
 isorth(H::TBHamiltonian) = isorthogonal(H)
 
 """
+`ndofs(::TBHamiltonian, ::AbstractAtoms)`
+
 returns total number of electron dofs
 """
 @protofun ndofs(::TBHamiltonian, ::AbstractAtoms)

@@ -203,9 +203,8 @@ occupancy_d(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
 #  * adding bounds on available Ne
 #  * adding a bisection stage
 #
-function eF_solver(at, f, tbm)
-   Ne = get_Ne(f)  # target particle number
-
+function eF_solver(at, f, tbm, Ne = get_Ne(f))
+   update!(at, tbm)
    # guess-timate an initial eF (this assumes Fermi-Dirac like behaviour)
    nf = ceil(Int, Ne)
    μ = 0.0
@@ -229,4 +228,24 @@ function eF_solver(at, f, tbm)
    end
 
    return μ
+end
+
+
+
+"""
+`set_δNel!(tbm::TBModel, at::AbstractAtoms, δNel = 0.0)`
+
+Set the particle number (number of electrons) to `(ndofs(at) + δNel) / 2`.
+"""
+set_δNel!(tbm::TBModel, at::AbstractAtoms, δNel = 0.0) =
+   set_Nel!(tbm, at, (ndofs(tbm.H, at)+δNel)/2)
+
+set_Nel!(tbm::TBModel, at::AbstractAtoms, Nel) =
+   set_Nel!(tbm.smearing, tbm, at, Nel)
+
+
+function set_Nel!(f::FermiDiracSmearing, tbm, at, Nel)
+   f.Ne = Nel
+   f.eF = eF_solver(at, f, tbm, Nel)
+   return nothing
 end
