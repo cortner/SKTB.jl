@@ -9,46 +9,88 @@
 
 
 
-############################################################
-### Standard Calculator Functions
+# """
+# uses spectral decomposition to compute Emin, Emax, eF
+# for the configuration `at` and stores it in `calc`
+# """
+# function calibrate2!(calc::PEXSI, at::AbstractAtoms,
+#                      beta::Float64; nkpoints=(4,4,4), eF = :auto )
+#    tbm = calc.tbm
+#    tbm.potential = FermiDiracSmearing(beta)
+#    tbm.fixed_eF = false
+#    tbm.eF = 0.0
+#    tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
+#    # this computes the spectrum and fermi-level
+#    H, M = hamiltonian(calc.tbm, at)
+#    ϵ = eigvals(full(H), full(M))
+#    if eF == :auto
+#       tbm.eF = 0.5 * sum(extrema(ϵ))
+#    else
+#       tbm.eF = eF
+#    end
+#    tbm.potential.eF = tbm.eF
+#    tbm.fixed_eF = true
+#    calc.Emin = 0.0
+#    calc.Emax = maximum( abs(ϵ - tbm.eF) )
+#    return calc
+# end
 
 
 
 
-
-function band_structure_all(at::AbstractAtoms, tbm::TBModel)
-   update!(at, tbm)
-   na = length(at) * tbm.norbitals
-   K, weight = monkhorstpackgrid(at, tbm)
-   E = zeros(na, length(K))
-   Ne = tbm.norbitals * length(at)
-   nf = round(Int, ceil(Ne/2))
-   for n = 1:length(K)
-      k = K[n]
-      epsn_k = get_k_array(tbm, :epsn, k)
-      for j = 1:na
-         E[j,n] = epsn_k[j]
-      end
-   end
-   return K, E
-end
+TB = TightBinding
 
 
-# get 2*Nb+1 bands around the fermi level
-function band_structure_near_eF(Nb, at::AbstractAtoms, tbm::TBModel)
-   update!(at, tbm)
-   K, weight = monkhorstpackgrid(at, tbm)
-   E = zeros(2*Nb+1, length(K))
-   Ne = tbm.norbitals * length(at)
-   nf = round(Int, ceil(Ne/2))
-   for n = 1:length(K)
-      k = K[n]
-      epsn_k = get_k_array(tbm, :epsn, k)
-      E[Nb+1,n] = epsn_k[nf]
-      for j = 1:Nb
-         E[Nb+1-j,n] = epsn_k[nf-j]
-         E[Nb+1+j,n] = epsn_k[nf+j]
-      end
-   end
-   return K, E
+# # 2D geometry: cross-over is at 0.05% sparsity!!!
+# for N = 6:2:20
+#    at = (N,N,1) * bulk("Al", pbc=false, cubic=true)
+#    tbm = TightBinding.ToyTBModel(r0=2.5, rcut=5.5)
+#    H, M = hamiltonian(tbm, at)
+#    Hs = sparse(H)
+#    println("N = $N | sparsity: $(nnz(Hs)/length(Hs)) %")
+#    println("  full LU:")
+#    @time lufact(H.data)
+#    @time lufact(H.data)
+#    @time lufact(H.data)
+#    println("  sparse LU:")
+#    @time lufact(Hs)
+#    @time lufact(Hs)
+#    @time lufact(Hs)
+# end
+
+
+# # 3D: cross-over is at 0.03% sparsity!!!
+# for N = 3:8
+#    at = (N,N,N) * bulk("Al", pbc=false, cubic=true)
+#    tbm = TightBinding.ToyTBModel(r0=2.5, rcut=5.5)
+#    H, M = hamiltonian(tbm, at)
+#    Hs = sparse(H)
+#    println("N = $N | sparsity: $(nnz(Hs)/length(Hs)) %")
+#    println("  full LU:")
+#    @time lufact(H.data)
+#    @time lufact(H.data)
+#    @time lufact(H.data)
+#    println("  sparse LU:")
+#    @time lufact(Hs)
+#    @time lufact(Hs)
+#    @time lufact(Hs)
+# end
+
+
+# 2D geometry NRL: cross-over is at 0.06% sparsity!!!
+# 3D, NRL: ca. 0.06 as well
+for N = 2:6
+   at = (N,N,N) * bulk("Si", pbc=false, cubic=true)
+   tbm = TightBinding.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(1.0))
+   H, M = hamiltonian(tbm, at)
+   Hs = sparse(H)
+   println("N = $N | sparsity: $(nnz(Hs)/length(Hs)) %")
+   println("  full LU:")
+   @time lufact(H.data)
+   @time lufact(H.data)
+   @time lufact(H.data)
+   println("  sparse LU:")
+   @time lufact(Hs)
+   @time lufact(Hs)
+   @time lufact(Hs)
 end

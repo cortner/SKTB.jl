@@ -37,6 +37,12 @@ energy(calc::PEXSI, at::AbstractAtoms) =
 forces(calc::PEXSI, at::AbstractAtoms) =
          - partial_energy(calc, at, calc.Idom, true)[2]
 
+site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
+         partial_energy(calc, at, [n0], false)[1]
+
+site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
+         partial_energy(calc, at, [n0], true)[2]
+
 
 """
 `update!(calc::PEXSI, at::AbstractAtoms; δNel = nothing, Nel = nothing)`
@@ -49,71 +55,13 @@ computation.
 function update!(calc::PEXSI, at::AbstractAtoms)
    update!(at, calc.tbm)
    # get the spectrum and compute Emin, Emax
-   _, epsn = band_structure_all(tbm, at)
-   Emin, Emax = extrema( abs(epsn - tbm.eF) )
-   return calc
+   epsn = spectrum(calc.tbm, at)
+   eF = get_eF(calc.tbm)
+   Emin, Emax = extrema( abs(epsn - eF) )
+   set_info!(at, (Emin, Emax), :EminEmax)    # TODO: this is not so clear that it shouldn't be transient!!
+   return nothing
 end
 
-
-"""
-uses spectral decomposition to compute Emin, Emax, eF
-for the configuration `at` and stores it in `calc`
-"""
-function calibrate2!(calc::PEXSI, at::AbstractAtoms,
-                     beta::Float64; nkpoints=(4,4,4), eF = :auto )
-   tbm = calc.tbm
-   tbm.potential = FermiDiracSmearing(beta)
-   tbm.fixed_eF = false
-   tbm.eF = 0.0
-   tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
-   # this computes the spectrum and fermi-level
-   H, M = hamiltonian(calc.tbm, at)
-   ϵ = eigvals(full(H), full(M))
-   if eF == :auto
-      tbm.eF = 0.5 * sum(extrema(ϵ))
-   else
-      tbm.eF = eF
-   end
-   tbm.potential.eF = tbm.eF
-   tbm.fixed_eF = true
-   calc.Emin = 0.0
-   calc.Emax = maximum( abs(ϵ - tbm.eF) )
-   return calc
-end
-
-# """
-# uses spectral decomposition to compute Emin, Emax, eF
-# for the configuration `at` and stores it in `calc`
-# """
-# function calibrate3!(calc::PEXSI, at::AbstractAtoms, beta::Float64)
-#    tbm = calc.tbm
-#    tbm.potential = FermiDiracSmearing(beta)
-#    tbm.fixed_eF = true
-#    tbm.eF = 0.0
-#    tbm.potential.eF = tbm.eF
-#    # this computes the spectrum and fermi-level
-#    H, M = hamiltonian(calc.tbm, at)
-#    ϵ = eigvals(full(H), full(M))
-#    calc.Emin = 0.0
-#    calc.Emax = maximum( abs(ϵ - tbm.eF) )
-#    return calc
-# end
-
-
-site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
-  partial_energy(calc, at, [n0], false)[1]
-
-site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
-  partial_energy(calc, at, [n0], true)[2]
-
-
-
-# TODO: at the moment we just have a single loop to compute
-#       energy and forces; consider instead to have forces separately
-#       but store precomputed information (the residuals)
-#       right now it looks like this would take too much storage?!?!?
-#       on the other hand, if we parallelise, maybe it is ok?
-#       >> discuss with Simon
 
 """
 partial_energy(calc::PEXSI, at, Is, deriv=false)
@@ -125,32 +73,30 @@ a sub-domain defined by `Is`.
 * `at`: an atoms object
 * `Is`: a list (`AbstractVector`) of indices specifying the subdomain
 * `deriv`: whether or not to compute derivatives as well
-
-Note that as a result of the `deriv` parameters, this function is not
-type-stable. But very likely - due to its high computational cost - this
-will never be relevant.
 """
 function partial_energy{TI <: Integer}(
                      calc::PEXSI, at::AbstractAtoms,
                      Is::AbstractVector{TI}, deriv=false)
    tbm = calc.tbm
+   EminEmax = get_info(at, :EminEmax)
 
    # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
-   @assert tbm.fixed_eF
+   @assert tbm.potential.fixed_eF
    # assume that the smearing function is FermiDiracSmearing
+   # but this should be ok to lift!!!!!
    @assert isa(tbm.potential, FermiDiracSmearing)
+
    # assume that we have only one k-point
    # TODO: eventually (when implementing dislocations) we will need BZ
    #       integration in at least one coordinate direction
    # K, w = monkhorstpackgrid(at, tbm)
-   # @assert length(K) == 1
+   @assert length(calc.tbm.bzquad) == 1
 
    # ------------------ main part of the assembly starts here
    # get the hamiltonian for the Gamma point
+   # this should return either full or sparse depending on the size of the system 
    H, M = hamiltonian(tbm, at)
-   H = full(H)
-   M = full(M)
 
    # get the Fermi-contour
    w, z = fermicontour(calc.Emin, calc.Emax, tbm.potential.beta, tbm.eF, calc.nquad)

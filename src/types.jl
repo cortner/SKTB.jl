@@ -114,17 +114,12 @@ abstract AbstractTBModel <: AbstractCalculator
 `TBModel`: basic non-self consistent tight binding calculator.
 """
 type TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: AbstractTBModel
-   # hamiltonian
-   H::HT
-   # additional MM potential (typically but not necessarily pair)
-   Vrep::SitePotential
-   # smearing function / fermi temperature model   TODO: smearing is not a good name for this?
-   smearing::ST
-   # k-point sampling
-   bzquad::BZQuadratureRule
+   H::HT                 # hamiltonian
+   Vrep::SitePotential   # additional MM potential (typically but not necessarily pair)
+   potential::ST         # chemical potential / smearing function
+   bzquad::BZQuadratureRule      # k-point sampling
    # -------------- internals ------------------
-   # step used for finite-difference approximations
-   hfd::Float64
+   hfd::Float64          # step used for finite-difference approximations
 end
 
 typealias TightBindingModel TBModel
@@ -152,6 +147,7 @@ binding model.
 hamiltonian(tbm::AbstractTBModel, at::AbstractAtoms, args...) =
    evaluate(tbm.H, at, args...)
 
+# TODO: return full or sparse hamiltonian depending on sparsity: 0.06% seems a good heuristic!
 
 
 # ==============================================================================

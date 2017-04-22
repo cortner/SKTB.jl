@@ -326,7 +326,7 @@ fermi-level; using the precomputed data in `tbm.arrays`
 """
 function update_eF!(atm::AbstractAtoms, tbm::TBModel)
    if tbm.fixed_eF
-      set_eF!(tbm.smearing, tbm.eF)
+      set_eF!(tbm.potential, tbm.eF)
       return
    end
    # the following algorithm works for Fermi-Dirac, not general Smearing
@@ -349,15 +349,15 @@ function update_eF!(atm::AbstractAtoms, tbm::TBModel)
       for n = 1:length(K)
          k = K[n]
          epsn_k = get_k_array(tbm, :epsn, k)
-         Ni += weight[n] * sum_kbn( tbm.smearing(epsn_k, μ) )
-         gi += weight[n] * sum_kbn( @D tbm.smearing(epsn_k, μ) )
+         Ni += weight[n] * sum_kbn( tbm.potential(epsn_k, μ) )
+         gi += weight[n] * sum_kbn( @D tbm.potential(epsn_k, μ) )
       end
       err = Ne - Ni
       #println("\n err=");  print(err)
       μ = μ - err / gi
    end
    tbm.eF = μ
-   set_eF!(tbm.smearing, tbm.eF)
+   set_eF!(tbm.potential, tbm.eF)
 end
 
 
@@ -486,7 +486,7 @@ function densitymatrix(at::AbstractAtoms, tbm::TBModel)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
       C_k = get_k_array(tbm, :C, k)
-      f = tbm.smearing(epsn_k, tbm.eF)
+      f = tbm.potential(epsn_k, tbm.eF)
       for m = 1:length(epsn_k)
          rho += weight[n] * f[m] * C_k[:,m] * C_k[:,m]'
       end
@@ -507,7 +507,7 @@ function energy(tbm::TBModel, at::AbstractAtoms)
    for n = 1:length(K)
       k = K[n]
       epsn_k = get_k_array(tbm, :epsn, k)
-      E += weight[n] * sum_kbn(tbm.smearing(epsn_k, tbm.eF) .* epsn_k)
+      E += weight[n] * sum_kbn(tbm.potential(epsn_k, tbm.eF) .* epsn_k)
    end
    return E
 end
@@ -556,7 +556,7 @@ function forces_k(X::JVecsF, tbm::TBModel, nlist, k::JVecF)
    # obtain the precomputed arrays
    epsn = get_k_array(tbm, :epsn, k)
    C = get_k_array(tbm, :C, k)
-   df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+   df = tbm.potential(epsn, tbm.eF) + epsn .* (@D tbm.potential(epsn, tbm.eF))
 
    # precompute some products
    const C_df_Ct = (C * (df' .* C)')::Matrix{Complex{Float64}}

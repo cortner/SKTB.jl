@@ -70,7 +70,7 @@ function set_Nel!(f::ZeroTemperature, Nel::Integer)
 end
 
 function set_Nel!(tbm::AbstractTBModel, Nel::Integer)
-   set_Nel!(tbm.smearing, Nel)
+   set_Nel!(tbm.potential, Nel)
    return tbm
 end
 
@@ -241,7 +241,7 @@ set_δNel!(tbm::TBModel, at::AbstractAtoms, δNel = 0.0) =
    set_Nel!(tbm, at, (ndofs(tbm.H, at)+δNel)/2)
 
 set_Nel!(tbm::TBModel, at::AbstractAtoms, Nel) =
-   set_Nel!(tbm.smearing, tbm, at, Nel)
+   set_Nel!(tbm.potential, tbm, at, Nel)
 
 
 function set_Nel!(f::FermiDiracSmearing, tbm, at, Nel)

@@ -46,7 +46,7 @@ function ToyTBModel(;alpha=2.0, r0=1.0, rcut=2.5, beta=1.0, fixed_eF=true,
 
    return TBModel(hop = hop,
                   overlap = ToyTBOverlap(),
-                  smearing = FermiDiracSmearing(beta),
+                  potential = FermiDiracSmearing(beta),
                   norbitals = 1,
                   Rcut = rcut,
                   fixed_eF = fixed_eF,
@@ -65,7 +65,7 @@ end
 #     h = tbm.hop(r)
 #     H = sparse(i, j, h, Natm, Natm)
 #     epsn, C = sorted_eig(H, speye(Natm))
-#     f = tbm.smearing(epsn, tbm.eF)
+#     f = tbm.potential(epsn, tbm.eF)
 #     E = r_sum(f .* epsn)
 #     return E
 # end
@@ -78,7 +78,7 @@ end
 #     h = tbm.hop(r)
 #     H = sparse(i, j, h, Natm, Natm)
 #     epsn, C = sorted_eig(H, speye(Natm))
-#     df = tbm.smearing(epsn, tbm.eF) + epsn .* (@D tbm.smearing(epsn, tbm.eF))
+#     df = tbm.potential(epsn, tbm.eF) + epsn .* (@D tbm.potential(epsn, tbm.eF))
 #     # compute derivatives of hopping
 #     dhop = @D tbm.hop(r)
 

@@ -7,7 +7,7 @@ using ForwardDiff
 using JuLIP.Potentials.ZeroSitePotential
 using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL,
                   norbitals, ChemicalPotential
-import TightBinding: hop!, overlap!, onsite!, hop, overlap, onsite_grad!
+import TightBinding: hop!, overlap!, onsite!, hop, overlap, onsite_grad!, GammaPoint
 import JuLIP.Potentials: cutoff
 
 export NRLTBModel, NRLHamiltonian

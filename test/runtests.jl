@@ -3,13 +3,15 @@ using JuLIP, JuLIP.ASE
 using JuLIP.Testing
 using Base.Test
 
+TESTDEPTH = 1
+
 println("============================================")
 println("    TightBinding Tests  ")
 println("============================================")
 
 
 # include("testtoymodel.jl")
-include("testnrltb.jl")
+# include("testnrltb.jl")
 # include("testsiteE.jl")
 
 # include("comparequip.jl")

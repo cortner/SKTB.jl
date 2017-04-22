@@ -78,7 +78,7 @@ function update!(at::AbstractAtoms, tbm::TBModel)
    # if the flag does not exist, then we update everything
    skh = SparseSKH(tbm.H, at)  # this also stores skh for later use
    update_eig!(at, skh, tbm)
-   update!(at, tbm.smearing, tbm)
+   update!(at, tbm.potential, tbm)
    return nothing
 end
 
@@ -114,7 +114,7 @@ function densitymatrix(tbm::TBModel, at::AbstractAtoms)
    N = ndofs(tbm.H, at)
    Γ = zeros(N, N)
    for (w, _, ϵ, ψ) in BZiter(tbm, at)
-      fs = occupancy(tbm.smearing, ϵ)
+      fs = occupancy(tbm.potential, ϵ)
       for a = 1:N, b = 1:N
          Γ[a,b] += w * fs * real(ψ[a] * ψ[b]')
       end
@@ -125,7 +125,7 @@ end
 
 # this is imported from JuLIP
 energy(tbm::TBModel, at::AbstractAtoms) =
-   sum( w * energy(tbm.smearing, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) )
+   sum( w * energy(tbm.potential, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) )
 
 
 
@@ -145,7 +145,7 @@ function _forces_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
    C = get_k_array(at, :C, k)::Matrix{Complex128}
-   df = grad(tbm.smearing, epsn)::Vector{Float64}
+   df = grad(tbm.potential, epsn)::Vector{Float64}
 
    # precompute some products
    # TODO: optimise these two lines?
@@ -211,7 +211,60 @@ function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
       C_k = get_k_array(at, :C, k)
       MC_k = M_k[In0, :] * C_k
       ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
-      Esite += w * sum(energy(tbm.smearing, epsn_k)  .* ψ²)
+      Esite += w * sum(energy(tbm.potential, epsn_k)  .* ψ²)
    end
    return real(Esite)
 end
+
+
+
+# ================ Band-structure =================
+
+"""
+`band_structure(tbm::TBModel, at::AbstractAtoms) -> k, E`
+
+where
+* `k` is a list of k-points
+* `E` is a ndofs x nk matrix of energies
+"""
+function band_structure(tbm::TBModel, at::AbstractAtoms)
+   update!(at, tbm)
+   na = ndofs(tbm.H, at)
+   K = JVecF[]
+   E = Vector{Float64}[]
+   for (w, k) in tbm.bzquad
+      push!(K, k)
+      append!(E, get_k_array(tbm, :epsn, k))
+   end
+   return K, reshape(E, na, length(E) ÷ na)
+end
+
+"""
+`spectrum(tbm, at) -> E::Vector`
+"""
+spectrum(tbm, at) = band_structure(at, tbm)[2][:]
+
+
+# """
+# `band_structure_near_eF(Nb::Integer, at::AbstractAtoms, tbm::TBModel) -> k, E`
+#
+# get 2*Nb+1 bands around the fermi level
+# """
+# function band_structure_near_eF(Nb, at::AbstractAtoms, tbm::TBModel)
+#    update!(at, tbm)
+#    Ne = ndofs(tbm.H, at)
+#    K = JVecF[]
+#    E = Float64[]
+#    eF = get_eF(tbm.potential)
+#    for (w, k) in tbm.bzquad
+#       push!(K, k)
+#       epsn_k = get_k_array(tbm, :epsn, k)
+#
+#       E[Nb+1,n] = epsn_k[nf]
+#       for j = 1:Nb
+#          E[Nb+1-j,n] = epsn_k[nf-j]
+#          E[Nb+1+j,n] = epsn_k[nf+j]
+#       end
+#    end
+#    return K, E
+# end

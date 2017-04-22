@@ -61,5 +61,5 @@ function ToyTBModel(; beta = 1.0, fixed_eF = true, eF = 0.0,
              hfd = 1e-6, bzquad = GammaPoint(), kwargs...)
    H = ToyHamiltonian(;kwargs...)
    TBModel( H, ZeroSitePotential(),
-            FermiDiracSmearing(beta, eF, fixed_eF), bzquad, hfd )
+            FermiDiracSmearing(beta, eF, 0, fixed_eF), bzquad, hfd )
 end

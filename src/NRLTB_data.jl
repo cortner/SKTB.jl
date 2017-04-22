@@ -19,6 +19,7 @@ end
 
 function NRLParams(s; orbitals=default_orbitals(s))
    s = string(s)
+   orbitals = string(orbitals)
    if s == "Al"  && orbitals == "spd"
       return Al_spd
    elseif s == "Si" && orbitals == "sp"
