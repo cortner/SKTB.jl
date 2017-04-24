@@ -1,56 +1,75 @@
 
 
 """
-`PEXSI <: AbstractTBModel`:
+This module implements evaluation of TB quantities based on contour integration
+instead of spectral decompostions. This module is still missing a lot of
+functionality and is therefore still experimental.
 
-This type implements evaluation of TB quantities based on contour integration
-/ pole expansion instead of spectral decompostion.
 Parts of this is based on [PEXSI](https://math.berkeley.edu/~linlin/pexsi/index.html),
-but we deviate in various ways. For example, we don't use selected inversion
-at the moment. The current implementation uses naive direct solvers.
-
-This calculator is still missing some
-functionality and is therefore experimental.
+but we deviate in various ways. For example, we don't use selected inversion,
+but rather (in the future) want to move towards an iterative solver instead.
+The current implementation uses naive direct solvers.
 
 ### TODO:
 * [ ] automatically determine Emin, Emax
-* [ ] 0T contour
+* [ ] need a 0T contour
+* [ ] in general: allow different energies, e.g. including entropy
 """
-type PEXSI{TBM <: TBModel} <: AbstractTBModel
-   tbm::TBM
-   nquad::Int           # number of quadrature points
-   Idom::Vector{Int}    # subset of atoms on which to compute the energy
+module Contour
+
+using JuLIP
+using JuLIP: cutoff
+using TightBinding: TBModel, monkhorstpackgrid, hamiltonian, FermiDiracSmearing,
+                     update!, band_structure_all, indexblock,
+                     evaluate, evaluate_d!, grad!
+using FermiContour
+
+import JuLIP: energy, forces
+import JuLIP.Potentials: site_energy, site_energy_d
+
+
+type ContourCalculator{P_os, P_hop, P_ol, P_p} <: AbstractCalculator
+   tbm::TBModel{P_os, P_hop, P_ol, P_p}
+   nquad::Int
+   Idom::Vector{Int}
+   Emin::Float64
+   Emax::Float64
 end
 
+ContourCalculator(tbm, nquad) = ContourCalculator(tbm, nquad, Int[])
+ContourCalculator(tbm, nquad, Idom) = ContourCalculator(tbm, nquad, Idom, 0.0, 0.0)
 
-PEXSI(tbm, nquad) = PEXSI(tbm, nquad, Int[])
-PEXSI(tbm, nquad, Idom) = PEXSI(tbm, nquad, Idom, 0.0, 0.0)
-
-function set_domain!(calc::PEXSI, Idom::Vector{Int})
+function set_domain!(calc::ContourCalculator, Idom::Vector{Int})
    calc.Idom = Idom
    return calc
 end
 
-energy(calc::PEXSI, at::AbstractAtoms) =
+energy(calc::ContourCalculator, at::AbstractAtoms) =
          partial_energy(calc, at, calc.Idom, false)[1]
 
-forces(calc::PEXSI, at::AbstractAtoms) =
+forces(calc::ContourCalculator, at::AbstractAtoms) =
          - partial_energy(calc, at, calc.Idom, true)[2]
 
 
 """
-`update!(calc::PEXSI, at::AbstractAtoms; δNel = nothing, Nel = nothing)`
-
-uses spectral decomposition to pre-compute some parameters needed for the PEXSI
-scheme; in particular  Emin, Emax, eF for the configuration `at` and stores it
-in `calc`. This is normally done in a preprocessing step before the actual
-computation.
+uses spectral decomposition to compute Emin, Emax, eF
+for the configuration `at` and stores it in `calc`
 """
-function update!(calc::PEXSI, at::AbstractAtoms)
-   update!(at, calc.tbm)
+function calibrate!(calc::ContourCalculator, at::AbstractAtoms,
+                     beta::Float64; nkpoints=(4,4,4) )
+   tbm = calc.tbm
+   tbm.smearing = FermiDiracSmearing(beta)
+   tbm.fixed_eF = false
+   tbm.eF = 0.0
+   tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
+   # this computes the spectrum and fermi-level
+   update!(at, tbm)
+   @assert tbm.eF == tbm.smearing.eF
+   tbm.fixed_eF = true
+   tbm.nkpoints = nkpoints_old
    # get the spectrum and compute Emin, Emax
-   _, epsn = band_structure_all(tbm, at)
-   Emin, Emax = extrema( abs(epsn - tbm.eF) )
+   _, epsn = band_structure_all(at, tbm)
+   calc.Emin, calc.Emax = extrema( abs(epsn - tbm.eF) )
    return calc
 end
 
@@ -59,10 +78,10 @@ end
 uses spectral decomposition to compute Emin, Emax, eF
 for the configuration `at` and stores it in `calc`
 """
-function calibrate2!(calc::PEXSI, at::AbstractAtoms,
+function calibrate2!(calc::ContourCalculator, at::AbstractAtoms,
                      beta::Float64; nkpoints=(4,4,4), eF = :auto )
    tbm = calc.tbm
-   tbm.potential = FermiDiracSmearing(beta)
+   tbm.smearing = FermiDiracSmearing(beta)
    tbm.fixed_eF = false
    tbm.eF = 0.0
    tbm.nkpoints, nkpoints_old = nkpoints, tbm.nkpoints
@@ -74,7 +93,7 @@ function calibrate2!(calc::PEXSI, at::AbstractAtoms,
    else
       tbm.eF = eF
    end
-   tbm.potential.eF = tbm.eF
+   tbm.smearing.eF = tbm.eF
    tbm.fixed_eF = true
    calc.Emin = 0.0
    calc.Emax = maximum( abs(ϵ - tbm.eF) )
@@ -85,12 +104,12 @@ end
 # uses spectral decomposition to compute Emin, Emax, eF
 # for the configuration `at` and stores it in `calc`
 # """
-# function calibrate3!(calc::PEXSI, at::AbstractAtoms, beta::Float64)
+# function calibrate3!(calc::ContourCalculator, at::AbstractAtoms, beta::Float64)
 #    tbm = calc.tbm
-#    tbm.potential = FermiDiracSmearing(beta)
+#    tbm.smearing = FermiDiracSmearing(beta)
 #    tbm.fixed_eF = true
 #    tbm.eF = 0.0
-#    tbm.potential.eF = tbm.eF
+#    tbm.smearing.eF = tbm.eF
 #    # this computes the spectrum and fermi-level
 #    H, M = hamiltonian(calc.tbm, at)
 #    ϵ = eigvals(full(H), full(M))
@@ -100,10 +119,10 @@ end
 # end
 
 
-site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
+site_energy(calc::ContourCalculator, at::AbstractAtoms, n0::Integer) =
   partial_energy(calc, at, [n0], false)[1]
 
-site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
+site_energy_d(calc::ContourCalculator, at::AbstractAtoms, n0::Integer) =
   partial_energy(calc, at, [n0], true)[2]
 
 
@@ -116,12 +135,12 @@ site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
 #       >> discuss with Simon
 
 """
-partial_energy(calc::PEXSI, at, Is, deriv=false)
+partial_energy(calc::ContourCalculator, at, Is, deriv=false)
 
 Instead of the total energy of a QM system this computes the energy stored in
 a sub-domain defined by `Is`.
 
-* `calc`: a `PEXSI`, defining a tight-binding model
+* `calc`: a `ContourCalculator`, defining a tight-binding model
 * `at`: an atoms object
 * `Is`: a list (`AbstractVector`) of indices specifying the subdomain
 * `deriv`: whether or not to compute derivatives as well
@@ -131,7 +150,7 @@ type-stable. But very likely - due to its high computational cost - this
 will never be relevant.
 """
 function partial_energy{TI <: Integer}(
-                     calc::PEXSI, at::AbstractAtoms,
+                     calc::ContourCalculator, at::AbstractAtoms,
                      Is::AbstractVector{TI}, deriv=false)
    tbm = calc.tbm
 
@@ -139,7 +158,7 @@ function partial_energy{TI <: Integer}(
    # assume that the fermi-level is fixed
    @assert tbm.fixed_eF
    # assume that the smearing function is FermiDiracSmearing
-   @assert isa(tbm.potential, FermiDiracSmearing)
+   @assert isa(tbm.smearing, FermiDiracSmearing)
    # assume that we have only one k-point
    # TODO: eventually (when implementing dislocations) we will need BZ
    #       integration in at least one coordinate direction
@@ -153,7 +172,7 @@ function partial_energy{TI <: Integer}(
    M = full(M)
 
    # get the Fermi-contour
-   w, z = fermicontour(calc.Emin, calc.Emax, tbm.potential.beta, tbm.eF, calc.nquad)
+   w, z = fermicontour(calc.Emin, calc.Emax, tbm.smearing.beta, tbm.eF, calc.nquad)
 
    # collect all the orbital-indices corresponding to the site-indices
    # into a long vector
