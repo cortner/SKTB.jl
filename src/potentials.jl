@@ -171,7 +171,7 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 FermiDiracSmearing
 
-FermiDiracSmearing(beta; eF=0.0, Ne = 0, fixed_eF = true) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
+FermiDiracSmearing(beta; eF=0.0, Ne = 0.0, fixed_eF = true) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
 
 occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
 occupancy(fd::FermiDiracSmearing, epsn::Number, eF) = fermidirac(epsn, eF, fd.beta)

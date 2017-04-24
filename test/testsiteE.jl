@@ -2,6 +2,8 @@ using JuLIP, JuLIP.Potentials, TightBinding
 using JuLIP.Potentials: site_energy, site_energy_d
 TB = TightBinding
 
+@testset "Site Energy" begin
+
 # test parameters
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
 
@@ -105,3 +107,6 @@ end
 #    end
 #    println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
 # end
+
+
+end 

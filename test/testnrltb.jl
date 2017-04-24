@@ -1,4 +1,5 @@
 
+
 TB=TightBinding
 
 @testset "NRLTB" begin
@@ -13,16 +14,15 @@ else
    Orbitals = (:sp, :spd)
 end
 
-
 for orbitals in Orbitals
    println("Test NRLTB with $(orbitals)")
    at = (1,2,2) * bulk("Si", pbc=(true, true, true), cubic=true)
    @show length(at)
-   β, fixed_eF = 1.0, 0.0, true
+   β, fixed_eF = 1.0, true
    tbm = TB.NRLTB.NRLTBModel(:Si, orbitals = orbitals,
                              TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
-                             # bzquad = TB.GammaPoint() )
                              bzquad=TB.MPGrid(at, (4,0,0)) )
+                             # bzquad = TB.GammaPoint() )
    print("Test setting Nel ... ")
    TB.set_δNel!(tbm, at)
    println("ok.")
@@ -30,9 +30,9 @@ for orbitals in Orbitals
    @show TB.get_eF(tbm.potential)
 
    # perturb positions a bit
-   # X = positions(at)
-   # X[2] += 0.1 * rand(JVecF)
-   # set_positions!(at, X)
+   X = positions(at)
+   X[2] += 0.1 * rand(JVecF)
+   set_positions!(at, X)
 
    print("check that hamiltonian evaluates ... ")
    H, M = hamiltonian(tbm, at)
