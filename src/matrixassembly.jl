@@ -9,6 +9,7 @@ using ForwardDiff
 #
 
 
+
 """
 `indexblock`:
 a little auxiliary function to compute indices of Slater Koster orbitals,
@@ -18,20 +19,13 @@ heap memory is allocated.
 indexblock{IO,NORB}(n::Integer, H::SKHamiltonian{IO,NORB}) =
    SVector{NORB, Int}( ((n-1)*NORB+1):(n*NORB) )
 
-# The following code is uncommented because we don't need it right now
-# it will probably used for the ContourCalculator
-#
-# function skindexblock{T <: Integer}(Iat::AbstractVector{T}, norb::Integer)
-#    out = T[]
-#    for n in Iat
-#       append!(out, indexblock(n, norb))
-#    end
-#    return out
-# end
-#
-# indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian) =
-#    skindexblock(Iat, norbitals(H))
-
+function indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian)
+   out = T[]
+   for n in Iat
+      append!(out, indexblock(n, H))
+   end
+   return out
+end
 
 
 ############################################################
@@ -287,7 +281,7 @@ function _full!{NORB}(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB})
    end
    Hout[diagind(Hout)] = real(Hout[diagind(Hout)])
    Mout[diagind(Mout)] = real(Mout[diagind(Mout)])
-   return Hermitian(Hout), Hermitian(Mout)
+   return Hout, Mout
 end
 
 
@@ -302,99 +296,8 @@ function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
       end
    end
    Hout[diagind(Hout)] = real(Hout[diagind(Hout)])
-   return Hermitian(Hout), I
+   return Hout, I
 end
-
-
-
-# import Base.-
-# -(A::AbstractVector{JVecF}, a::JVecF) = JVecF[v - a for v in A]
-#
-# dott(a::JVecF, A::AbstractVector{JVecF}) = JVecF[dot(a, v) for v in A]
-#
-#
-# # # append to triplet format: version 1 for H and M (non-orth TB)
-# function _append!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
-#                   It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
-#    @inbounds for i = 1:NORB, j = 1:NORB
-#       idx += 1
-#       It[idx] = In[i]
-#       Jt[idx] = Im[j]
-#       Ht[idx] = H_nm[i,j] * exp_i_kR
-#       Mt[idx] = M_nm[i,j] * exp_i_kR
-#    end
-#    return idx
-# end
-#
-# # append to triplet format: version 2 for H only (orthogonal TB)
-# function _append!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
-#                   It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, idx)
-#    @inbounds for i = 1:NORB, j = 1:NORB
-#       idx += 1
-#       It[idx] = In[i]
-#       Jt[idx] = Im[j]
-#       Ht[idx] = H_nm[i,j] * exp_i_kR
-#    end
-#    return idx
-# end
-#
-# # inner SKHamiltonian assembly
-# #
-# # NOTES:
-# #  * exp_i_kR = complex multiplier needed for BZ integration
-# #  * we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
-# #       but this would actually be less efficient, and less clear to read
-# #
-# #
-# function assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
-#                                  k, It, Jt, Ht, Mt, nlist, X)
-#
-#    # TODO: H_nm, M_nm, bonds could all be MArrays
-#    idx = 0                     # initialise index into triplet format
-#    H_nm = zeros(NORB, NORB)    # temporary arrays for computing H and M entries
-#    M_nm = zeros(NORB, NORB)
-#    bonds = zeros(nbonds(H))     # temporary array for storing the potentials
-#
-#    # loop through sites
-#    for (n, neigs, r, R, _) in sites(nlist)
-#       In = indexblock(n, H)     # index-block for atom index n
-#       # loop through the neighbours of the current atom (i.e. the bonds)
-#       for m = 1:length(neigs)
-#          U = R[m]/r[m]
-#          # hamiltonian block
-#          sk!(H, U, hop!(H, r[m], bonds), H_nm)
-#          # overlap block (only if the model is NONORTHOGONAL)
-#          ISORTH || sk!(H, U, overlap!(H, r[m], bonds), M_nm)
-#          # add new indices into the sparse matrix
-#          Im = indexblock(neigs[m], H)
-#          exp_i_kR = exp( im * dot(k, R[m] - (X[neigs[m]] - X[n])) )
-#          idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
-#       end
-#
-#       # now compute the on-site blocks;
-#       # TODO: revisit this (can one do the scalar temp trick again?) >>> only if we assume diagonal!
-#       # on-site hamiltonian block
-#       onsite!(H, r, R, H_nm)
-#       # on-site overlap matrix block (only if the model is NONORTHOGONAL)
-#       ISORTH || overlap!(H, M_nm)
-#       # add into sparse matrix
-#       idx = _append!(H, It, Jt, Ht, Mt, In, In, H_nm, M_nm, 1.0, idx)
-#    end
-#
-#    # convert M, H into Sparse CCS and return
-#    #   NOTE: The conversion to sparse format accounts for about 1/2 of the
-#    #         total cost. Since It, Jt are in an ordered format, it should be
-#    #         possible to write a specialised code that converts it to
-#    #         CCS much faster, possibly with less additional allocation?
-#    #         another option would be to store a single It, Jt somewhere
-#    #         for ALL the hamiltonians, and store multiple Ht, Mt and convert
-#    #         these "on-the-fly", depending on whether full or sparse is needed.
-#    #         but at the moment, eigfact cost MUCH more than the assembly,
-#    #         so we could choose to stop here.
-#    return ISORTH ? (sparse(It, Jt, Ht), I) :
-#                    (sparse(It, Jt, Ht), sparse(It, Jt, Mt))
-# end
-
 
 
 

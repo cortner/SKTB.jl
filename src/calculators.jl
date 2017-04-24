@@ -21,14 +21,14 @@ using JuLIP: set_transient!, get_transient
 `sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well.
 """
-function sorted_eig(H::Hermitian, M::Hermitian)
-   epsn, C = eig(H, M)
+function sorted_eig(H::Matrix, M::Matrix)
+   epsn, C = eig(Hermitian(H), Hermitian(M))
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
 
-function sorted_eig(H::Hermitian, ::UniformScaling)
-   epsn, C = eig(H)
+function sorted_eig(H::Matrix, ::UniformScaling)
+   epsn, C = eig(Hermitian(H))
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
@@ -231,10 +231,10 @@ function band_structure(tbm::TBModel, at::AbstractAtoms)
    update!(at, tbm)
    na = ndofs(tbm.H, at)
    K = JVecF[]
-   E = Vector{Float64}[]
+   E = Float64[]
    for (w, k) in tbm.bzquad
       push!(K, k)
-      append!(E, get_k_array(tbm, :epsn, k))
+      append!(E, get_k_array(at, :epsn, k))
    end
    return K, reshape(E, na, length(E) ÷ na)
 end
@@ -242,7 +242,7 @@ end
 """
 `spectrum(tbm, at) -> E::Vector`
 """
-spectrum(tbm, at) = band_structure(at, tbm)[2][:]
+spectrum(tbm, at) = band_structure(tbm, at)[2][:]
 
 
 # """

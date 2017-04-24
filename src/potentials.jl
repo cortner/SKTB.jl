@@ -33,6 +33,8 @@ occupancy_d(f::ChemicalPotential, epsn::Real, μ::Real) =
 occupancy_d(f::ChemicalPotential, epsn::AbstractVector, args...) =
    [occupancy_d(f, s, args...) for s in epsn]
 
+beta(f::FiniteTPotential) = f.beta
+beta(f::ZeroTPotential) = Inf    # or should it be `nothing`???
 
 # ================= Zero-Temperature Models  ============================
 
@@ -169,7 +171,7 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 FermiDiracSmearing
 
-FermiDiracSmearing(beta; eF=0.0, Ne = 0, fixed_eF = false) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
+FermiDiracSmearing(beta; eF=0.0, Ne = 0, fixed_eF = true) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
 
 occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
 occupancy(fd::FermiDiracSmearing, epsn::Number, eF) = fermidirac(epsn, eF, fd.beta)

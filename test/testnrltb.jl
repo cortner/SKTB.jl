@@ -48,11 +48,11 @@ for orbitals in Orbitals
    println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
    @test true
 
-   # println("-------------------------------------------")
-   # println("  Finite-difference test with NRLTBModel:  ")
-   # println("-------------------------------------------")
-   # @test fdtest(tbm, at, verbose=true)
-   # println("-------------------------------------------")
+   println("-------------------------------------------")
+   println("  Finite-difference test with NRLTBModel:  ")
+   println("-------------------------------------------")
+   @test fdtest(tbm, at, verbose=true)
+   println("-------------------------------------------")
 end
 
 end

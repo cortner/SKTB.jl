@@ -129,6 +129,8 @@ TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
 
 isorthogonal(tbm::TBModel) = isorthogonal(tbm.H)
 
+get_eF(tbm::TBModel) = get_eF(tbm.potential)
+
 """
 `hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
 binding model.

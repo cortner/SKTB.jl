@@ -9,11 +9,12 @@ println("============================================")
 println("    TightBinding Tests  ")
 println("============================================")
 
-
-# include("testtoymodel.jl")
-# include("testnrltb.jl")
+# =========== Main tests =================
+include("testtoymodel.jl")
+include("testnrltb.jl")
 # include("testsiteE.jl")
 
+# =============
 # include("comparequip.jl")
 # include("compareatoms.jl")
 

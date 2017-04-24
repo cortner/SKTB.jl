@@ -6,7 +6,7 @@ using JuLIP: @protofun
 using JuLIP.Potentials: @pot, SitePotential
 
 import JuLIP: energy, forces, cutoff
-import JuLIP.Potentials: evaluate, evaluate_d, site_energy
+import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d
 
 # using FixedSizeArrays
 export hamiltonian, densitymatrix, TBModel, TightBindingModel
@@ -46,7 +46,7 @@ include("NRLTB.jl")
 include("calculators.jl")
 
 # implement the contour integral variants of the TB model
-# include("contour.jl")
+include("pexsi.jl")
 
 
 # TODO: perturbation theory module
