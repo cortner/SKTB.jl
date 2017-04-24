@@ -42,7 +42,7 @@ Es = [TB.site_energy(tbm, at, n) for n = 1:length(at)]
 println("Convergence of Contour integral implementation")
 for nquad in NQUAD
    calc.nquad = nquad
-   Enew, _ = TB.Contour.site_energy(calc, at, n0)
+   Enew = TB.Contour.site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
 
@@ -50,7 +50,8 @@ end
 println("Test consistency of site forces")
 calc.nquad = 10
 X = copy( positions(at) |> mat )
-Es, dEs = TB.Contour.site_energy(calc, at, n0, true)
+Es = TB.Contour.site_energy(calc, at, n0)
+dEs = TB.Contour.site_energy_d(calc, at, n0)
 dEs = dEs |> mat
 dEsh = []
 println(" p  |  error ")
@@ -60,7 +61,7 @@ for p = 2:9
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)
-      Esh, _ = TB.Contour.site_energy(calc,at,n0)
+      Esh = TB.Contour.site_energy(calc, at, n0)
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end
