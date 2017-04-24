@@ -14,7 +14,8 @@ This calculator is still missing some
 functionality and is therefore experimental.
 
 ### TODO:
-* [ ] automatically determine Emin, Emax
+* [ ] an automatic calibration mechanism that determines a good
+      discretisation (nquad) as well as E0, E1.
 * [ ] 0T contour
 """
 type PEXSI{TBM <: TBModel} <: AbstractTBModel
@@ -54,7 +55,7 @@ site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
 
 
 """
-`update!(calc::PEXSI, at::AbstractAtoms; δNel = nothing, Nel = nothing)`
+`update!(calc::PEXSI, at::AbstractAtoms)`
 
 uses spectral decomposition to pre-compute some parameters needed for the PEXSI
 scheme; in particular  Emin, Emax, eF for the configuration `at` and stores it
@@ -70,6 +71,7 @@ function update!(calc::PEXSI, at::AbstractAtoms)
    set_info!(at, :EminEmax, (Emin, Emax))    # TODO: this is not so clear that it shouldn't be transient!!
    return nothing
 end
+# TODO: not so clear that Emin, Emax should be updated!!!!
 
 import Base.\
 function \(A::Base.SparseArrays.UMFPACK.UmfpackLU, B::Matrix{Float64})

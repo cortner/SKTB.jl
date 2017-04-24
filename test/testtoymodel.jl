@@ -19,15 +19,12 @@ println("Testing ToyTBModel: ")
 print("check that hamiltonian evaluates ... ")
 H, M = hamiltonian(tbm, at)
 println("ok.")
-@test true
 print("check that `densitymatrix` evaluates ... ")
 Γ = densitymatrix(tbm, at)
-println("ok.")
-@test true
+println("ok.")@test true
 print("check that `energy` evaluates ... ")
 E = energy(tbm, at)
 println("ok : E = ", E, ".")
-@test true
 print("check that `forces` evaluates ... ")
 frc = forces(tbm, at)
 println("ok : |f|∞ = ", maximum(norm.(frc)), ".")
