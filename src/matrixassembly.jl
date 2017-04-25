@@ -328,13 +328,22 @@ end
 #
 SKBlockGradType{IO, NORB}(H::SKHamiltonian{IO, NORB}) = typeof(@SArray zeros(3, NORB, NORB))
 
+#
+# the next getindex extension is a little trick that let's us do the following:
+#
+#
+# import Base.getindex
+# getindex{T}(a::SArray{(3,1,1), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+# getindex{S,T}(a::SArray{(3,4,4), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+# getindex{S,T}(a::SArray{(3,9,9), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+
 
 function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
    # if the array has previously been computed, just return it
    if has_transient(at, :SKBg)
       return get_transient(at, :SKBg)
    end
-   # if not generate it from scratch
+   # (if not then generate it from scratch >>> rest of this function)
 
    # entry-type
    SKBg = SKBlockGradType(H)

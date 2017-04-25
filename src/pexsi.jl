@@ -154,17 +154,8 @@ function pexsi_partial_energy{TI <: Integer}(
 
       # --------------- assemble forces -----------
       if deriv
-         # res = isorthogonal(tbm) ? resM : LU \ rhs
-         res = LU \ rhs
-         # ∇E += _pexsi_site_grad(tbm, at, tbm.H, skhg, res, resM, rhs, 2.0 * wi*zi, zi)
-         ∇E += _site_grad_inner(tbm, at, skhg, res, resM, rhs, wi*zi, zi)
-         # # >>>>>>>>> START DEBUG >>>>>>>>
-         # # (keep this code for performance testing)
-         # Profile.clear()
-         # @profile  Esite_d += site_grad_inner(tbm, at, res, resM, rhs, 2.0*wi*zi, zi)
-         # Profile.print()
-         # quit()
-         # # <<<<<<<<< END DEBUG <<<<<<<<<
+         res = isorthogonal(tbm) ? resM : LU \ rhs
+         _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*zi, zi)
       end
    end
    # --------------------------------------------
@@ -172,115 +163,25 @@ function pexsi_partial_energy{TI <: Integer}(
 end
 
 
-# ~~~~~~~~~~~~~~ CONTINUE HERE ~~~~~~~~~~~~~~~
 
-# import Base.getindex
+import Base.getindex
+getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
-
-function _pexsi_site_grad{ISORTH, NORB}(tbm, at, H::SKHamiltonian{ISORTH, NORB},
-                                        skhg, res, resM, e0, wi, zi)
-
-   # allocate force vector
-   ∇E = zerovecs(length(at))
-
-   if isorthogonal(tbm)
-      dM_ij = @SArray zeros(3, norbitals(tbm), norbitals(tbm))
-   end
-   f1 = zeros(Complex128, 3)
-
-   for n = 1:length(skhg.i)
-      i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
-      if !isorthogonal(tbm); dM_ij = skhg.dM[n]; end
-      Ii, Ij = indexblock(i, H), indexblock(j, H)
-      fill!(f1, 0.0) #JVec(0.0im,0.0im,0.0im)
-      for t = 1:size(res,2), a = 1:NORB, b = 1:NORB
-         for c = 1:3
-            f1[c] += - (wi * res[Ii[a], t] * resM[Ij[b], t]) *
-                               ( dH_ij[c,a,b] - zi * dM_ij[c,a,b] )
-            f1[c] += - (wi * res[Ii[a], t] * resM[Ii[b], t]) * dH_ii[c,a,b]
-            f1[c] += (wi * res[Ii[a], t] * e0[Ij[b], t]) * dM_ij[c,a,b]
-         end
+function _pexsi_site_grad!{ISORTH, NORB}(∇E, H::SKHamiltonian{ISORTH,NORB}, skhg,
+                                         res, resM, e0, wi, zi)
+   for t = 1:length(skhg.i)
+      n, m, dH_nm, dH_nn = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t]
+      In = indexblock(n, H)
+      Im = indexblock(m, H)
+      dM_nm = skhg.dM[t]
+      f1 = JVec(0.0im,0.0im,0.0im)
+      for t = 1:size(res,2), a = 1:NORB, b = 1:NORB   # 2500
+         f1 += - (wi * res[In[a], t] * resM[Im[b], t]) * ( dH_nm[:,a,b] - zi * dM_nm[:,a,b] )
+         f1 += - (wi * res[In[a], t] * resM[In[b], t]) * dH_nn[:,a,b]
+         f1 += (wi * res[In[a], t] * e0[Im[b], t]) * dM_nm[:,a,b]
       end
-      ∇E[j] += real(f1)
-      ∇E[i] -= real(f1)
+      ∇E[m] += real(f1)
+      ∇E[n] -= real(f1)
    end
-
    return ∇E
-end
-
-
-# tyealias SKHGBlock{NORB} SMatrix{NORB, NORB, StaticArrays.SVector{3,Float64},16}
-# function SKHGBlock{NORB}(a::SArray)
-
-# import Base.getindex
-# getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
-
-function _site_grad_inner(tbm, at, skhg, res, resM, e0, wi, zi)
-
-   # count the maximum number of neighbours
-   nlist = neighbourlist(at, cutoff(tbm.H))
-   # this is a long loop, but it costs nothing compared to the for-loop below
-   maxneigs = maximum( length(s[2]) for s in sites(nlist) )
-
-   # pre-allocate dH, dM arrays
-   norb = norbitals(tbm.H)
-   dH_nn = zeros(3, norb, norb, maxneigs)
-   dH_nm = zeros(3, norb, norb)
-   dM_nm = zeros(3, norb, norb)
-   # creates references to these arrays; when dH_nn etc get new data
-   # written into them, then vdH_nn etc are automatically updated.
-   vdH_nn = vecs(dH_nn)::Array{JVecF, 3}   # no x no x maxneigs array with each entry a JVecF
-   vdH_nm = vecs(dH_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
-   vdM_nm = vecs(dM_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
-
-   const bonds = zeros(nbonds(tbm.H))
-   const dbonds = zeros(nbonds(tbm.H))
-
-   # allocate force vector
-   frc = zerovecs(length(at))
-
-   idx = 0
-
-   for (n, neigs, r, R, _) in sites(at, cutoff(tbm.H))
-      In = indexblock(n, tbm.H)
-      onsite_grad!(tbm.H, r, R, dH_nn)    # 2100 (performance)
-      for i_n = 1:length(neigs)
-
-         idx += 1
-         @assert skhg.i[idx] == n
-         @assert skhg.j[idx] == neigs[i_n]
-
-         m = neigs[i_n]
-         Im = indexblock(m, tbm.H)
-
-         # hop_d!(tbm.hop, r[i_n], R[i_n], dH_nm)    #  2600
-         # grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)   # 2800
-
-         hop_d!(tbm.H, r[i_n], bonds, dbonds)
-         sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
-
-         # if !ISORTH
-            overlap_d!(tbm.H, r[i_n], bonds, dbonds)
-            sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
-         # end
-
-         dH_ij = skhg.dH[idx]
-         @assert Array(dH_ij) == dH_nm
-         dM_ij = skhg.dM[idx]
-         @assert Array(dM_ij) == dM_nm
-         dH_ii = skhg.dOS[idx]
-         @assert Array(dH_ii) == dH_nn[:,:,:,i_n]
-
-         f1 = JVec(0.0im,0.0im,0.0im)
-         for t = 1:size(res,2), a = 1:norb, b = 1:norb   # 2500
-            f1 += - (wi * res[In[a], t] * resM[Im[b], t]) *
-                               ( vdH_nm[a,b] - zi * vdM_nm[a,b] )
-            f1 += - (wi * res[In[a], t] * resM[In[b], t]) * vdH_nn[a,b,i_n]
-            f1 += (wi * res[In[a], t] * e0[Im[b], t]) * vdM_nm[a,b]
-         end
-         frc[m] += real(f1)
-         frc[n] -= real(f1)
-      end
-   end
-   return frc
 end   # site_force_inner
