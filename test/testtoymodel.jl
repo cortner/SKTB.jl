@@ -21,7 +21,7 @@ H, M = hamiltonian(tbm, at)
 println("ok.")
 print("check that `densitymatrix` evaluates ... ")
 Γ = densitymatrix(tbm, at)
-println("ok.")@test true
+println("ok.")
 print("check that `energy` evaluates ... ")
 E = energy(tbm, at)
 println("ok : E = ", E, ".")

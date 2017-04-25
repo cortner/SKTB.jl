@@ -98,7 +98,6 @@ function pexsi_partial_energy{TI <: Integer}(
                      calc::PEXSI, at::AbstractAtoms,
                      Is::AbstractVector{TI}, deriv=false)
    tbm = calc.tbm
-   EminEmax = get_info(at, :EminEmax)
 
    # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
@@ -124,7 +123,8 @@ function pexsi_partial_energy{TI <: Integer}(
 
    # get the Fermi-contour
    Emin, Emax = get_info(at, :EminEmax)::Tuple{Float64, Float64}
-   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential), calc.nquad)
+   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential),
+                        calc.nquad)
 
    # collect all the orbital-indices corresponding to the site-indices
    # into a long vector
@@ -154,13 +154,10 @@ function pexsi_partial_energy{TI <: Integer}(
 
       # --------------- assemble forces -----------
       if deriv
-         if isorthogonal(tbm)
-            res = resM
-         else
-            res = LU \ rhs
-         end
-         ∇E += _pexsi_site_grad(tbm, at, tbm.H, skhg, res, resM, rhs, wi*zi, zi)
-         # ∇E += _site_grad_inner(tbm, at, res, resM, rhs, wi*zi, zi)
+         # res = isorthogonal(tbm) ? resM : LU \ rhs
+         res = LU \ rhs
+         # ∇E += _pexsi_site_grad(tbm, at, tbm.H, skhg, res, resM, rhs, 2.0 * wi*zi, zi)
+         ∇E += _site_grad_inner(tbm, at, skhg, res, resM, rhs, wi*zi, zi)
          # # >>>>>>>>> START DEBUG >>>>>>>>
          # # (keep this code for performance testing)
          # Profile.clear()
@@ -212,9 +209,13 @@ function _pexsi_site_grad{ISORTH, NORB}(tbm, at, H::SKHamiltonian{ISORTH, NORB},
 end
 
 
+# tyealias SKHGBlock{NORB} SMatrix{NORB, NORB, StaticArrays.SVector{3,Float64},16}
+# function SKHGBlock{NORB}(a::SArray)
 
+# import Base.getindex
+# getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
-function _site_grad_inner(tbm, at, res, resM, e0, wi, zi)
+function _site_grad_inner(tbm, at, skhg, res, resM, e0, wi, zi)
 
    # count the maximum number of neighbours
    nlist = neighbourlist(at, cutoff(tbm.H))
@@ -232,28 +233,42 @@ function _site_grad_inner(tbm, at, res, resM, e0, wi, zi)
    vdH_nm = vecs(dH_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
    vdM_nm = vecs(dM_nm)::Matrix{JVecF}     # no x no matrix  of JVecF
 
-   const bonds = zeros(nbonds(H))
-   const dbonds = zeros(nbonds(H))
+   const bonds = zeros(nbonds(tbm.H))
+   const dbonds = zeros(nbonds(tbm.H))
 
    # allocate force vector
    frc = zerovecs(length(at))
+
+   idx = 0
 
    for (n, neigs, r, R, _) in sites(at, cutoff(tbm.H))
       In = indexblock(n, tbm.H)
       onsite_grad!(tbm.H, r, R, dH_nn)    # 2100 (performance)
       for i_n = 1:length(neigs)
+
+         idx += 1
+         @assert skhg.i[idx] == n
+         @assert skhg.j[idx] == neigs[i_n]
+
          m = neigs[i_n]
          Im = indexblock(m, tbm.H)
 
          # hop_d!(tbm.hop, r[i_n], R[i_n], dH_nm)    #  2600
          # grad!(tbm.overlap, r[i_n], R[i_n], dM_nm)   # 2800
 
-         hop_d!(H, r[i_n], bonds, dbonds)
-         sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
-         if !ISORTH
-            overlap_d!(H, r[i_n], bonds, dbonds)
-            sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
-         end
+         hop_d!(tbm.H, r[i_n], bonds, dbonds)
+         sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
+
+         dH_ij = skhg.dH[idx]
+         display(Array(dH_ij)[1,:,:])
+         display(dH_nm[1,:,:])
+         @assert Array(dH_ij) == dH_nm
+         quit()
+
+         # if !ISORTH
+            overlap_d!(tbm.H, r[i_n], bonds, dbonds)
+            sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
+         # end
 
          f1 = JVec(0.0im,0.0im,0.0im)
          for t = 1:size(res,2), a = 1:norb, b = 1:norb   # 2500
