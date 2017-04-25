@@ -53,6 +53,8 @@ site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
 site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
          pexsi_partial_energy(calc, at, [n0], true)[2]
 
+partial_energy(calc::PEXSI, at::AbstractAtoms, Idom) =
+         pexsi_partial_energy(calc, at, Idom, false)[1]
 
 """
 `update!(calc::PEXSI, at::AbstractAtoms)`
@@ -126,8 +128,7 @@ function pexsi_partial_energy{TI <: Integer}(
    w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential),
                         calc.nquad)
 
-   # collect all the orbital-indices corresponding to the site-indices
-   # into a long vector
+   # collect all the orbital-indices corresponding to the site-indices into a long vector
    Iorb = indexblock(Is, tbm.H)
    Norb = length(Iorb)
    # define the right-hand sides in the linear solver at each quad-point
@@ -135,30 +136,27 @@ function pexsi_partial_energy{TI <: Integer}(
    rhs = zeros(size(H,1), Norb);
    rhs[Iorb,:] = eye(Norb)
 
+   # allocate
    E = 0.0
    ∇E = zerovecs(length(at))
-
-   # prepare for force assembly
+   # precompute the hamiltonian derivatives
    if deriv
       skhg = SparseSKHgrad(tbm.H, at)
    end
 
    # integrate over the contour
    for (wi, zi) in zip(w, z)
-      # compute the Green's function
+      # Green's function
       LU = lufact(H - zi * M)
-
       # --------------- assemble energy -----------
       resM = LU \ rhsM
       E += real(wi * zi * trace(resM[Iorb,:]))
-
       # --------------- assemble forces -----------
       if deriv
          res = isorthogonal(tbm) ? resM : LU \ rhs
          _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*zi, zi)
       end
    end
-   # --------------------------------------------
    return E, ∇E
 end
 
@@ -167,15 +165,13 @@ end
 import Base.getindex
 getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
-function _pexsi_site_grad!{ISORTH, NORB}(∇E, H::SKHamiltonian{ISORTH,NORB}, skhg,
+function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skhg,
                                          res, resM, e0, wi, zi)
    for t = 1:length(skhg.i)
-      n, m, dH_nm, dH_nn = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t]
-      In = indexblock(n, H)
-      Im = indexblock(m, H)
-      dM_nm = skhg.dM[t]
+      n, m, dH_nm, dH_nn, dM_nm = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t], skhg.dM[t]
+      In, Im = indexblock(n, H), indexblock(m, H)
       f1 = JVec(0.0im,0.0im,0.0im)
-      for t = 1:size(res,2), a = 1:NORB, b = 1:NORB   # 2500
+      for t = 1:size(res,2), a = 1:NORB, b = 1:NORB
          f1 += - (wi * res[In[a], t] * resM[Im[b], t]) * ( dH_nm[:,a,b] - zi * dM_nm[:,a,b] )
          f1 += - (wi * res[In[a], t] * resM[In[b], t]) * dH_nn[:,a,b]
          f1 += (wi * res[In[a], t] * e0[Im[b], t]) * dM_nm[:,a,b]
@@ -184,4 +180,22 @@ function _pexsi_site_grad!{ISORTH, NORB}(∇E, H::SKHamiltonian{ISORTH,NORB}, sk
       ∇E[n] -= real(f1)
    end
    return ∇E
-end   # site_force_inner
+end
+
+
+function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
+                                         res, resM, e0, wi, zi)
+   for t = 1:length(skhg.i)
+      n, m, dH_nm, dH_nn = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t]
+      In = indexblock(n, H)
+      Im = indexblock(m, H)
+      f1 = JVec(0.0im,0.0im,0.0im)
+      for t = 1:size(res,2), a = 1:NORB, b = 1:NORB
+         f1 -= (res[In[a], t] * resM[Im[b], t]) * dH_nm[:,a,b]
+         f1 -= (res[In[a], t] * resM[In[b], t]) * dH_nn[:,a,b]
+      end
+      ∇E[m] += wi * real(f1)
+      ∇E[n] -= wi * real(f1)
+   end
+   return ∇E
+end
