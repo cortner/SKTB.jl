@@ -378,10 +378,10 @@ function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::Abstrac
 
          # compute ∂H_nm/∂y_n (hopping terms) and ∂M_nm/∂y_n
          hop_d!(H, r[i_n], bonds, dbonds)
-         sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dH_nm)
+         sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
          if !ISORTH
             overlap_d!(H, r[i_n], bonds, dbonds)
-            sk_d!(H, r[i_n], -R[i_n], bonds, dbonds, dM_nm)
+            sk_d!(H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
          end
 
          # store in new format

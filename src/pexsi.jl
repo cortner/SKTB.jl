@@ -259,16 +259,17 @@ function _site_grad_inner(tbm, at, skhg, res, resM, e0, wi, zi)
          hop_d!(tbm.H, r[i_n], bonds, dbonds)
          sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dH_nm)
 
-         dH_ij = skhg.dH[idx]
-         display(Array(dH_ij)[1,:,:])
-         display(dH_nm[1,:,:])
-         @assert Array(dH_ij) == dH_nm
-         quit()
-
          # if !ISORTH
             overlap_d!(tbm.H, r[i_n], bonds, dbonds)
             sk_d!(tbm.H, r[i_n], R[i_n], bonds, dbonds, dM_nm)
          # end
+
+         dH_ij = skhg.dH[idx]
+         @assert Array(dH_ij) == dH_nm
+         dM_ij = skhg.dM[idx]
+         @assert Array(dM_ij) == dM_nm
+         dH_ii = skhg.dOS[idx]
+         @assert Array(dH_ii) == dH_nn[:,:,:,i_n]
 
          f1 = JVec(0.0im,0.0im,0.0im)
          for t = 1:size(res,2), a = 1:norb, b = 1:norb   # 2500

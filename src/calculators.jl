@@ -168,13 +168,13 @@ function _forces_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
       eikr = exp(im * dot(S, k))::Complex{Float64}
 
       @inbounds for a = 1:NORB, b = 1:NORB
-         t1 = 2.0 * real(C_df_Ct[Ij[a], Ii[b]] * eikr)
-         t2 = 2.0 * real(C_dfepsn_Ct[Ij[a], Ii[b]] * eikr)
+         t1 = 2.0 * real(C_df_Ct[Ii[a], Ij[b]] * eikr)
+         t2 = 2.0 * real(C_dfepsn_Ct[Ii[a], Ij[b]] * eikr)
          t3 = real(C_df_Ct[Ii[a],Ii[b]])
 
          for c = 1:3
-            frc[c,i] += -dH_ij[c,a,b] * t1 + dM_ij[c,a,b] * t2 + dH_ii[c,a,b] * t3
-            frc[c,j] -= t3 * dH_ii[c,a,b]
+            frc[c,j] += -dH_ij[c,a,b] * t1 + dM_ij[c,a,b] * t2 - dH_ii[c,a,b] * t3
+            frc[c,i] += t3 * dH_ii[c,a,b]
          end
       end
    end

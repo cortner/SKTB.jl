@@ -21,8 +21,8 @@ for orbitals in Orbitals
    β, fixed_eF = 1.0, true
    tbm = TB.NRLTB.NRLTBModel(:Si, orbitals = orbitals,
                              TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
-                             bzquad=TB.MPGrid(at, (4,0,0)) )
-                             # bzquad = TB.GammaPoint() )
+                           #   bzquad=TB.MPGrid(at, (4,0,0)) )
+                             bzquad = TB.GammaPoint() )
    print("Test setting Nel ... ")
    TB.set_δNel!(tbm, at)
    println("ok.")
