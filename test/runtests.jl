@@ -11,8 +11,8 @@ println("============================================")
 
 # =========== Main tests =================
 # include("testtoymodel.jl")
-# include("testnrltb.jl")
-include("testsiteE.jl")
+include("testnrltb.jl")
+# include("testsiteE.jl")
 
 # =============
 # include("comparequip.jl")

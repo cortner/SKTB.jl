@@ -162,8 +162,8 @@ end
 
 
 
-import Base.getindex
-getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
+# import Base.getindex
+# getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
 function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skhg,
                                          res, resM, e0, wi, zi)
@@ -184,7 +184,7 @@ end
 
 
 function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
-                                         res, resM, e0, wi, zi)
+                                 res, resM, e0, wi, zi)
    for t = 1:length(skhg.i)
       n, m, dH_nm, dH_nn = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t]
       In = indexblock(n, H)

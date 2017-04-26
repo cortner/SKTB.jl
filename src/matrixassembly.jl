@@ -120,27 +120,6 @@ function onsite_grad! end
 
 
 
-
-# # prototypes for the defaul diagonal on-site terms
-# function diagonsite! end
-# function diagonsite_d! end
-#
-# function onsite!(H::SKHamiltonian, r, R, H_nn)
-#    diagonsite!(H, r, H_nn)   # this treats H_nn as linear memory
-#    for i = 1:size(H_nn, 1)
-#       H_nn[i,i] = H_nn[i]    # hence H_nn[i] must be copied to the diagonal
-#       H_nn[i] = 0.0
-#    end
-#    return H_nn
-# end
-
-# function onsite_grad!(H::SKHamiltonian, r, dH_nn)
-#    temp = zeros(
-#
-# end
-
-
-
 # =========================  Intermediate Hamiltonian Type
 
 
@@ -320,22 +299,22 @@ type SparseSKHgrad{HT, TV}
 end
 
 
-#
 # this is a work-around until we move to v0.6; at that point
 # StaticArrays changes and we can do
 #    typealias SKBlockGrad{NORB} SArray{Tuple{3,NORB,NORB}, ...}
-# instead. But there is still the problem with D and L
+# instead. But there is still the problem with D and L, which we need to
+# figure out as well!
 #
 SKBlockGradType{IO, NORB}(H::SKHamiltonian{IO, NORB}) = typeof(@SArray zeros(3, NORB, NORB))
 
 #
 # the next getindex extension is a little trick that let's us do the following:
+#     dH_ij[:,a,b] becomes a JVecF, which is useful for force assemblies
 #
-#
-# import Base.getindex
-# getindex{T}(a::SArray{(3,1,1), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
-# getindex{S,T}(a::SArray{(3,4,4), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
-# getindex{S,T}(a::SArray{(3,9,9), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+import Base.getindex
+getindex{T}(a::SArray{(3,1,1), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+getindex{T}(a::SArray{(3,4,4), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
+getindex{T}(a::SArray{(3,9,9), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
 
 
 function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
