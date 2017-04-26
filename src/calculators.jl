@@ -83,16 +83,6 @@ function update!(at::AbstractAtoms, tbm::TBModel)
 end
 
 
-############################################################
-### Hamiltonian Evaluation
-
-function evaluate(H::SKHamiltonian, at::AbstractAtoms,
-                  k::AbstractVector, T=full)
-   # this retrieves and if necessary computes the SparseSKH thing
-   skh = SparseSKH(H, at)
-   return T(skh, k)
-end
-
 
 # ================ Density Matrix and Energy ================
 

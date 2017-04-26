@@ -55,4 +55,16 @@ for orbitals in Orbitals
    println("-------------------------------------------")
 end
 
+println("Test sparse hamiltonian assembly")
+for N = 2:6
+   at = (N,N,N) * bulk("Si", pbc=false, cubic=true)
+   tbm = TightBinding.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(1.0))
+   H, M = hamiltonian(tbm, at)
+   Hf, Mf =  TightBinding.evaluate(tbm.H, at, zeros(3), T = full)
+   @show typeof(H)
+   @test issparse(H) == (N > 3)
+   @show vecnorm(full(H) - Hf, Inf)
+   @test vecnorm(full(H) - Hf, Inf) == 0.0
+end
+
 end

@@ -40,7 +40,7 @@ include("toymodel.jl")
 # the NRLTB model
 include("NRLTB.jl")
 
-# The Kwon model - a simple orthogonal TB model for Silicon
+# TODO: The Kwon model - a simple orthogonal TB model for Silicon
 # include("kwon.jl")
 
 # generic code, such as computing spectral decoposition, energy, forces

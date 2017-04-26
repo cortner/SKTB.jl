@@ -1,4 +1,3 @@
-import JuLIP.Potentials: evaluate, evaluate_d
 
 using ForwardDiff
 
@@ -160,6 +159,8 @@ immutable SparseSKH{HT, TV}  # v0.6: require that TV <: SKBlock{NORB}
    Rcell::Vector{JVecF}
 end
 
+Base.length(skh::SparseSKH) = length(skh.i)
+
 function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
    if has_transient(at, :SKH)
       return get_transient(at, :SKH)
@@ -278,6 +279,93 @@ function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
    return Hout, I
 end
 
+
+function Base.nnz(skh::SparseSKH)
+   norb = norbitals(skh.H)
+   return length(skh) * norb^2 + length(skh.at) * norb^2
+end
+
+# append to triplet format: version 1 for H and M (non-orth TB)
+function _append!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
+                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
+   @inbounds for i = 1:NORB, j = 1:NORB
+      idx += 1
+      It[idx] = In[i]
+      Jt[idx] = Im[j]
+      Ht[idx] = H_nm[i,j] * exp_i_kR
+      Mt[idx] = M_nm[i,j] * exp_i_kR
+   end
+   return idx
+end
+
+# append to triplet format: version 2 for H only (orthogonal TB)
+function _append!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
+                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, idx)
+   @inbounds for i = 1:NORB, j = 1:NORB
+      idx += 1
+      It[idx] = In[i]
+      Jt[idx] = Im[j]
+      Ht[idx] = H_nm[i,j] * exp_i_kR
+   end
+   return idx
+end
+
+function alloc_sparse(skh::SparseSKH)
+   nnzest = nnz(skh)
+   It = zeros(Int32, nnzest)
+   Jt = zeros(Int32, nnzest)
+   Ht = zeros(nnzest)
+   Mt = zeros(nnzest)
+   return It, Jt, Ht, Mt
+end
+
+#  * exp_i_kR = complex multiplier needed for BZ integration
+#  * we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
+#       but this would actually be less efficient, and less clear to read
+function _assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
+                                  k, It, Jt, Ht, Mt, skh)
+   N = ndofs(H, skh.at)
+   M_nm = @SMatrix zeros(NORB, NORB)  # empty M_nm for ORTHOGONAL case
+   idx = 0  # initialise index into triplet format
+   for t = 1:length(skh)
+      n, m, H_nm, S = skh.i[t], skh.j[t], skh.vH[t], skh.Rcell[t]
+      if !ISORTH; M_nm = skh.vM[t]; end
+      In, Im = indexblock(n, skh.H), indexblock(m, skh.H)
+      # if minimum(In) < 1 || minimum(Im) < 1 || maximum(In) > N || maximum(Im) > N
+      #    @show In, Im
+      # end
+      exp_i_kR = exp( im * dot(k, S) )
+      idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
+   end
+   It, Jt, Ht, Mt = It[1:idx], Jt[1:idx], Ht[1:idx], Mt[1:idx]
+
+   # convert M, H into Sparse CCS and return
+   return ISORTH ? (sparse(It, Jt, Ht, N, N), I) :
+                   (sparse(It, Jt, Ht, N, N), sparse(It, Jt, Mt, N, N))
+end
+
+
+Base.sparse(skh::SparseSKH, k = JVecF(0.0,0.0,0.0)) =
+   _assemble!(skh.H, k, alloc_sparse(skh)..., skh)
+
+
+function best(skh, k)
+   const FULLSPARSE_CROSSOVER = 0.4  # based on testing with sp NRLTB model for Si
+   nnz_full = (length(skh.at) * norbitals(skh.H))^2
+   nnz_sparse = nnz(skh)
+   @show nnz_sparse / nnz_full
+   if nnz_sparse / nnz_full  <= FULLSPARSE_CROSSOVER
+      return sparse(skh, k)
+   else
+      return full(skh, k)
+   end
+end
+
+############################################################
+### Hamiltonian Evaluation
+
+evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector; T=best) =
+      T(SparseSKH(H, at), k)
 
 
 # ================== Intermediate Storage for dHij/dRa elements
