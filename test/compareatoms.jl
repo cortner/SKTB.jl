@@ -32,7 +32,7 @@ Ma = full(Ma)
 @show vecnorm(Mj - Ma, Inf)
 ae = full(Ha) |> eigvals |> real |> sort
 je = full(Hj) |> eigvals |> real |> sort
-@show vecnorm(ae - je, Inf) 
+@show vecnorm(ae - je, Inf)
 
 
 

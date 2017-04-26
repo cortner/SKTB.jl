@@ -1,32 +1,55 @@
 
 module TightBinding
 
-using JuLIP
-using JuLIP.Potentials
+using JuLIP, StaticArrays
+using JuLIP: @protofun
+using JuLIP.Potentials: @pot, SitePotential
 
-abstract AbstractTBModel <: AbstractCalculator
+import JuLIP: energy, forces, cutoff
+import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d
 
-# general parts of the module: core tb functionality
-include("general.jl")
+# using FixedSizeArrays
+export hamiltonian, densitymatrix, TBModel, TightBindingModel
 
-# perturbation theory module
-# include("perturbation.jl")
 
-# implements the "classical" site energy
-include("site_energy.jl")
 
-# implement the contour integral variants
-# in particular the site energy
-include("Contour.jl")
+# ============================================================================
 
-# a tight binding toy model, mostly for testing
+
+# abstractions
+include("types.jl")
+
+# chemical potentials
+# define how to go from spectrum (energy-levels) to potential energy
+include("potentials.jl")
+
+# BZ integration: MPGrid and GammaPoint, iterators, etc
+include("bzintegration.jl")
+
+# ============= SLATER KOSTER TYPE MODELS ================
+
+# basics for slater-koster type hamiltonians
+include("sk_core.jl")
+
+# assembling hamiltonian and hamiltonian derivatives
+include("matrixassembly.jl")
+
+# the TB toy model for quick tests (a slater-koster s-orbital model)
 include("toymodel.jl")
 
-# the NRL tight binding model
+# the NRLTB model
 include("NRLTB.jl")
 
-# The model of Kwon et al, PRB 49(11)
-# include("Orthogonal.jl")
+# TODO: The Kwon model - a simple orthogonal TB model for Silicon
+# include("kwon.jl")
 
+# generic code, such as computing spectral decoposition, energy, forces
+include("calculators.jl")
+
+# pole expansion (contour integration) based calculator for TBModel
+include("pexsi.jl")
+
+# TODO: perturbation theory module
+# include("perturbation.jl")
 
 end    # module
