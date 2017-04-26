@@ -132,34 +132,30 @@ energy(tbm::TBModel, at::AbstractAtoms) =
 
 # ========================== Forces ==========================
 
-# this is an old force computation that *requires* a SKHamiltonian structure
+# this is an old force computation that requires a SKHamiltonian structure
 #    F_n = - ∑_s f'(ϵ_s) < ψ_s | H,n - ϵ_s * M,n | ψ_s >
 # but instead of computing H,n, M,n as matrices, this assembly loops over
-# the non-zero blocks first and the inner loop is over the derivative ,n.
+# the non-zero blocks first and the inner loop is over the derivative ,n
+# it prevents allocating lots of sparse matrices for the hamiltonian
+# derivatives.
 
-
-# TODO: in the future assemble the forces already in JVecsF format
-function _forces_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
+function _forces_k!{ISORTH, NORB}(frc::Vector{JVecF},
+                                 at::AbstractAtoms, tbm::TBModel,
                                  H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
-                                 skhg)
+                                 skhg, w)
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
    C = get_k_array(at, :C, k)::Matrix{Complex128}
    df = grad(tbm.potential, epsn)::Vector{Float64}
 
    # precompute some products
-   # TODO: optimise these two lines?
-   #       note also these are O(N^3) scaling, while overall
-   #       force assembly should be just O(N^2)
-   #       (but can we beat the BLAS?)
+   # TODO: optimise these two lines? These are O(N^3) scaling, while overall
+   #       force assembly should be just O(N^2) (but can we beat BLAS3?)
    C_df_Ct = (C * (df' .* C)')
    C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')
 
    # an array replacing dM_ij when the model is orthogonal
    dM_ij = zero(typeof(skhg.dH[1]))
-
-   # allocate array for forces
-   const frc = zeros(Float64, 3, length(at))
 
    for n = 1:length(skhg.i)
       i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
@@ -171,15 +167,12 @@ function _forces_k{ISORTH, NORB}(at::AbstractAtoms, tbm::TBModel,
          t1 = 2.0 * real(C_df_Ct[Ii[a], Ij[b]] * eikr)
          t2 = 2.0 * real(C_dfepsn_Ct[Ii[a], Ij[b]] * eikr)
          t3 = real(C_df_Ct[Ii[a],Ii[b]])
-
-         for c = 1:3
-            frc[c,j] += -dH_ij[c,a,b] * t1 + dM_ij[c,a,b] * t2 - dH_ii[c,a,b] * t3
-            frc[c,i] += t3 * dH_ii[c,a,b]
-         end
+         frc[j] += (-t1) * dH_ij[:,a,b] + t2 * dM_ij[:,a,b] - t3 * dH_ii[:,a,b]
+         frc[i] += t3 * dH_ii[:,a,b]
       end
    end
 
-   return real(frc) |> vecs
+   return frc
 end
 
 
@@ -193,7 +186,7 @@ function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    skhg = SparseSKHgrad(tbm.H, atm)
    frc = zerovecs(length(atm))
    for (w, k) in tbm.bzquad
-      frc +=  w * _forces_k(atm, tbm, tbm.H, k, skhg)
+      _forces_k!(frc, atm, tbm, tbm.H, k, skhg, w)
    end
    return frc
 end
