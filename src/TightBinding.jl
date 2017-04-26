@@ -19,16 +19,19 @@ export hamiltonian, densitymatrix, TBModel, TightBindingModel
 # abstractions
 include("types.jl")
 
-# define how to go from eigenvalues (energy-levels) to potential energy
+# chemical potentials
+# define how to go from spectrum (energy-levels) to potential energy
 include("potentials.jl")
 
-# BZ integration: basic prototype;
+# BZ integration: MPGrid and GammaPoint, iterators, etc
 include("bzintegration.jl")
 
 # ============= SLATER KOSTER TYPE MODELS ================
 
 # basics for slater-koster type hamiltonians
 include("sk_core.jl")
+
+# assembling hamiltonian and hamiltonian derivatives
 include("matrixassembly.jl")
 
 # the TB toy model for quick tests (a slater-koster s-orbital model)
@@ -40,14 +43,11 @@ include("NRLTB.jl")
 # The Kwon model - a simple orthogonal TB model for Silicon
 # include("kwon.jl")
 
-# generic code, such as computing spectral decoposition,
-# energy, forces (given the hamiltonian and hamiltonian derivatives)
-# TODO: rename to become eigcalculators or standardcalc
+# generic code, such as computing spectral decoposition, energy, forces
 include("calculators.jl")
 
-# implement the contour integral variants of the TB model
+# pole expansion (contour integration) based calculator for TBModel
 include("pexsi.jl")
-
 
 # TODO: perturbation theory module
 # include("perturbation.jl")

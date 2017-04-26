@@ -21,30 +21,26 @@ E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
 println("Testing that the spectral-decompositions site energy sums to total energy")
 @show E - ∑En
-@test abs(E - ∑En) < 1e-12
+@test abs(E - ∑En) < 1e-10
 
 
 
-calc = TB.PEXSI(tbm, 5, [1])
-
-# use a mini-system to pre-compute the Fermi-level and energy bounds
-# TODO: need to allow calibrating on a different geometry and BZQuadratureRule
-# print("calibrating . . . ")
-# at = bulk("Si", pbc=(true,true,true))
-# TB.Contour.calibrate!(calc, at, beta, nkpoints=(6,6,6))
-# println("done.")
 
 # now the real system to test on
+calc = TB.PEXSI(tbm, 5, [1])
 at = DIM * bulk("Si", pbc=(false,false,false), cubic=true)
-print("calibrating . . . ")
-TB.update!(calc, at)
-println("done."); @test true
 JuLIP.rattle!(at, 0.02)
+
+# calibrate the PEXSI calculator on a mini-system
+print("calibrating . . . ")
+TB.calibrate!(calc, at; at_train = bulk("Si", pbc=true), npoles = 8)
+println("done."); @test true
+
+# output some useful info if we are watching the tests...
 @show length(at)
+@show TB.get_EminEmax(at)
 
-@show get_info(at, :EminEmax)
-
-# compute the site energy the old way
+# compute the site energy the old way and compare against the PEXSI calculation
 Eold = TB.site_energy(tbm, at, n0)
 println("Old Site Energy (via spectral decomposition): ", Eold)
 println("Testing convergence of PEXSI site energy")
@@ -54,7 +50,7 @@ for nquad in NQUAD
    Enew = site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
-@test abs(Enew - Eold) < 1e-7
+@test abs(Enew - Eold) < 1e-6
 
 println("Test consistency of site forces")
 TB.set_npoles!(calc, 8)
@@ -87,7 +83,7 @@ for nquad in NQUAD
    Enew = TB.partial_energy(calc, at, Is)
    println("nquad = ", nquad, "; rel-error = ", abs(Enew - Eold) / abs(Eold))
 end
-@test  abs(Enew - Eold) / abs(Eold) < 1e-6
+@test  abs(Enew - Eold) / abs(Eold) < 1e-5
 
 
 println("Test consistency of multiple site forces")

@@ -135,9 +135,8 @@ function pexsi_partial_energy{TI <: Integer}(
    end
 
    # get the Fermi-contour
-   Emin, Emax = get_info(at, :EminEmax)::Tuple{Float64, Float64}
-   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential),
-                        calc.nquad)
+   Emin, Emax = get_EminEmax(at)
+   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential), calc.nquad)
 
    # collect all the orbital-indices corresponding to the site-indices into a long vector
    Iorb = indexblock(Is, tbm.H)
@@ -177,7 +176,7 @@ end
 # getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
 function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skhg,
-                                         res, resM, e0, wi, zi)
+                                   res, resM, e0, wi, zi)
    for t = 1:length(skhg.i)
       n, m, dH_nm, dH_nn, dM_nm = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t], skhg.dM[t]
       In, Im = indexblock(n, H), indexblock(m, H)
@@ -228,7 +227,7 @@ function calibrate!(calc::PEXSI, at::AbstractAtoms;
    return  nothing
 end
 
-function _calibrate_poles(calc, at, npoles=nothing, tol=nothing)
+function _calibrate_poles!(calc, at, npoles=nothing, tol=nothing)
    if npoles != nothing && tol != nothing
       error("`calibrate!`: provide *either* `npoles` *or* `tol`")
    end
@@ -239,7 +238,7 @@ function _calibrate_poles(calc, at, npoles=nothing, tol=nothing)
    end
 end
 
-function _calibrate_EminEmax(calc, at, at_train, nkpoints, eF, δNel)
+function _calibrate_EminEmax!(calc, at, at_train, nkpoints, eF, δNel)
    if at_train != nothing && eF != nothing
       error("`calibrate!`: provide either `(at_train, nkpoints)` *or* `eF`")
    end
@@ -254,7 +253,7 @@ function _calibrate_EminEmax(calc, at, at_train, nkpoints, eF, δNel)
       end
       bzquad_at = calc.tbm.bzquad
       calc.tbm.bzquad = MPGrid(at_train, nkpoints)
-      update!(calc.tbm, at_train)
+      update!(at_train, calc.tbm)
       set_δNel!(calc.tbm, at_train, δNel)
       # compute and store Emin, Emax >>> TODO: seems this needs to be moved out of `update!`
       update!(calc, at_train)
