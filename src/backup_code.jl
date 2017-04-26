@@ -38,7 +38,7 @@
 
 
 
-TB = TightBinding
+# TB = TightBinding
 
 
 # # 2D geometry: cross-over is at 0.05% sparsity!!!

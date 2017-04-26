@@ -56,6 +56,16 @@ site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
 partial_energy(calc::PEXSI, at::AbstractAtoms, Idom) =
          pexsi_partial_energy(calc, at, Idom, false)[1]
 
+
+function set_EminEmax!(at::AbstractAtoms, Emin, Emax)
+   set_info!(at, :EminEmax, (Emin, Emax))
+end
+
+function get_EminEmax(at::AbstractAtoms)
+   Emin, Emax = get_info(at, :EminEmax)::Tuple{Float64, Float64}
+   return Emin, Emax
+end
+
 """
 `update!(calc::PEXSI, at::AbstractAtoms)`
 
@@ -69,11 +79,12 @@ function update!(calc::PEXSI, at::AbstractAtoms)
    # get the spectrum and compute Emin, Emax
    epsn = spectrum(calc.tbm, at)
    eF = get_eF(calc.tbm)
+   # TODO: not so clear that Emin, Emax should be updated!!!!
    Emin, Emax = extrema( abs(epsn - eF) )
-   set_info!(at, :EminEmax, (Emin, Emax))    # TODO: this is not so clear that it shouldn't be transient!!
+   set_EminEmax!(at, Emin, Emax)
    return nothing
 end
-# TODO: not so clear that Emin, Emax should be updated!!!!
+
 
 import Base.\
 function \(A::Base.SparseArrays.UMFPACK.UmfpackLU, B::Matrix{Float64})
@@ -198,4 +209,59 @@ function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
       ∇E[n] -= wi * real(f1)
    end
    return ∇E
+end
+
+
+
+
+"""
+`calibrate!(calc::PEXSI, at; kwargs...)`
+
+Performans some initialisations / calibrations of the PEXSI Calculator.
+"""
+function calibrate!(calc::PEXSI, at::AbstractAtoms;
+         npoles = nothing, tol = nothing,    # train quadrature rule
+         at_train = nothing, nkpoints = nothing, eF = nothing, δNel = 0.0 # train eF, Emin, Emax
+   )
+   _calibrate_poles!(calc, at, npoles, tol)
+   _calibrate_EminEmax!(calc, at, at_train, nkpoints, eF, δNel)
+   return  nothing
+end
+
+function _calibrate_poles(calc, at, npoles=nothing, tol=nothing)
+   if npoles != nothing && tol != nothing
+      error("`calibrate!`: provide *either* `npoles` *or* `tol`")
+   end
+   if npoles != nothing
+      set_npoles!(calc, npoles)
+   else
+      error("calibration of PEXSI using tolerance is has not been implemented yet.")
+   end
+end
+
+function _calibrate_EminEmax(calc, at, at_train, nkpoints, eF, δNel)
+   if at_train != nothing && eF != nothing
+      error("`calibrate!`: provide either `(at_train, nkpoints)` *or* `eF`")
+   end
+   if eF != nothing
+      set_eF!(calc.tbm, eF)
+   else
+      @assert isa(calc.tbm.potential, FermiDiracSmearing)
+      # TODO: generalise last line: require that the potential is a
+      #       fixed_eF potential, then do the same calibration
+      if nkpoints == nothing
+         nkpoints = (4,4,4)
+      end
+      bzquad_at = calc.tbm.bzquad
+      calc.tbm.bzquad = MPGrid(at_train, nkpoints)
+      update!(calc.tbm, at_train)
+      set_δNel!(calc.tbm, at_train, δNel)
+      # compute and store Emin, Emax >>> TODO: seems this needs to be moved out of `update!`
+      update!(calc, at_train)
+      # recover Emin, Emax and store in `at`
+      Emin, Emax = get_EminEmax(at_train)
+      set_EminEmax!(at, Emin, Emax)
+      # finally revert to the original bzquad
+      calc.tbm.bzquad = bzquad_at
+   end
 end
