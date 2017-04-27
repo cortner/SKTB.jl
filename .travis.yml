@@ -1,18 +1,27 @@
 # Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
+
 os:
   - linux
   - osx
+
 julia:
   - 0.5
   # - release
   # - nightly
+
+addons:
+  apt:
+    packages:
+    - gfortran
+
 notifications:
   email: false
-# uncomment the following lines to override the default test script
+
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia -e 'ENV["PYTHON"]=""; Pkg.add("PyCall"); Pkg.add("Conda"); using Conda; Conda.add("NumPy"); Conda.add("SciPy"); Conda.add("pip"); pip = joinpath(Conda.BINDIR, "pip"); run(`$pip install ase`); run(`$pip install -e git+https://github.com/libAtoms/matscipy#egg=matscipy`); Pkg.clone(pwd()); Pkg.add("JuLIP"); Pkg.checkout("JuLIP"); Pkg.clone("https://github.com/ettersi/FermiContour.jl"); Pkg.build("TightBinding.jl"); Pkg.test("TightBinding.jl"; coverage=true)'
+ - julia -e 'ENV["PYTHON"]=""; Pkg.add("PyCall"); Pkg.add("Conda"); using Conda; Conda.add("NumPy"); Conda.add("SciPy"); Conda.add("pip"); pip = joinpath(Conda.BINDIR, "pip"); run(`$pip install ase`); run(`$pip install -e git+https://github.com/libAtoms/matscipy#egg=matscipy`); Pkg.clone("https://github.com/cortner/TightBinding.jl"); Pkg.add("JuLIP"); Pkg.checkout("JuLIP"); Pkg.clone("https://github.com/ettersi/FermiContour.jl"); Pkg.build("TightBinding"); Pkg.test("TightBinding"; coverage=true)'
+
 after_success:
   # push coverage results to Coveralls
   - julia -e 'cd(Pkg.dir("TightBinding.jl")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
