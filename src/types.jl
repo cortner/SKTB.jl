@@ -84,7 +84,7 @@ abstract ZeroTPotential <: ChemicalPotential
 auxiliary smearing function that doesn't do anything but lets us construct
 and empty TBModel.
 """
-type NullSmearing <: ChemicalPotential end
+type NullPotential <: ChemicalPotential end
 
 
 # ======================= BZ Quadrature supertype =====================
@@ -125,9 +125,10 @@ end
 typealias TightBindingModel TBModel
 
 TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
-                    NullSmearing(), NullBZQ(), 0.0)
+                    NullPotential(), NullBZQ(), 0.0)
 
 isorthogonal(tbm::TBModel) = isorthogonal(tbm.H)
+isorth(tbm::TBModel) = isorthogonal(tbm)
 
 get_eF(tbm::TBModel) = get_eF(tbm.potential)
 

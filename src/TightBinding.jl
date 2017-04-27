@@ -6,7 +6,8 @@ using JuLIP: @protofun
 using JuLIP.Potentials: @pot, SitePotential
 
 import JuLIP: energy, forces, cutoff
-import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d
+import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d,
+                        partial_energy, partial_energy_d
 
 # using FixedSizeArrays
 export hamiltonian, densitymatrix, TBModel, TightBindingModel
@@ -39,8 +40,8 @@ include("toymodel.jl")
 # the NRLTB model
 include("NRLTB.jl")
 
-# TODO: The Kwon model - a simple orthogonal TB model for Silicon
-# include("kwon.jl")
+# The Kwon model - a simple orthogonal TB model for Silicon
+include("kwon.jl")
 
 # generic code, such as computing spectral decoposition, energy, forces
 include("calculators.jl")

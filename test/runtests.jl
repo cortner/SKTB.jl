@@ -4,7 +4,7 @@ using JuLIP.Testing
 using Base.Test
 
 COMPAREATOMS = false    # if Atoms.jl is installed
-COMPAREQUIP = false     # if QUIP and quippy are installed 
+COMPAREQUIP = false     # if QUIP and quippy are installed
 TESTDEPTH = 1
 
 println("============================================")
@@ -15,6 +15,7 @@ println("============================================")
 include("testtoymodel.jl")
 include("testnrltb.jl")
 include("testsiteE.jl")
+include("testkwon.jl")
 
 # ============= Compare with Atoms.jl and QUIP implementations
 if COMPAREATOMS; include("compareatoms.jl"); end
