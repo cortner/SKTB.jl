@@ -64,13 +64,25 @@ cutoff(H::NRLHamiltonian) = H.Rc
 # TODO: talk to Noam about this.
 
 
-cutoff_NRL(r, Rc, lc, Mc=5.0) = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc ))) .* (r .<= Rc)
-cutoff_NRL_d(r, Rc, lc, Mc=5.0) = (-1) * (1.0 + exp( (r-Rc) / lc + Mc )).^(-2) .* exp( (r-Rc) / lc + Mc ) / lc .* (r .<= Rc)
+_nrlcut_(r, Rc, lc, Mc) = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )))
+# cutoff_NRL_d(r, Rc, lc, Mc=5.0) = (-1) * (1.0 + exp( (r-Rc) / lc + Mc )).^(-2) .* exp( (r-Rc) / lc + Mc ) / lc .* (r .<= Rc)
+# cutoff_NRL_d(Rc,Rc,lc,Mc) = (-1) * (1.0 + exp(Mc))^(-2) * exp(Mc) / lc
 
+cutoff_NRL_original(r, Rc, lc, Mc=5.0) =
+   _nrlcut_(r,Rc,lc,Mc) .* (r .<= Rc)
 
+cutoff_NRL_Eshift(r, Rc, lc, Mc = 5.0) =
+   (_nrlcut_(r,Rc,lc,Mc) - 1.0/(1.0+exp(Mc))) .* (r .<= Rc)
+   # (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc)
+
+cutoff_NRL_Fshift(r, Rc, lc, Mc=5.0) =
+   (_nrlcut_(r,Rc,lc,Mc) - 1.0/(1.0+exp(Mc)) + (exp(Mc)/lc)/(1.0+exp(Mc))^2 * (r-Rc)) .* (r .<= Rc)
+
+# default
+cutoff_NRL = cutoff_NRL_Fshift
 
 # contains information for Si, C, Al
-# TODO: switch to data files
+#    TODO: switch to data files
 include("NRLTB_data.jl")
 
 
@@ -103,7 +115,7 @@ NRLTBModel(species, fs::ChemicalPotential;
 
 nrl_hop(H::NRLHamiltonian, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
 
-hop(H::NRLHamiltonian, r, i) = nrl_hop(H, r/BOHR, i) * H.fcut(r/BOHR)
+hop(H::NRLHamiltonian, r, i) = nrl_hop(H, r/BOHR, i) * H.fcut(r/BOHR, H.Rc, H.lc)
 
 
 # ================= OVERLAP INTEGRALS  =====================
@@ -111,7 +123,7 @@ hop(H::NRLHamiltonian, r, i) = nrl_hop(H, r/BOHR, i) * H.fcut(r/BOHR)
 nrl_olap(H, r, i) = (H.p[i] + (H.q[i] + (H.r[i] + H.s[i] * r) * r) * r) * exp(-H.t[i]^2 * r)
 
 overlap(H::NRLHamiltonian, r::Real, i::Integer) =
-      nrl_olap(H, r/BOHR, i) * H.fcut(r/BOHR)
+      nrl_olap(H, r/BOHR, i) * H.fcut(r/BOHR, H.Rc, H.lc)
 
 # on-site overlap block
 function overlap!(H::NRLHamiltonian, M_nn)
@@ -131,7 +143,7 @@ end
 # ρ    : return the pseudo density on site n = 1, ... , length(atm)
 # note that the NRL pseudo density has ignored the self-distance
 pseudoDensity(H::NRLHamiltonian, r::AbstractVector) =
-   sum( exp(- H.λ^2 * r) .* H.fcut(r)  )
+   sum( exp(- H.λ^2 * r) .* H.fcut(r, H.Rc, H.lc) )
 
 # auxiliary functions for computing the onsite terms
 nrl_os(H::NRLHamiltonian, ρ, i) =

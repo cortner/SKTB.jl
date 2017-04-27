@@ -39,4 +39,4 @@ ae = full(Ha) |> eigvals |> real |> sort
 je = full(Hj) |> eigvals |> real |> sort
 @show vecnorm(ae - je, Inf)
 
-@assert size(Ha, 1) == length(at) * 9
+# @assert size(Ha, 1) == length(at) * 9

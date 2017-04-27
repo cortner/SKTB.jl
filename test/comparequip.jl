@@ -7,7 +7,7 @@ beta = 10.0
 TB = TightBinding
 at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
-tbm = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp)
+tbm = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp, cutoff=:original)
 
 H, M = hamiltonian(tbm, at)
 H = full(H)

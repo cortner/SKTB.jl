@@ -34,12 +34,11 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    end
 
    if cutoff == :original
-      H.fcut = r -> cutoff_NRL(r, H.Rc, H.lc)
+      H.fcut = cutoff_NRL_original
    elseif cutoff == :energyshift
-      H.fcut = r -> cutoff_NRL(r, H.Rc, H.lc) - cutoff_NRL(H.Rc, H.Rc, H.lc)
+      H.fcut = cutoff_NRL_Eshift
    elseif cutoff == :forceshift
-      H.fcut = r -> (cutoff_NRL(r, H.Rc, H.lc) - cutoff_NRL(H.Rc, H.Rc, H.lc)
-                        - cutoff_NRL_d(H.Rc, H.Rc, H.lc) * (r - H.Rc))
+      H.fcut = cutoff_NRL_Fshift
    else
       error("unknown cut-off type")
    end
