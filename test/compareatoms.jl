@@ -18,7 +18,7 @@ at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
 
 # JuLIP TB model
-tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :spd, cutoff=:energyshift)
+tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp, cutoff=:energyshift)
 
 # JulIP matrices
 Hj, Mj = hamiltonian(tbj, at)
@@ -26,7 +26,7 @@ Hj = full(Hj)
 Mj = full(Mj)
 
 # Atoms.jl TB Model
-tba = AtJuLIP.JuLIPTB(:Si9, nkpoints = nkpoints)
+tba = AtJuLIP.JuLIPTB(:Si, nkpoints = nkpoints)
 
 # Atoms Matrices
 Ha, Ma = hamiltonian(tba, at)

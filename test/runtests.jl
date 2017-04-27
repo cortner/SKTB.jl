@@ -16,7 +16,7 @@ println("============================================")
 
 # ============= Compare with Atoms.jl and QUIP implementations
 include("compareatoms.jl")
-include("comparequip.jl")
+# include("comparequip.jl")
 
 
 # include("benchmarkEandFrc.jl")
