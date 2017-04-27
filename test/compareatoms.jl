@@ -14,11 +14,11 @@ nkpoints = (0,0,0)
 beta = 10.0
 
 # compute a configuration
-at = bulk("Si", cubic = true)
+at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
 
 # JuLIP TB model
-tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta))
+tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :spd)
 
 # JulIP matrices
 Hj, Mj = hamiltonian(tbj, at)
@@ -26,7 +26,7 @@ Hj = full(Hj)
 Mj = full(Mj)
 
 # Atoms.jl TB Model
-tba = AtJuLIP.JuLIPTB(:Si, nkpoints = nkpoints)
+tba = AtJuLIP.JuLIPTB(:Si9, nkpoints = nkpoints)
 
 # Atoms Matrices
 Ha, Ma = hamiltonian(tba, at)
@@ -38,36 +38,3 @@ Ma = full(Ma)
 ae = full(Ha) |> eigvals |> real |> sort
 je = full(Hj) |> eigvals |> real |> sort
 @show vecnorm(ae - je, Inf)
-
-
-println("JuLIP/TightBinding:")
-display(round(Hj[1:8,1:8], 4))
-println("Atoms:")
-display(round(Ha[1:8,1:8], 4))
-
-
-
-
-
-# ==================================================================
-
-# # OLD VERSION
-# # ===========
-#
-# # save to a file
-# X = positions(at) |> mat
-# bc = pbc(at)
-# C = cell(at)
-# save("/Users/ortner/temp1.jld", "X", X, "pbc", bc, "C", C)
-#
-# # now ask Atoms.jl to compute H and M as well
-# run(`/Applications/Julia-0.4.7.app/Contents/Resources/julia/bin/julia /Users/ortner/gits/Atoms.jl/tbH.jl /Users/ortner/temp1.jld /Users/ortner/temp2.jld`)
-#
-# # load the stuff
-# Ha, Ma = load("/Users/ortner/temp2.jld", "H", "M")
-#
-# vecnorm(H - Ha, Inf)
-# vecnorm(M - Ma, Inf)
-#
-# display(H)
-# display(Ha)
