@@ -114,8 +114,9 @@ end
 
 
 # this is imported from JuLIP
-energy(tbm::TBModel, at::AbstractAtoms) =
+energy(tbm::TBModel, at::AbstractAtoms) = (
    sum( w * energy(tbm.potential, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) )
+   + energy(tbm.Vrep, at) )
 
 
 
@@ -174,7 +175,7 @@ end
 function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
-   frc = zerovecs(length(atm))
+   frc = forces(tbm.Vrep, atm) # zerovecs(length(atm))
    for (w, k) in tbm.bzquad
       _forces_k!(frc, atm, tbm, tbm.H, k, skhg, w)
    end
@@ -192,11 +193,11 @@ function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
       epsn_k = get_k_array(at, :epsn, k)
       M_k = get_k_array(at, :M, k)
       C_k = get_k_array(at, :C, k)
-      MC_k = M_k[In0, :] * C_k
+      MC_k = isorth(tbm) ? C_k[In0,:] : (M_k[In0, :] * C_k)
       ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
       Esite += w * sum(energy(tbm.potential, epsn_k)  .* ψ²)
    end
-   return real(Esite)
+   return real(Esite) + site_energy(tbm.Vrep, at, n0)
 end
 
 

@@ -147,11 +147,13 @@ function pexsi_partial_energy{TI <: Integer}(
    rhs[Iorb,:] = eye(Norb)
 
    # allocate
-   E = 0.0
-   ∇E = zerovecs(length(at))
+   E = partial_energy(tbm.Vrep, at, Is)
    # precompute the hamiltonian derivatives
    if deriv
       skhg = SparseSKHgrad(tbm.H, at)
+      ∇E = partial_energy_d(tbm.Vrep, at, Is)
+   else
+      ∇E = zerovecs(length(at))
    end
 
    # integrate over the contour
@@ -201,11 +203,11 @@ function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
       Im = indexblock(m, H)
       f1 = JVec(0.0im,0.0im,0.0im)
       for t = 1:size(res,2), a = 1:NORB, b = 1:NORB
-         f1 -= (res[In[a], t] * resM[Im[b], t]) * dH_nm[:,a,b]
-         f1 -= (res[In[a], t] * resM[In[b], t]) * dH_nn[:,a,b]
+         f1 -= (wi * res[In[a], t] * res[Im[b], t]) * dH_nm[:,a,b]
+         f1 -= (wi * res[In[a], t] * res[In[b], t]) * dH_nn[:,a,b]
       end
-      ∇E[m] += wi * real(f1)
-      ∇E[n] -= wi * real(f1)
+      ∇E[m] += real(f1)
+      ∇E[n] -= real(f1)
    end
    return ∇E
 end
