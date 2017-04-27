@@ -12,9 +12,9 @@ println("    TightBinding Tests  ")
 println("============================================")
 
 # =========== Main tests =================
-include("testtoymodel.jl")
-include("testnrltb.jl")
-include("testsiteE.jl")
+# include("testtoymodel.jl")
+# include("testnrltb.jl")
+# include("testsiteE.jl")
 include("testkwon.jl")
 
 # ============= Compare with Atoms.jl and QUIP implementations

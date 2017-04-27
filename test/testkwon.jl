@@ -8,7 +8,7 @@ println("Test Kwon TB Model")
 at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
 @show length(at)
 β, fixed_eF = 1.0, true
-tbm = TB.Kwon.KwonTBModel(potential = TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
+tbm = TB.Kwon.KwonTBModel(potential = TB.GrandPotential(β, 0.0),
                         #   bzquad=TB.MPGrid(at, (4,0,0)) )
                                 bzquad = TB.GammaPoint() )
 print("Test setting Nel ... ")

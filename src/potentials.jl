@@ -130,26 +130,39 @@ end
 # ================= Grand Potential ============================
 
 
-@pot type GrandPotential <: ChemicalPotential
+@pot type GrandPotential <: FiniteTPotential
    beta::Float64
    eF::Float64
 end
 
 """
-Finite temperature grand-potential
-
-e ↦ 2/β log(1 - f(e))
-
+Finite temperature grand-potential, e ↦ 2/β log(1 - f(e)),
 where f is the Fermi-dirac function.
 """
 GrandPotential
 
+occupancy(f::GrandPotential, epsn::Number) = fermidirac(epsn, f.eF, f.beta)
+occupancy(f::GrandPotential, epsn::Number, eF) = fermidirac(epsn, eF, f.beta)
+occupancy(f::GrandPotential, epsn::AbstractVector, args...) =
+            [occupancy(f, es, args...) for es in epsn]
+
 _gr0_ = :( 2.0/beta * log(1 - $_fd0_) )
-_gr1_ = Calculus.differentiate(_gr0_, :epsn)
-_gr2_ = Calculus.differentiate(_gr1_, :epsn)
-_gr3_ = Calculus.differentiate(_gr2_, :epsn)
+# _gr1_ = Calculus.differentiate(_gr0_, :epsn)
+# _gr2_ = Calculus.differentiate(_gr1_, :epsn)
+# _gr3_ = Calculus.differentiate(_gr2_, :epsn)
 
+eval( :( grand(epsn, eF, beta) = $_gr0_ ) )
 
+energy(f::GrandPotential, epsn::Number) = grand(epsn, f.eF, f.beta)
+energy(f::GrandPotential, epsn::AbstractVector) = [energy(f, es) for es in epsn]
+
+update!(at::AbstractAtoms, f::GrandPotential, tbm::TBModel) = nothing
+
+set_Nel!(f::GrandPotential, tbm, at, Nel) = set_eF!(f, eF_solver(at, f, tbm, Nel))
+
+# get_Ne(f::GrandPotential) = occupancy(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f))
+
+fixed_eF(::GrandPotential) = true
 
 # ================= The Old Smearing Function ============================
 # should still implement it, then deprecate and remove once
@@ -162,8 +175,11 @@ _gr3_ = Calculus.differentiate(_gr2_, :epsn)
     fixed_eF::Bool
 end
 
-get_eF(f::FermiDiracSmearing) = f.eF
+get_eF(f::FiniteTPotential) = f.eF
 get_Ne(f::FermiDiracSmearing) = f.Ne
+
+fixed_eF(f::FermiDiracSmearing) = f.fixed_eF
+
 
 """`FermiDiracSmearing`:
 
@@ -182,7 +198,7 @@ energy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta) 
 energy(fd::FermiDiracSmearing, epsn::AbstractVector) = [energy(fd, es) for es in epsn]
 
 
-function set_eF!(fd::FermiDiracSmearing, eF)
+function set_eF!(fd::FiniteTPotential, eF)
    fd.eF = eF
 end
 

@@ -114,10 +114,10 @@ function pexsi_partial_energy{TI <: Integer}(
 
    # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
-   @assert tbm.potential.fixed_eF
+   @assert fixed_eF(tbm.potential)
    # assume that the smearing function is FermiDiracSmearing
    # but this should be ok to lift!!!!!
-   @assert isa(tbm.potential, FermiDiracSmearing)
+   @assert isa(tbm.potential, FiniteTPotential)
 
    # assume that we have only one k-point
    # TODO: eventually (when implementing dislocations) we will need BZ
@@ -247,7 +247,7 @@ function _calibrate_EminEmax!(calc, at, at_train, nkpoints, eF, δNel)
    if eF != nothing
       set_eF!(calc.tbm, eF)
    else
-      @assert isa(calc.tbm.potential, FermiDiracSmearing)
+      @assert isa(calc.tbm.potential, FiniteTPotential)
       # TODO: generalise last line: require that the potential is a
       #       fixed_eF potential, then do the same calibration
       if nkpoints == nothing
