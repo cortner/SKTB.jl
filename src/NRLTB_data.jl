@@ -17,28 +17,42 @@ function default_orbitals(s)
 end
 
 
-function NRLParams(s; orbitals=default_orbitals(s))
+
+function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    s = string(s)
    orbitals = string(orbitals)
    if s == "Al"  && orbitals == "spd"
-      return Al_spd
+      H = Al_spd
    elseif s == "Si" && orbitals == "sp"
-      return Si_sp
+      H = Si_sp
    elseif s == "Si" && orbitals == "spd"
-      return Si_spd
+      H = Si_spd
    elseif s == "C" && orbitals == "sp"
-      return C_sp
+      H = C_sp
+   else
+      error("unkown species / orbitals combination in `NRLParams`")
    end
-   error("unkown species / orbitals combination in `NRLParams`")
+
+   if cutoff == :original
+      H.fcut = cutoff_NRL_original
+   elseif cutoff == :energyshift
+      H.fcut = cutoff_NRL_Eshift
+   elseif cutoff == :forceshift
+      H.fcut = cutoff_NRL_Fshift
+   else
+      error("unknown cut-off type")
+   end
+   return H
 end
+
 
 
 
 # SILICON
 # 'Si' : silicon with s&p orbitals
 # reduce Rc = 12.5 to 7.5
-Si_sp  =  NRLHamiltonian{4}( 4, 4,			    # norbital, nbond
-                    12.5, 0.5,			# Rc, lc
+Si_sp  =  NRLHamiltonian{4, Function}(4, 4,			    # norbital, nbond
+                    12.5, 0.5, cutoff_NRL,			# Rc, lc
                     1.10356625153,		# λ
                     [-0.053233461902,  0.357859715265,  0.357859715265,  0.357859715265],  	#a
                     [-0.907642743185,  0.303647693101,  0.303647693101,  0.303647693101],   	#b
@@ -56,12 +70,11 @@ Si_sp  =  NRLHamiltonian{4}( 4, 4,			    # norbital, nbond
                    )
 
 
-
 # SILICON
 # 'Si' : silicon with s&p&d orbitals  :BUT: ignore d-d orbital interactions
 # reduce Rc = 12.5 to 7.5
-Si_spd  =  NRLHamiltonian{9}(9, 10,			# norbital, nbond
-                     12.5, 0.5,		# Rc, lc
+Si_spd  =  NRLHamiltonian{9, Function}(9, 10,			# norbital, nbond
+                     12.5, 0.5, cutoff_NRL,			# Rc, lc
                      1.1108,		# λ
                      [-0.0555,  0.4127,   0.4127,   0.4127,
                       0.9691,   0.9691,   0.9691,   0.9691,  0.9691],         	#a
@@ -99,8 +112,8 @@ Si_spd  =  NRLHamiltonian{9}(9, 10,			# norbital, nbond
 # CARBON
 # 'C' : carbon with s&p orbitals
 # reduce Rc = 10.5 to 6.0
-C_sp  =  NRLHamiltonian{4}( 4, 4,			    # norbital, nbond
-                    10.5, 0.5,			# Rc, lc
+C_sp  =  NRLHamiltonian{4, Function}( 4, 4,			    # norbital, nbond
+                    10.5, 0.5, cutoff_NRL,			# Rc, lc
                     1.59901905594,		# λ
                     [-0.102789972814,  0.542619178314,  0.542619178314,  0.542619178314],  	#a
                     [-1.62604640052,   2.73454062799,   2.73454062799,   2.73454062799],   	#b
@@ -122,8 +135,8 @@ C_sp  =  NRLHamiltonian{4}( 4, 4,			    # norbital, nbond
 # ALUMINIUM
 # 'Al' : Aluminum with s&p&d orbitals
 # reduce Rc = 16.5 to 9.5
-Al_spd  =  NRLHamiltonian{9}(9, 10,			        # norbital, nbond
-                     16.5, 0.5,		    	# Rc, lc
+Al_spd  =  NRLHamiltonian{9, Function}(9, 10,			        # norbital, nbond
+                     16.5, 0.5, cutoff_NRL,			# Rc, lc
                      1.108515601511,		# λ
                      [-0.0368090795665,  0.394060871550,  0.394060871550,  0.394060871550,
                       1.03732517161,  1.03732517161,  1.03732517161, 1.03732517161, 1.03732517161],         	#a
