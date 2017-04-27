@@ -1,4 +1,6 @@
 
+
+
 push!(LOAD_PATH, "/Users/ortner/gits/Atoms.jl")
 
 using JuLIP, TightBinding
@@ -6,14 +8,17 @@ using JLD
 import AtJuLIP
 TB = TightBinding
 
+
+
 nkpoints = (0,0,0)
+beta = 10.0
 
 # compute a configuration
 at = bulk("Si", cubic = true)
 rattle!(at, 0.02)
 
 # JuLIP TB model
-tbj = TB.NRLTB.NRLTBModel(elem = TB.NRLTB.Si_sp, nkpoints = nkpoints)
+tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta))
 
 # JulIP matrices
 Hj, Mj = hamiltonian(tbj, at)
@@ -35,6 +40,10 @@ je = full(Hj) |> eigvals |> real |> sort
 @show vecnorm(ae - je, Inf)
 
 
+println("JuLIP/TightBinding:")
+display(round(Hj[1:8,1:8], 4))
+println("Atoms:")
+display(round(Ha[1:8,1:8], 4))
 
 
 

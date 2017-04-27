@@ -331,9 +331,6 @@ function _assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
       n, m, H_nm, S = skh.i[t], skh.j[t], skh.vH[t], skh.Rcell[t]
       if !ISORTH; M_nm = skh.vM[t]; end
       In, Im = indexblock(n, skh.H), indexblock(m, skh.H)
-      # if minimum(In) < 1 || minimum(Im) < 1 || maximum(In) > N || maximum(Im) > N
-      #    @show In, Im
-      # end
       exp_i_kR = exp( im * dot(k, S) )
       idx = _append!(H, It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
    end
@@ -353,7 +350,6 @@ function best(skh, k)
    const FULLSPARSE_CROSSOVER = 0.4  # based on testing with sp NRLTB model for Si
    nnz_full = (length(skh.at) * norbitals(skh.H))^2
    nnz_sparse = nnz(skh)
-   @show nnz_sparse / nnz_full
    if nnz_sparse / nnz_full  <= FULLSPARSE_CROSSOVER
       return sparse(skh, k)
    else

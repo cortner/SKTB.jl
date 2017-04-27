@@ -88,8 +88,8 @@ NRLTBModel(species, fs::ChemicalPotential;
 # TODO: talk to Noam about this.
 
 cutoff_NRL(r, Rc, lc, Mc = 5.0) =
-            (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc ))) .* (r .<= Rc)
-
+   (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc)
+   # (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc ))) .* (r .<= Rc)
 
 # ================= HOPPING INTEGRALS =====================
 
