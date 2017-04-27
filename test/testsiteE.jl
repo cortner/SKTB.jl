@@ -7,7 +7,7 @@ TB = TightBinding
 # test parameters
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
-NQUAD = (4, 6, 8, 10)     # number of contour points
+NQUAD = (4, 8, 16, 20)     # number of contour points
 DIM = (1,2,3)
 
 
@@ -48,7 +48,7 @@ for nquad in NQUAD
    Enew = site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
-@test abs(Enew - Eold) < 1e-6
+@test abs(Enew - Eold) < 1e-5
 
 println("Test consistency of site forces")
 TB.set_npoles!(calc, 8)

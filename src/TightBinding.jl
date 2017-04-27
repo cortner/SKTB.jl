@@ -12,7 +12,6 @@ import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d
 export hamiltonian, densitymatrix, TBModel, TightBindingModel
 
 
-
 # ============================================================================
 
 

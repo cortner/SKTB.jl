@@ -13,8 +13,7 @@ import JuLIP.Potentials: cutoff
 export NRLTBModel, NRLHamiltonian
 
 const BOHR = 0.52917721092::Float64  # atomic unit of length 1 Bohr = 0.52917721092 Å
-# const BOHR = 1.0::Float64
-# TODO: insert the BOHR conversion into the hop!, overlap! and onsite! functions
+const half_eV = 13.60569301::Float64     # conversion from Ha to eV:  1 eV = 27.21138602 Ha
 
 # Norbital: 4 if(s, p) : s, px, py, pz
 #           9 if(s, p, d) : s, px, py, pz, dxy, dyz, dzx, dx^2-y^2, d3z^2-r^2
@@ -113,7 +112,9 @@ NRLTBModel(species, fs::ChemicalPotential;
 
 nrl_hop(H::NRLHamiltonian, r, i) = (H.e[i] + (H.f[i] + H.g[i] * r) * r) * exp( - H.h[i]^2 * r)
 
-hop(H::NRLHamiltonian, r, i) = nrl_hop(H, r/BOHR, i) * H.fcut(r/BOHR, H.Rc, H.lc)
+hop(H::NRLHamiltonian, r, i) =
+   half_eV * nrl_hop(H, r/BOHR, i) * H.fcut(r/BOHR, H.Rc, H.lc)
+
 
 
 # ================= OVERLAP INTEGRALS  =====================
@@ -154,7 +155,7 @@ function onsite!(H::NRLHamiltonian, r, _, H_nn)
    ρ = pseudoDensity(H, r / BOHR)
    fill!(H_nn, 0.0)
    for i = 1:norbitals(H)
-      H_nn[i,i] = nrl_os(H, ρ, i)
+      H_nn[i,i] = half_eV * nrl_os(H, ρ, i)
    end
    return H_nn
 end
@@ -164,7 +165,7 @@ function onsite_grad!(H::NRLHamiltonian, r, R, dH_nn)
    ∇ρ = ForwardDiff.gradient( r_ -> pseudoDensity(H, r_ / BOHR), r )
    fill!(dH_nn, 0.0)
    for i = 1:norbitals(H), a = 1:3, j = 1:length(r)
-      dH_nn[a,i,i,j] = nrl_os_d(H, ρ, i) * ∇ρ[j] * R[j][a] / r[j]
+      dH_nn[a,i,i,j] = half_eV * nrl_os_d(H, ρ, i) * ∇ρ[j] * R[j][a] / r[j]
    end
    return dH_nn
 end

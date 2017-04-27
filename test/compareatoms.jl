@@ -30,13 +30,13 @@ tba = AtJuLIP.JuLIPTB(:Si, nkpoints = nkpoints)
 
 # Atoms Matrices
 Ha, Ma = hamiltonian(tba, at)
-Ha = full(Ha)
+Ha = TB.NRLTB.half_eV * full(Ha)
 Ma = full(Ma)
 
 @show vecnorm(Hj - Ha, Inf)
+@test vecnorm(Hj - Ha, Inf) < 1e-12
 @show vecnorm(Mj - Ma, Inf)
+@test vecnorm(Mj - Ma, Inf) < 1e-12
 ae = full(Ha) |> eigvals |> real |> sort
 je = full(Hj) |> eigvals |> real |> sort
 @show vecnorm(ae - je, Inf)
-
-# @assert size(Ha, 1) == length(at) * 9
