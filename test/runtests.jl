@@ -3,8 +3,8 @@ using JuLIP, JuLIP.ASE
 using JuLIP.Testing
 using Base.Test
 
-COMPAREATOMS = true    # if Atoms.jl is installed
-COMPAREQUIP = true
+COMPAREATOMS = false    # if Atoms.jl is installed
+COMPAREQUIP = false     # if QUIP and quippy are installed 
 TESTDEPTH = 1
 
 println("============================================")
@@ -12,8 +12,8 @@ println("    TightBinding Tests  ")
 println("============================================")
 
 # =========== Main tests =================
-# include("testtoymodel.jl")
-# include("testnrltb.jl")
+include("testtoymodel.jl")
+include("testnrltb.jl")
 include("testsiteE.jl")
 
 # ============= Compare with Atoms.jl and QUIP implementations
