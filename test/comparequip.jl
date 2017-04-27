@@ -1,9 +1,14 @@
 
+using JuLIP
+using TightBinding
+
+beta = 10.0
 
 TB = TightBinding
-at = bulk("Si", cubic = true)
+at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
-tbm = TB.NRLTB.NRLTBModel(elem = TB.NRLTB.Si_sp, nkpoints = (0,0,0))
+tbm = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp)
+
 H, M = hamiltonian(tbm, at)
 H = full(H)
 M = full(M)
@@ -41,21 +46,28 @@ end
 quip_tb = make_quip_tb(at, 0)
 Hq, Mq = tb_matrices(quip_tb, at)
 
+M, H = real(M), real(H)
+Mq, Hq = real(Mq), real(Hq)
+
 # normalise Hq:
 Hqn = Hq * H[1,1] / Hq[1,1]
 Mqn = Mq * M[1,1] / Mq[1,1]
 
-M = real(M)
-Mqn = real(Mqn)
-# @show M[1,1:15]
-# @show Mqn[1,1:15]
+
+@show vecnorm(H - Hqn, Inf)
+@show vecnorm(M - Mqn, Inf)
 
 E = sort(real(eigvals(H, M)))
-Eqn = sort(real(eigvals(Hqn, Mqn)))
-Eqn = Eqn * E[end] / Eqn[end]
-@show E[end-10:end]
-@show Eqn[end-10:end]
+Eqn = sort(real(eigvals(Hq, Mq)))
 @show norm(E - Eqn, Inf)
+@show norm(E - Eqn * E[1]/Eqn[1], Inf)
+
+
+println("JuLIP: " )
+display(round(H[1:12, 1:12], 3)); println()
+println("QUIP: ")
+display(round(Hqn[1:12,1:12], 3)); println()
+
 
 
 

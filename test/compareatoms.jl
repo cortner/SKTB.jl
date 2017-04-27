@@ -18,7 +18,7 @@ at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
 
 # JuLIP TB model
-tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :spd)
+tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :spd, cutoff=:energyshift)
 
 # JulIP matrices
 Hj, Mj = hamiltonian(tbj, at)
@@ -38,3 +38,5 @@ Ma = full(Ma)
 ae = full(Ha) |> eigvals |> real |> sort
 je = full(Hj) |> eigvals |> real |> sort
 @show vecnorm(ae - je, Inf)
+
+@assert size(Ha, 1) == length(at) * 9
