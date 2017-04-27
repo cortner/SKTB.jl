@@ -64,16 +64,14 @@ cutoff(H::NRLHamiltonian) = H.Rc
 # TODO: talk to Noam about this.
 
 
-_nrlcut_(r, Rc, lc, Mc) = (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )))
-# cutoff_NRL_d(r, Rc, lc, Mc=5.0) = (-1) * (1.0 + exp( (r-Rc) / lc + Mc )).^(-2) .* exp( (r-Rc) / lc + Mc ) / lc .* (r .<= Rc)
-# cutoff_NRL_d(Rc,Rc,lc,Mc) = (-1) * (1.0 + exp(Mc))^(-2) * exp(Mc) / lc
+_nrlcut_(r, Rc, lc, Mc) =
+   (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )))
 
 cutoff_NRL_original(r, Rc, lc, Mc=5.0) =
    _nrlcut_(r,Rc,lc,Mc) .* (r .<= Rc)
 
 cutoff_NRL_Eshift(r, Rc, lc, Mc = 5.0) =
    (_nrlcut_(r,Rc,lc,Mc) - 1.0/(1.0+exp(Mc))) .* (r .<= Rc)
-   # (1.0 ./ (1.0 + exp( (r-Rc) / lc + Mc )) - 1.0 ./ (1.0 + exp(Mc))) .* (r .<= Rc)
 
 cutoff_NRL_Fshift(r, Rc, lc, Mc=5.0) =
    (_nrlcut_(r,Rc,lc,Mc) - 1.0/(1.0+exp(Mc)) + (exp(Mc)/lc)/(1.0+exp(Mc))^2 * (r-Rc)) .* (r .<= Rc)
