@@ -4,7 +4,6 @@
 push!(LOAD_PATH, "/Users/ortner/gits/Atoms.jl")
 
 using JuLIP, TightBinding
-using JLD
 import AtJuLIP
 TB = TightBinding
 
