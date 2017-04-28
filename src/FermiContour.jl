@@ -44,7 +44,7 @@ end # module Transforms
 include("JacobiFunc.jl")
 
 export fermicontour
-function fermicontour(Emin,Emax,β,μ,n)
+function fermicontour(Emin,Emax,β,μ,n, pure=false)
     m = Emin^2 + π^2/β^2
     M = Emax^2 + π^2/β^2
 
@@ -65,9 +65,11 @@ function fermicontour(Emin,Emax,β,μ,n)
             Transforms.Affine(im,0)
 
         # Fermi-Dirac function
-        w[i] *= abs(β*z[i]) < log(realmax(typeof(k))) ?
-                1/(1 + exp(β*z[i])) :
-                0.5*(1-sign(real(z[i])))
+        if !pure
+           w[i] *= abs(β*z[i]) < log(realmax(typeof(k))) ?
+                   1/(1 + exp(β*z[i])) :
+                   0.5*(1-sign(real(z[i])))
+        end
         z[i] += μ
     end
     return w,z
