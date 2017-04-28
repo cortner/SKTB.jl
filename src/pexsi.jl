@@ -115,8 +115,8 @@ function pexsi_partial_energy{TI <: Integer}(
    # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
    @assert fixed_eF(tbm.potential)
-   # assume that the smearing function is FermiDiracSmearing
-   # but this should be ok to lift!!!!!
+   # assume that this is a finite-T model, otherwise we need a different kind
+   # of contour - but this should be ok to lift!!!!!
    @assert isa(tbm.potential, FiniteTPotential)
 
    # assume that we have only one k-point
@@ -137,6 +137,7 @@ function pexsi_partial_energy{TI <: Integer}(
    # get the Fermi-contour
    Emin, Emax = get_EminEmax(at)
    w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential), calc.nquad)
+   Ez = energy(tbm.potential, z)
 
    # collect all the orbital-indices corresponding to the site-indices into a long vector
    Iorb = indexblock(Is, tbm.H)
@@ -157,16 +158,16 @@ function pexsi_partial_energy{TI <: Integer}(
    end
 
    # integrate over the contour
-   for (wi, zi) in zip(w, z)
+   for (wi, zi, Ei) in zip(w, z, Ez)
       # Green's function
       LU = lufact(H - zi * M)
       # --------------- assemble energy -----------
       resM = LU \ rhsM
-      E += real(wi * zi * trace(resM[Iorb,:]))
+      E += real(wi * Ei * trace(resM[Iorb,:]))
       # --------------- assemble forces -----------
       if deriv
          res = isorthogonal(tbm) ? resM : LU \ rhs
-         _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*zi, zi)
+         _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*Ei, zi)
       end
    end
    return E, ∇E
