@@ -92,7 +92,8 @@ GrandPotential
 occupancy(f::GrandPotential, epsn::Number, eF) = fermidirac(epsn, eF, f.beta)
 occupancy(f::GrandPotential, epsn::Number) = occupancy(f, epsn, f.eF)
 
-_logfd(z) = real(z) < 0 ? z - log(1+exp(z)) : log( exp(z) / (1+exp(z)) )
+# _logfd(z) = real(z) < 0 ? z - log(1+exp(z)) : log( exp(z) / (1+exp(z)) )
+_logfd(z) = real(z) < 0 ? z - log1p(exp(z)) : -log1p(exp(-z));
 # _logfd(z) = log( exp(z) / (1+exp(z)) )
 # _logfd(z) = z - log(1+exp(z))
 grand(epsn, eF, beta) = 2.0/beta * _logfd(beta*(epsn-eF))

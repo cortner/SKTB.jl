@@ -7,7 +7,7 @@ TB=TightBinding
 println("Test Kwon TB Model")
 at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
 @show length(at)
-β, fixed_eF = 3.0, true
+β, fixed_eF = 30.0, true
 tbm = TB.Kwon.KwonTBModel(# potential = FermiDiracSmearing(β),
                           potential = TB.GrandPotential(β, 0.0),
                           # bzquad=TB.MPGrid(at, (4,0,0)) )
@@ -47,7 +47,7 @@ println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
 # ==================== site energy tests ==================
 
 n0 = 1
-NQUAD = (4, 8, 16, 20)
+NQUAD = (4, 8, 16, 20, 25, 30)
 
 E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )

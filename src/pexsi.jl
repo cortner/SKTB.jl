@@ -134,9 +134,12 @@ function pexsi_partial_energy{TI <: Integer}(
       M = speye(ndofs(tbm.H, at))
    end
 
-   # get the Fermi-contour
+   # get the Fermi-contour;
+   # to be on the safe side, we don't use the Emin parameter at all; this
+   # can cause problems when there is an e-val near eF.
    Emin, Emax = get_EminEmax(at)
-   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential), calc.nquad)
+   w, z = fermicontour(0.0, Emax, beta(tbm.potential), calc.nquad)
+   z += get_eF(tbm.potential)
    Ez = energy(tbm.potential, z)
 
    # collect all the orbital-indices corresponding to the site-indices into a long vector
