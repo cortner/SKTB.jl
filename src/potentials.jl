@@ -21,9 +21,9 @@ export ZeroTemperature,
 #         this can of course be overloaded
 
 # AD derivative of potential and occupancy
-grad(f::ChemicalPotential, epsn::Real) =
+grad(f::FiniteTPotential, epsn::Real) =
       ForwardDiff.derivative(s -> energy(f, s), epsn)
-occupancy_d(f::ChemicalPotential, epsn::Real, args...) =
+occupancy_d(f::FiniteTPotential, epsn::Real, args...) =
       ForwardDiff.derivative(s -> occupancy(f, s, args...), epsn)
 
 # vectorized versions
@@ -31,16 +31,16 @@ energy(f::ChemicalPotential, epsn::AbstractVector, args...) =
       [energy(f, es, args...) for es in epsn]
 occupancy(f::ChemicalPotential, epsn::AbstractVector, args...) =
       [occupancy(f, es, args...) for es in epsn]
-grad(f::ChemicalPotential, epsn::AbstractVector, args...) =
+grad(f::FiniteTPotential, epsn::AbstractVector, args...) =
       [grad(f, s, args...) for s in epsn]
-occupancy_d(f::ChemicalPotential, epsn::AbstractVector, args...) =
+occupancy_d(f::FiniteTPotential, epsn::AbstractVector, args...) =
       [occupancy_d(f, s, args...) for s in epsn]
 
 # default implementations for extracting beta and eF
 beta(f::FiniteTPotential) = f.beta
 get_eF(f::FiniteTPotential) = f.eF
 
-function set_eF!(fd::FiniteTPotential, eF)
+function set_eF!(fd::ChemicalPotential, eF)
    fd.eF = eF
 end
 
@@ -198,49 +198,65 @@ end
 
 
 
+# ================= Zero-Temperature Models  ============================
+
+function fermilevel(tbm::TBModel, at::AbstractAtoms, Nel)
+   e = spectrum(tbm, at) |> sort
+   Nel = floor(Int, Nel)
+   return 0.5 * (e[Nel] + e[Nel+1])
+end
+
+abstract ZeroTPotential <: ChemicalPotential
+
+"""
+`ZeroT`: 0T canonical model (Nel fixed)
+"""
+type ZeroT <: ZeroTPotential
+   Nel::Float64
+   eF::Float64
+end
+
+"""
+`ZeroTGrand`: 0T Grand-canonical model (eF fixed)
+"""
+type ZeroTGrand <: ZeroTPotential
+   Nel::Float64
+   eF::Float64
+end
+
+beta(f::ZeroTPotential) = 0.0
+
+get_eF(f::ZeroTPotential) = f.eF
+
+get_Nel(f::ZeroTPotential) = f.Nel
+
+occupancy(f::ZeroTPotential, epsn::Number) = epsn < f.eF ? 1.0 : 0.0
+
+energy(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn) * epsn
+
+grad(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn)
 
 
+function set_Nel!(f::ZeroT, tbm, at, Nel)
+   f.Nel = Nel
+   return nothing
+end
 
+function set_Nel!(f::ZeroTGrand, tbm, at, Nel)
+   f.Nel = Nel
+   f.eF = fermilevel(tbm, at, Nel)
+   return nothing
+end
 
-# # ================= Zero-Temperature Models  ============================
-#
-#
-# @pot type ZeroTemperatureGrand <: ChemicalPotential
-#    eF::Float64
-# end
-# """
-# 0T model for the electrons in the grand potential
-# (with fixed Fermi-level eF, but variable number of particle Nel)
-# """
-# ZeroTemperatureGrand
-#
-# update!(::AbstractAtoms, ::ZeroTemperatureGrand) = nothing
-#
-#
-# # TODO: continue here; need an eF for this one as well
-# #       probably write a collect_epsn function to compute and sort all e-vals
-# #       then compute eF from those.
-#
-# @pot type ZeroTemperature <: ChemicalPotential
-#    Nel::Float64
-# end
-# """
-# 0T model for the electrons in the canonical potentials
-# (fixed number of particles Nel, variable fermi-level eF)
-# """
-# ZeroTemperature
-#
-# update!(::AbstractAtoms, ::ZeroTemperature) = nothing
-#
-# function set_Nel!(f::ZeroTemperature, Nel::Integer)
-#    f.Nel = Nel
-#    return f
-# end
-#
-# function set_Nel!(tbm::AbstractTBModel, Nel::Integer)
-#    set_Nel!(tbm.potential, Nel)
-#    return tbm
-# end
+function update!(at::AbstractAtoms, f::ZeroT, tbm::TBModel)
+   f.eF = fermilevel(tbm, at, f.Nel)
+   return nothing
+end
+
+function update!(at::AbstractAtoms, f::ZeroTGrand, tbm::TBModel)
+   f.Ne = occupancy(at, f, tbm)
+   return nothing
+end
 
 
 
