@@ -1,5 +1,5 @@
 
-using FermiContour
+using FermiContour: fermicontour
 
 """
 `PEXSI <: AbstractTBModel`:

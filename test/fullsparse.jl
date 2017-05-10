@@ -1,6 +1,6 @@
 
 
-# 2D geometry NRL: cross-over is at 0.06% sparsity!!!
+# 2D geometry NRL: cross-over is at 6% sparsity!!!
 # 3D, NRL: ca. 0.06 as well
 for N = 2:6
    at = (N,N,N) * bulk("Si", pbc=false, cubic=true)

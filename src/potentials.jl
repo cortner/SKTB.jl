@@ -1,4 +1,5 @@
 
+using Parameters
 import Calculus
 
 export ZeroTemperature,
@@ -31,7 +32,7 @@ energy(f::ChemicalPotential, epsn::AbstractVector, args...) =
       [energy(f, es, args...) for es in epsn]
 occupancy(f::ChemicalPotential, epsn::AbstractVector, args...) =
       [occupancy(f, es, args...) for es in epsn]
-grad(f::FiniteTPotential, epsn::AbstractVector, args...) =
+grad(f::ChemicalPotential, epsn::AbstractVector, args...) =
       [grad(f, s, args...) for s in epsn]
 occupancy_d(f::FiniteTPotential, epsn::AbstractVector, args...) =
       [occupancy_d(f, s, args...) for s in epsn]
@@ -211,17 +212,17 @@ abstract ZeroTPotential <: ChemicalPotential
 """
 `ZeroT`: 0T canonical model (Nel fixed)
 """
-type ZeroT <: ZeroTPotential
-   Nel::Float64
-   eF::Float64
+@with_kw type ZeroT <: ZeroTPotential
+   Nel::Float64 = 0.0
+   eF::Float64 = 0.0
 end
 
 """
 `ZeroTGrand`: 0T Grand-canonical model (eF fixed)
 """
-type ZeroTGrand <: ZeroTPotential
-   Nel::Float64
-   eF::Float64
+@with_kw type ZeroTGrand <: ZeroTPotential
+   Nel::Float64 = 0.0
+   eF::Float64 = 0.0
 end
 
 beta(f::ZeroTPotential) = 0.0
@@ -230,19 +231,14 @@ get_eF(f::ZeroTPotential) = f.eF
 
 get_Nel(f::ZeroTPotential) = f.Nel
 
-occupancy(f::ZeroTPotential, epsn::Number) = epsn < f.eF ? 1.0 : 0.0
+occupancy(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn, f.eF)
+occupancy(f::ZeroTPotential, epsn::Number, μ) = epsn < μ ? 1.0 : 0.0
 
 energy(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn) * epsn
 
 grad(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn)
 
-
-function set_Nel!(f::ZeroT, tbm, at, Nel)
-   f.Nel = Nel
-   return nothing
-end
-
-function set_Nel!(f::ZeroTGrand, tbm, at, Nel)
+function set_Nel!(f::ZeroTPotential, tbm, at, Nel)
    f.Nel = Nel
    f.eF = fermilevel(tbm, at, Nel)
    return nothing
@@ -254,7 +250,7 @@ function update!(at::AbstractAtoms, f::ZeroT, tbm::TBModel)
 end
 
 function update!(at::AbstractAtoms, f::ZeroTGrand, tbm::TBModel)
-   f.Ne = occupancy(at, f, tbm)
+   f.Nel = occupancy(at, f, tbm)
    return nothing
 end
 
