@@ -7,10 +7,11 @@ TB=TightBinding
 println("Test Kwon TB Model")
 at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
 @show length(at)
-β, fixed_eF = 1.0, true
-tbm = TB.Kwon.KwonTBModel(potential = TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
-                        #   bzquad=TB.MPGrid(at, (4,0,0)) )
-                                bzquad = TB.GammaPoint() )
+β, fixed_eF = 30.0, true
+tbm = TB.Kwon.KwonTBModel(# potential = FermiDiracSmearing(β),
+                          potential = TB.GrandPotential(β, 0.0),
+                          # bzquad=TB.MPGrid(at, (4,0,0)) )
+                          bzquad = TB.GammaPoint() )
 print("Test setting Nel ... ")
 TB.set_δNel!(tbm, at)
 println("ok.")
@@ -36,17 +37,17 @@ frc = forces(tbm, at) |> mat
 println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
 @test true
 
-println("  Finite-difference test:  ")
-@test fdtest(tbm, at, verbose=true)
-println("  Finite-difference test without the repulsive part:  ")
-Vrep, tbm.Vrep = tbm.Vrep, JuLIP.Potentials.ZeroSitePotential()
-@test fdtest(tbm, at, verbose=true)
-tbm.Vrep = Vrep
+# println("  Finite-difference test:  ")
+# @test fdtest(tbm, at, verbose=true)
+# println("  Finite-difference test without the repulsive part:  ")
+# Vrep, tbm.Vrep = tbm.Vrep, JuLIP.Potentials.ZeroSitePotential()
+# @test fdtest(tbm, at, verbose=true)
+# tbm.Vrep = Vrep
 
-# ====== site energy tests
+# ==================== site energy tests ==================
 
 n0 = 1
-NQUAD = (4, 8, 16, 20)
+NQUAD = (4, 8, 16, 20, 25, 30)
 
 E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
@@ -75,6 +76,7 @@ for nquad in NQUAD
    Enew = site_energy(calc, at, n0)
    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
 end
+@show Enew, Eold
 @test abs(Enew - Eold) < 1e-5
 
 println("Test consistency of site forces")

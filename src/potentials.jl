@@ -1,4 +1,5 @@
 
+using Parameters
 import Calculus
 
 export ZeroTemperature,
@@ -10,11 +11,7 @@ export ZeroTemperature,
 # a smearing function can be
 #  [1] 0T or finite T
 #  [2] fixed eF or variable eF
-
-# TODO: consider combining ZeroTemperature with MerminFreeEnergy and
-#       ZeroTemperatureGrand with GrandPotential
-#
-# TODO: ChemicalPotential is not a great term, what would be a better one?
+# TODO: ZeroTemperature models, MerminFreeEnergy
 
 
 # ChemicalPotentials define:
@@ -24,57 +21,41 @@ export ZeroTemperature,
 #     NB: grad is defined via ForwardDiff, but for an efficient implemention
 #         this can of course be overloaded
 
-grad(f::ChemicalPotential, epsn::Real) = ForwardDiff.derivative(s->energy(f, s), epsn)
-grad(f::ChemicalPotential, epsn::AbstractVector) = [grad(f, s) for s in epsn]
+# AD derivative of potential and occupancy
+grad(f::FiniteTPotential, epsn::Real) =
+      ForwardDiff.derivative(s -> energy(f, s), epsn)
+occupancy_d(f::FiniteTPotential, epsn::Real, args...) =
+      ForwardDiff.derivative(s -> occupancy(f, s, args...), epsn)
 
-occupancy_d(f::ChemicalPotential, epsn::Real) = ForwardDiff.derivative(s -> occupancy(f, s), epsn)
-occupancy_d(f::ChemicalPotential, epsn::Real, μ::Real) =
-   ForwardDiff.derivative(s -> occupancy(f, s, μ), epsn)
-occupancy_d(f::ChemicalPotential, epsn::AbstractVector, args...) =
-   [occupancy_d(f, s, args...) for s in epsn]
+# vectorized versions
+energy(f::ChemicalPotential, epsn::AbstractVector, args...) =
+      [energy(f, es, args...) for es in epsn]
+occupancy(f::ChemicalPotential, epsn::AbstractVector, args...) =
+      [occupancy(f, es, args...) for es in epsn]
+grad(f::ChemicalPotential, epsn::AbstractVector, args...) =
+      [grad(f, s, args...) for s in epsn]
+occupancy_d(f::FiniteTPotential, epsn::AbstractVector, args...) =
+      [occupancy_d(f, s, args...) for s in epsn]
 
+# default implementations for extracting beta and eF
 beta(f::FiniteTPotential) = f.beta
-beta(f::ZeroTPotential) = Inf    # or should it be `nothing`???
+get_eF(f::FiniteTPotential) = f.eF
 
-# ================= Zero-Temperature Models  ============================
-
-
-@pot type ZeroTemperatureGrand <: ChemicalPotential
-   eF::Float64
-end
-"""
-0T model for the electrons in the grand potential
-(with fixed Fermi-level eF, but variable number of particle Nel)
-"""
-ZeroTemperatureGrand
-
-update!(::AbstractAtoms, ::ZeroTemperatureGrand) = nothing
-
-
-# TODO: continue here; need an eF for this one as well
-#       probably write a collect_epsn function to compute and sort all e-vals
-#       then compute eF from those.
-
-@pot type ZeroTemperature <: ChemicalPotential
-   Nel::Float64
-end
-"""
-0T model for the electrons in the canonical potentials
-(fixed number of particles Nel, variable fermi-level eF)
-"""
-ZeroTemperature
-
-update!(::AbstractAtoms, ::ZeroTemperature) = nothing
-
-function set_Nel!(f::ZeroTemperature, Nel::Integer)
-   f.Nel = Nel
-   return f
+function set_eF!(fd::ChemicalPotential, eF)
+   fd.eF = eF
 end
 
-function set_Nel!(tbm::AbstractTBModel, Nel::Integer)
-   set_Nel!(tbm.potential, Nel)
-   return tbm
+function set_beta!(fd::FiniteTPotential, beta)
+   fd.beta = beta
 end
+
+# total occupancy calculation
+
+occupancy(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
+   sum( w * occupancy(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
+
+occupancy_d(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
+   sum( w * occupancy_d(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
 
 
 
@@ -86,69 +67,47 @@ _fd1_ = Calculus.differentiate(_fd0_, :epsn)
 _fd2_ = Calculus.differentiate(_fd1_, :epsn)
 _fd3_ = Calculus.differentiate(_fd2_, :epsn)
 
-eval( :( fermidirac(epsn, eF, beta) = $_fd0_ ) )
+eval( :( fermidirac(epsn::Number, eF, beta) = $_fd0_ ) )
 eval( :( fermidirac1(epsn, eF, beta) = $_fd1_ ) )
 eval( :( fermidirac2(epsn, eF, beta) = $_fd2_ ) )
 eval( :( fermidirac3(epsn, eF, beta) = $_fd3_ ) )
 
+fermidirac(epsn::AbstractVector, eF, beta) = [fermidirac(e, eF, beta) for e in epsn]
 
-
-# ================= Canonical Ensemble (Mermin) ============================
-
-@pot type MerminFreeEnergy <: ChemicalPotential
-   Nel::Float64
-   beta::Float64
-   eF::Float64
-end
-
-"""
-Mermin Free energy is given by
-`e ↦  2 e f(e - μ) + 2 β⁻¹ entropy(f(e-μ))`
-
-where μ is determined from  `2 ∑_s f(e_s - μ) = Nel.`
-"""
-MerminFreeEnergy
-
-_en0_ = :( f * log(f) - (1-f) * log(1-f) )
-_en1_ = Calculus.differentiate(_en0_, :f)
-_en2_ = Calculus.differentiate(_en1_, :f)
-_en3_ = Calculus.differentiate(_en2_, :f)
-
-eval( :( entropy(f) = $_en0_ ) )
-eval( :( entropy1(f) = $_en1_ ) )
-eval( :( entropy2(f) = $_en2_ ) )
-eval( :( entropy3(f) = $_en3_ ) )
-
-
-function update!(at::AbstractAtoms, f::MerminFreeEnergy)
-   error("`update!` for `MerminFreeEnergy` has not been implemented yet.")
-   # need to solve the nonlinear system that ensures
-   # ∑_k ∑_s f(ϵ_sk) = Nel/2    (or whatever)
-end
 
 
 # ================= Grand Potential ============================
 
 
-@pot type GrandPotential <: ChemicalPotential
+@pot type GrandPotential <: FiniteTPotential
    beta::Float64
    eF::Float64
 end
 
 """
-Finite temperature grand-potential
-
-e ↦ 2/β log(1 - f(e))
-
+Finite temperature grand-potential, e ↦ 2/β log(1 - f(e)),
 where f is the Fermi-dirac function.
 """
 GrandPotential
 
-_gr0_ = :( 2.0/beta * log(1 - $_fd0_) )
-_gr1_ = Calculus.differentiate(_gr0_, :epsn)
-_gr2_ = Calculus.differentiate(_gr1_, :epsn)
-_gr3_ = Calculus.differentiate(_gr2_, :epsn)
+occupancy(f::GrandPotential, epsn::Number, eF) = fermidirac(epsn, eF, f.beta)
+occupancy(f::GrandPotential, epsn::Number) = occupancy(f, epsn, f.eF)
 
+# _logfd(z) = real(z) < 0 ? z - log(1+exp(z)) : log( exp(z) / (1+exp(z)) )
+_logfd(z) = real(z) < 0 ? z - log1p(exp(z)) : -log1p(exp(-z));
+# _logfd(z) = log( exp(z) / (1+exp(z)) )
+# _logfd(z) = z - log(1+exp(z))
+grand(epsn, eF, beta) = 2.0/beta * _logfd(beta*(epsn-eF))
+
+energy(f::GrandPotential, epsn::Number) = grand(epsn, f.eF, f.beta)
+
+update!(at::AbstractAtoms, f::GrandPotential, tbm::TBModel) = nothing
+
+set_Nel!(f::GrandPotential, tbm, at, Nel) = set_eF!(f, eF_solver(at, f, tbm, Nel))
+
+# get_Ne(f::GrandPotential) = occupancy(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f))
+
+fixed_eF(::GrandPotential) = true
 
 
 # ================= The Old Smearing Function ============================
@@ -162,8 +121,9 @@ _gr3_ = Calculus.differentiate(_gr2_, :epsn)
     fixed_eF::Bool
 end
 
-get_eF(f::FermiDiracSmearing) = f.eF
 get_Ne(f::FermiDiracSmearing) = f.Ne
+fixed_eF(f::FermiDiracSmearing) = f.fixed_eF
+
 
 """`FermiDiracSmearing`:
 
@@ -171,20 +131,12 @@ f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
 """
 FermiDiracSmearing
 
-FermiDiracSmearing(beta; eF=0.0, Ne = 0.0, fixed_eF = true) = FermiDiracSmearing(beta, eF, Ne, fixed_eF)
+FermiDiracSmearing(beta; eF=0.0, Ne = 0.0, fixed_eF = true) =
+      FermiDiracSmearing(beta, eF, Ne, fixed_eF)
 
 occupancy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta)
 occupancy(fd::FermiDiracSmearing, epsn::Number, eF) = fermidirac(epsn, eF, fd.beta)
-occupancy(fd::FermiDiracSmearing, epsn::AbstractVector, args...) =
-      [occupancy(fd, es, args...) for es in epsn]
-
 energy(fd::FermiDiracSmearing, epsn::Number) = fermidirac(epsn, fd.eF, fd.beta) * epsn
-energy(fd::FermiDiracSmearing, epsn::AbstractVector) = [energy(fd, es) for es in epsn]
-
-
-function set_eF!(fd::FermiDiracSmearing, eF)
-   fd.eF = eF
-end
 
 function update!(at::AbstractAtoms, f::FermiDiracSmearing, tbm::TBModel)
    if !f.fixed_eF
@@ -192,13 +144,6 @@ function update!(at::AbstractAtoms, f::FermiDiracSmearing, tbm::TBModel)
    end
    return nothing
 end
-
-
-occupancy(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
-   sum( w * occupancy(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
-
-occupancy_d(at::AbstractAtoms, f::ChemicalPotential, tbm, μ = get_eF(f)) =
-   sum( w * occupancy_d(f, epsn, μ) for (w, _k, epsn, _ψ) in BZiter(tbm, at) )
 
 
 # TODO: make this robust by
@@ -251,3 +196,97 @@ function set_Nel!(f::FermiDiracSmearing, tbm, at, Nel)
    f.eF = eF_solver(at, f, tbm, Nel)
    return nothing
 end
+
+
+
+# ================= Zero-Temperature Models  ============================
+
+function fermilevel(tbm::TBModel, at::AbstractAtoms, Nel)
+   e = spectrum(tbm, at) |> sort
+   Nel = floor(Int, Nel)
+   return 0.5 * (e[Nel] + e[Nel+1])
+end
+
+abstract ZeroTPotential <: ChemicalPotential
+
+"""
+`ZeroT`: 0T canonical model (Nel fixed)
+"""
+@with_kw type ZeroT <: ZeroTPotential
+   Nel::Float64 = 0.0
+   eF::Float64 = 0.0
+end
+
+"""
+`ZeroTGrand`: 0T Grand-canonical model (eF fixed)
+"""
+@with_kw type ZeroTGrand <: ZeroTPotential
+   Nel::Float64 = 0.0
+   eF::Float64 = 0.0
+end
+
+beta(f::ZeroTPotential) = 0.0
+
+get_eF(f::ZeroTPotential) = f.eF
+
+get_Nel(f::ZeroTPotential) = f.Nel
+
+occupancy(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn, f.eF)
+occupancy(f::ZeroTPotential, epsn::Number, μ) = epsn < μ ? 1.0 : 0.0
+
+energy(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn) * epsn
+
+grad(f::ZeroTPotential, epsn::Number) = occupancy(f, epsn)
+
+function set_Nel!(f::ZeroTPotential, tbm, at, Nel)
+   f.Nel = Nel
+   f.eF = fermilevel(tbm, at, Nel)
+   return nothing
+end
+
+function update!(at::AbstractAtoms, f::ZeroT, tbm::TBModel)
+   f.eF = fermilevel(tbm, at, f.Nel)
+   return nothing
+end
+
+function update!(at::AbstractAtoms, f::ZeroTGrand, tbm::TBModel)
+   f.Nel = occupancy(at, f, tbm)
+   return nothing
+end
+
+
+
+
+
+# # ================= Canonical Ensemble (Mermin) ============================
+#
+# @pot type MerminFreeEnergy <: ChemicalPotential
+#    Nel::Float64
+#    beta::Float64
+#    eF::Float64
+# end
+#
+# """
+# Mermin Free energy is given by
+# `e ↦  2 e f(e - μ) + 2 β⁻¹ entropy(f(e-μ))`
+#
+# where μ is determined from  `2 ∑_s f(e_s - μ) = Nel.`
+# """
+# MerminFreeEnergy
+#
+# _en0_ = :( f * log(f) - (1-f) * log(1-f) )
+# _en1_ = Calculus.differentiate(_en0_, :f)
+# _en2_ = Calculus.differentiate(_en1_, :f)
+# _en3_ = Calculus.differentiate(_en2_, :f)
+#
+# eval( :( entropy(f) = $_en0_ ) )
+# eval( :( entropy1(f) = $_en1_ ) )
+# eval( :( entropy2(f) = $_en2_ ) )
+# eval( :( entropy3(f) = $_en3_ ) )
+#
+#
+# function update!(at::AbstractAtoms, f::MerminFreeEnergy)
+#    error("`update!` for `MerminFreeEnergy` has not been implemented yet.")
+#    # need to solve the nonlinear system that ensures
+#    # ∑_k ∑_s f(ϵ_sk) = Nel/2    (or whatever)
+# end

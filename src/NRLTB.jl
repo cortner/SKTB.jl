@@ -85,16 +85,15 @@ include("NRLTB_data.jl")
 
 
 """
-`NRLTBModel`: constructs the NRL tight binding model.
+`NRLTBModel(species, fs; kwargs...)`: constructs the NRL tight binding model.
 
-### Parameters
+* `species`: symbol or string specifying the chemical symbol
+* `fs` : chemical potential
 
-* elem : NRLParams (default at Carbon atom with s&p orbitals)
-* beta = 1.0 : electronic temperature
-* fixed_eF = true : if true, then the chemical potential is fixed (default at 0.0)
-* eF = 0.0 : chemical potential (if fixed)
-* nkpoints : number of k-points at each direction (only (0,0,Int) has been implemented)
-* hfd = 1e-6 : finite difference step for computing hessians
+### Keyword Parameters
+
+* `orbitals`: either `:sp` or `:spd` (the default option makes a predetermined choice)
+* `hfd` = 1e-6 : finite difference step for computing hessians
 * `cutoff`: NRLTB has one of the most awful cutoff multipliers in the history
 of interatomic potentials: use `cutoff=:original` for the original cutoff
 and enjoy the benefits of a discontinuous potential. Other options:

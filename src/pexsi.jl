@@ -1,5 +1,5 @@
 
-using FermiContour
+using FermiContour: fermicontour
 
 """
 `PEXSI <: AbstractTBModel`:
@@ -114,10 +114,10 @@ function pexsi_partial_energy{TI <: Integer}(
 
    # ----------- some temporary things to check simplifying assumptions
    # assume that the fermi-level is fixed
-   @assert tbm.potential.fixed_eF
-   # assume that the smearing function is FermiDiracSmearing
-   # but this should be ok to lift!!!!!
-   @assert isa(tbm.potential, FermiDiracSmearing)
+   @assert fixed_eF(tbm.potential)
+   # assume that this is a finite-T model, otherwise we need a different kind
+   # of contour - but this should be ok to lift!!!!!
+   @assert isa(tbm.potential, FiniteTPotential)
 
    # assume that we have only one k-point
    # TODO: eventually (when implementing dislocations) we will need BZ
@@ -134,9 +134,13 @@ function pexsi_partial_energy{TI <: Integer}(
       M = speye(ndofs(tbm.H, at))
    end
 
-   # get the Fermi-contour
+   # get the Fermi-contour;
+   # to be on the safe side, we don't use the Emin parameter at all; this
+   # can cause problems when there is an e-val near eF.
    Emin, Emax = get_EminEmax(at)
-   w, z = fermicontour(Emin, Emax, beta(tbm.potential), get_eF(tbm.potential), calc.nquad)
+   w, z = fermicontour(0.0, Emax, beta(tbm.potential), calc.nquad)
+   z += get_eF(tbm.potential)
+   Ez = energy(tbm.potential, z)
 
    # collect all the orbital-indices corresponding to the site-indices into a long vector
    Iorb = indexblock(Is, tbm.H)
@@ -157,16 +161,16 @@ function pexsi_partial_energy{TI <: Integer}(
    end
 
    # integrate over the contour
-   for (wi, zi) in zip(w, z)
+   for (wi, zi, Ei) in zip(w, z, Ez)
       # Green's function
       LU = lufact(H - zi * M)
       # --------------- assemble energy -----------
       resM = LU \ rhsM
-      E += real(wi * zi * trace(resM[Iorb,:]))
+      E += real(wi * Ei * trace(resM[Iorb,:]))
       # --------------- assemble forces -----------
       if deriv
          res = isorthogonal(tbm) ? resM : LU \ rhs
-         _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*zi, zi)
+         _pexsi_site_grad!(∇E, tbm.H, skhg, res, resM, rhs, wi*Ei, zi)
       end
    end
    return E, ∇E
@@ -247,7 +251,7 @@ function _calibrate_EminEmax!(calc, at, at_train, nkpoints, eF, δNel)
    if eF != nothing
       set_eF!(calc.tbm, eF)
    else
-      @assert isa(calc.tbm.potential, FermiDiracSmearing)
+      @assert isa(calc.tbm.potential, FiniteTPotential)
       # TODO: generalise last line: require that the potential is a
       #       fixed_eF potential, then do the same calibration
       if nkpoints == nothing

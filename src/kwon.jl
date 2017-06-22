@@ -25,7 +25,7 @@ Phys Rev B 49 (11), 1994.
    r0::Float64 = 2.360352   # Å
    Es::Float64 = -5.25       # eV
    Ep::Float64 = 1.2        # eV
-   E0::Float64 = 0.0  # eV   8.7393204  is the original value; but it is just a constant
+   E0::Float64 = 8.7393204  # eV   8.7393204  is the original value; but it is just a constant
    # ------------------------------- Electronic Parameters
    # α   1     2    3     4
    #    ssσ   spσ  ppσ   ppπ

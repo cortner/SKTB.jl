@@ -18,9 +18,10 @@ for orbitals in Orbitals
    println("Test NRLTB with $(orbitals)")
    at = (1,2,2) * bulk("Si", pbc=(true, true, true), cubic=true)
    @show length(at)
-   β, fixed_eF = 1.0, true
-   tbm = TB.NRLTB.NRLTBModel(:Si, orbitals = orbitals,
-                             TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
+   β, fixed_eF = 10.0, true
+   tbm = TB.NRLTB.NRLTBModel(:Si, TB.GrandPotential(β, 0.0),
+                           #  TB.FermiDiracSmearing(β, fixed_eF=fixed_eF),
+                           orbitals = orbitals,
                            #   bzquad=TB.MPGrid(at, (4,0,0)) )
                              bzquad = TB.GammaPoint() )
    print("Test setting Nel ... ")
