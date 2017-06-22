@@ -132,6 +132,8 @@ isorth(tbm::TBModel) = isorthogonal(tbm)
 
 get_eF(tbm::TBModel) = get_eF(tbm.potential)
 
+norbitals(tbm::TBModel) = norbitals(tbm.H)
+
 """
 `hamiltonian`: computes the hamiltonitan and overlap matrix for a tight
 binding model.
