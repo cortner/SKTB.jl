@@ -1,5 +1,6 @@
 
 using Parameters
+import Roots
 import Calculus
 
 export ZeroTemperature,
@@ -90,6 +91,8 @@ where f is the Fermi-dirac function.
 """
 GrandPotential
 
+GrandPotential(; β=30.0, beta=β, eF = 0.0) = GrandPotential(beta, eF)
+
 occupancy(f::GrandPotential, epsn::Number, eF) = fermidirac(epsn, eF, f.beta)
 occupancy(f::GrandPotential, epsn::Number) = occupancy(f, epsn, f.eF)
 
@@ -145,11 +148,17 @@ function update!(at::AbstractAtoms, f::FermiDiracSmearing, tbm::TBModel)
    return nothing
 end
 
+"""
+`eF_solver(at, f, tbm, Ne = get_Ne(f))`
 
-# TODO: make this robust by
-#  * adding bounds on available Ne
-#  * adding a bisection stage
-#
+* `at`: `AbstractAtoms`
+* `f`: potential (e.g. `FermiDiracSmearing`, `GrandPotential`, etc)
+* `tbm`: `TightBindingModel`
+* `Ne` : number of electrons in the system
+
+Given an electron number `Ne` compute the fermi-level (chemical potential)
+such that `∑_s f_s = Ne` (where `f_s` is the occupation number)
+"""
 function eF_solver(at, f, tbm, Ne = get_Ne(f))
    update!(at, tbm)
    # guess-timate an initial eF (this assumes Fermi-Dirac like behaviour)
@@ -159,20 +168,9 @@ function eF_solver(at, f, tbm, Ne = get_Ne(f))
       epsn_k = get_k_array(at, :epsn, k)
       μ += w * (epsn_k[nf-1] + epsn_k[nf]) / 2
    end
-
-   # Newton iteration
-   err = 1.0
-   itctr = 0
-   while abs(err) > 1e-8
-      Ni = occupancy(at, f, tbm, μ)
-      gi = occupancy_d(at, f, tbm, μ)
-      err = Ne - Ni
-      μ = μ - err / gi
-      itctr += 1
-      if itctr > 20
-         error("eF_solver Newton iteration failed.")
-      end
-   end
+   # call the Roots package
+   μ = Roots.fzero( _μ -> Ne - occupancy(at, f, tbm, _μ), μ )
+   @assert abs(Ne - occupancy(at, f, tbm, μ)) < 1e-6
 
    return μ
 end

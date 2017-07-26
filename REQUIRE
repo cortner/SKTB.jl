@@ -4,3 +4,4 @@ ForwardDiff
 StaticArrays
 Parameters
 PyCall
+Roots

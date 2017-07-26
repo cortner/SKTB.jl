@@ -86,15 +86,6 @@ function update!(calc::PEXSI, at::AbstractAtoms)
 end
 
 
-import Base.\
-function \(A::Base.SparseArrays.UMFPACK.UmfpackLU, B::Matrix{Float64})
-   out = zeros(B)
-   for n = 1:size(B, 2)
-      out[:, n] = A \ B[:, n]
-   end
-   return out
-end
-
 
 """
 partial_energy(calc::PEXSI, at, Is, deriv=false)
