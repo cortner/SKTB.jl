@@ -81,6 +81,7 @@ cutoff_NRL = cutoff_NRL_Fshift
 # contains information for Si, C, Al
 #    TODO: switch to data files
 include("NRLTB_data.jl")
+include("NRLTB_data2.jl")
 
 
 

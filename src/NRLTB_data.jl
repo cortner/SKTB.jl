@@ -6,12 +6,12 @@
 
 function default_orbitals(s)
    s = string(s)
-   if s == "Al"
+   # if s == "Al"  return "spd"
+   # if s == "Si"  return "sp"
+   if s == "C" || s == "Si"
+      return "sp"
+   else
       return "spd"
-   elseif s == "Si"
-      return "sp"
-   elseif s == "C"
-      return "sp"
    end
    error("unkown species in `NRLParams`")
 end
