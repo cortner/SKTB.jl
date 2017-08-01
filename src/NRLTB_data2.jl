@@ -65,6 +65,16 @@ end
 
 
 ######################## READ NRL-TB DATAS FROM TEXT ###############################
+# TODO HUAJIE: everything below here, move to TBDataFiles
+#               + also move the actual files
+#               + create function TBDataFiles.get_datafile
+
+_DATAFILES_ = Dict(
+   :Ag => "ag_par",
+   :Al => "al_par",
+   (:Al, :spd) => "al_par",
+)
+
 
 function read_nrl_data(s)
    s = string(s)

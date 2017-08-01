@@ -131,6 +131,8 @@ fixed_eF(f::FermiDiracSmearing) = f.fixed_eF
 """`FermiDiracSmearing`:
 
 f(e) = ( 1 + exp( beta (e - eF) ) )^{-1}
+
+Constructor: `FermiDiracSmearing(beta; eF=0.0, Ne = 0.0, fixed_eF = true)`
 """
 FermiDiracSmearing
 

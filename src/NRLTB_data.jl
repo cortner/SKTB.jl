@@ -4,6 +4,11 @@
 
 ############################### DATAS FOR NRL-TB #######################################
 
+try
+   import TBDataFiles
+catch
+end
+
 function default_orbitals(s)
    s = string(s)
    # if s == "Al"  return "spd"
@@ -17,6 +22,9 @@ function default_orbitals(s)
 end
 
 
+function load_NRLHamiltonian(fname)
+   # HUAJIE TODO
+end
 
 function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    s = string(s)
@@ -30,7 +38,12 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    elseif s == "C" && orbitals == "sp"
       H = C_sp
    else
-      error("unkown species / orbitals combination in `NRLParams`")
+      try
+         fname = TBDataFiles.get_datafile(s, orbitals)
+         H = load_NRLHamiltonian(fname)
+      catch
+         error("unkown species / orbitals combination in `NRLParams`")
+      end
    end
 
    if cutoff == :original
@@ -44,6 +57,7 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    end
    return H
 end
+
 
 
 
