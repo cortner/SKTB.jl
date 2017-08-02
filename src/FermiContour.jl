@@ -44,9 +44,24 @@ end # module Transforms
 include("JacobiFunc.jl")
 
 export fermicontour
-function fermicontour(Emin,Emax,β,n)
-    m = Emin^2 + π^2/β^2
-    M = Emax^2 + π^2/β^2
+"""
+    fermicontour(E1,E2,β,n) -> w,z
+
+Compute a quadrature rule for evaluating the Fermi-Dirac function through contour integration. 
+    
+For any `x ∈ [-E2,-E1] ∪ [E1,E2]` and any `β ∈ [0,∞]` it holds
+```julia
+fermidirac(x,β) ≈ sum(
+    real(w*fermidirac(z,β)/(z-x)) 
+    for (w,z) in zip(fermicontour(E1,E2,β,n)...)
+)
+```
+and the error converges exponentially for `n → ∞`. Note that both `E1 = 0` (single interval)
+and `β = Inf` (zero temperature) are valid inputs. 
+"""
+function fermicontour(E1,E2,β,n)
+    m = E1^2 + π^2/β^2
+    M = E2^2 + π^2/β^2
 
     k = (sqrt(M/m)-1)/(sqrt(M/m)+1)
     K = JacobiFunc.K(k^2)
@@ -57,7 +72,7 @@ function fermicontour(Emin,Emax,β,n)
     z = Vector{Complex{typeof(k)}}(length(t))
     for i = 1:length(t)
         # Quadrature points and weights
-        w[i],z[i] = (1/(2π*im) * 4*K/n, t[i]) |>
+        w[i],z[i] = (-1/(2π*im) * 4*K/n, t[i]) |>
             Transforms.Sn(k^2) |>
             Transforms.Möbius(1,1/k, -1,1/k) |>
             Transforms.Affine(-sqrt(m*M), π^2/β^2) |>
@@ -67,8 +82,12 @@ function fermicontour(Emin,Emax,β,n)
     return w,z
 end
 
-# Numerically stable implementation of 1/(1+exp(z))
 export fermidirac
+"""
+    fermidirac(z,β)
+
+Compute `1/(1+exp(β*z))` in a numerically stable way. 
+"""
 function fermidirac(z,β)
     return abs(β*z) < log(realmax(real(typeof(z)))) ?
             1/(1 + exp(β*z)) :
