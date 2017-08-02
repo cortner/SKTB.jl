@@ -58,6 +58,8 @@ fermidirac(x,β) ≈ sum(
 ```
 and the error converges exponentially for `n → ∞`. Note that both `E1 = 0` (single interval)
 and `β = Inf` (zero temperature) are valid inputs. 
+
+Reference: Lin Lin et al., Pole-Based Approximation of the Fermi-Dirac Function, Chinese Annals of Mathematics, Series B
 """
 function fermicontour(E1,E2,β,n)
     m = E1^2 + π^2/β^2
