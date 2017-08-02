@@ -4,6 +4,8 @@ using JuLIP.Potentials: site_energy, site_energy_d
 
 TB=TightBinding
 
+@testset "Kwon" begin
+
 println("Test Kwon TB Model")
 at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
 @show length(at)
@@ -100,3 +102,5 @@ for p = 2:9
    push!(errors, vecnorm(dEs-dEsh, Inf))
 end
 @test minimum(errors) < 1e-3 * maximum(errors)
+
+end

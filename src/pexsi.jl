@@ -1,5 +1,5 @@
 
-using FermiContour: fermicontour
+using TightBinding.FermiContour: fermicontour
 
 """
 `PEXSI <: AbstractTBModel`:
@@ -130,6 +130,7 @@ function pexsi_partial_energy{TI <: Integer}(
    # can cause problems when there is an e-val near eF.
    Emin, Emax = get_EminEmax(at)
    w, z = fermicontour(0.0, Emax, beta(tbm.potential), calc.nquad)
+   w = -w    # flip weights due to change in fermicontour implementation
    z += get_eF(tbm.potential)
    Ez = energy(tbm.potential, z)
 

@@ -26,6 +26,9 @@ include("potentials.jl")
 # BZ integration: MPGrid and GammaPoint, iterators, etc
 include("bzintegration.jl")
 
+# Construction of contours for PEXSI
+include("FermiContour.jl")
+
 # ============= SLATER KOSTER TYPE MODELS ================
 
 # basics for slater-koster type hamiltonians

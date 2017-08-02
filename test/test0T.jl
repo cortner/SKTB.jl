@@ -5,6 +5,7 @@ using JuLIP.Potentials: site_energy, site_energy_d
 TB=TightBinding
 
 println("Test 0T Potentials with Kwon TB Model")
+@testset "0T" begin
 
 for pot in (TB.ZeroT(), TB.ZeroTGrand())
 
@@ -107,3 +108,5 @@ end
 #    push!(errors, vecnorm(dEs-dEsh, Inf))
 # end
 # @test minimum(errors) < 1e-3 * maximum(errors)
+
+end 

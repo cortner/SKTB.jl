@@ -47,17 +47,17 @@ export fermicontour
 """
     fermicontour(E1,E2,β,n) -> w,z
 
-Compute a quadrature rule for evaluating the Fermi-Dirac function through contour integration. 
-    
+Compute a quadrature rule for evaluating the Fermi-Dirac function through contour integration.
+
 For any `x ∈ [-E2,-E1] ∪ [E1,E2]` and any `β ∈ [0,∞]` it holds
 ```julia
 fermidirac(x,β) ≈ sum(
-    real(w*fermidirac(z,β)/(z-x)) 
+    real(w*fermidirac(z,β)/(z-x))
     for (w,z) in zip(fermicontour(E1,E2,β,n)...)
 )
 ```
 and the error converges exponentially for `n → ∞`. Note that both `E1 = 0` (single interval)
-and `β = Inf` (zero temperature) are valid inputs. 
+and `β = Inf` (zero temperature) are valid inputs.
 
 Reference: Lin Lin et al., Pole-Based Approximation of the Fermi-Dirac Function, Chinese Annals of Mathematics, Series B
 """
@@ -88,7 +88,7 @@ export fermidirac
 """
     fermidirac(z,β)
 
-Compute `1/(1+exp(β*z))` in a numerically stable way. 
+Compute `1/(1+exp(β*z))` in a numerically stable way.
 """
 function fermidirac(z,β)
     return abs(β*z) < log(realmax(real(typeof(z)))) ?

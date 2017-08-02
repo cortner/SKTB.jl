@@ -12,16 +12,16 @@ code to experiment with new models, and non-standard multi-scale schemes.
 
 ## Installation
 
-The module depends on the latest versions of [JuLIP.jl](https://github.com/libAtoms/JuLIP.jl) and
-[FermiContour.jl](https://github.com/ettersi/FermiContour.jl). Install
+The module depends on the latest versions of [JuLIP.jl](https://github.com/libAtoms/JuLIP.jl). Install
 these via
 ```
 Pkg.add("JuLIP")
 Pkg.checkout("JuLIP")
-Pkg.clone("https://github.com/ettersi/FermiContour.jl")
 ```
 
 
 ## Authors
 
-This module was written by [Huajie Chen](https://github.com/hjchen1983) and [Christoph Ortner](http://homepages.warwick.ac.uk/staff/C.Ortner/).
+This module was written by [Huajie Chen](https://github.com/hjchen1983) and [Christoph Ortner](http://homepages.warwick.ac.uk/staff/C.Ortner/), the FermiContour
+submodule was merged from [FermiContour.jl](https://github.com/ettersi/FermiContour.jl)
+by [ettersi](https://github.com/ettersi).
