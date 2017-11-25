@@ -80,7 +80,7 @@ function update!(calc::PEXSI, at::AbstractAtoms)
    epsn = spectrum(calc.tbm, at)
    eF = get_eF(calc.tbm)
    # TODO: not so clear that Emin, Emax should be updated!!!!
-   Emin, Emax = extrema( abs(epsn - eF) )
+   Emin, Emax = extrema( abs.(epsn - eF) )
    set_EminEmax!(at, Emin, Emax)
    return nothing
 end

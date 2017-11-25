@@ -3,7 +3,9 @@ module Kwon
 
 using Parameters
 using TightBinding: SKHamiltonian, hop, TBModel, NullPotential, ORTHOGONAL
-using JuLIP.Potentials: fcut, fcut_d, SplineCutoff, PairPotential, ZeroPairPotential, EAM
+using JuLIP.Potentials: fcut, fcut_d, SplineCutoff,
+   PairPotential, ZeroPairPotential, EAM, @analytic
+
 
 import JuLIP: cutoff
 import TightBinding: hop, onsite!, onsite_grad!
@@ -44,10 +46,10 @@ end
 
 cutoff(H::KwonHamiltonian) = H.rcut
 
-kwon_hop(H::KwonHamiltonian, r, α) = ( H.hr0[α] * (H.r0 / r)^2 *
+kwon_hop(H::KwonHamiltonian, r::Real, α) = ( H.hr0[α] * (H.r0 / r)^2 *
                exp( - 2 * (r/H.rc[α])^H.nc[α] + 2 * (H.r0/H.rc[α])^H.nc[α] ) )
 
-hop(H::KwonHamiltonian, r, α) = kwon_hop(H, r, α) * fcut(r, H.r1, H.rcut)
+hop(H::KwonHamiltonian, r::Real, α) = kwon_hop(H, r, α) * fcut(r, H.r1, H.rcut)
 
 function onsite!(H::KwonHamiltonian, _r, _R, H_nn)
    fill!(H_nn, 0.0)
@@ -61,14 +63,16 @@ onsite_grad!(H::KwonHamiltonian, _r, _R, dH_nn) = fill!(dH_nn, 0.0)
 # ============ Repulsive potential
 
 # embedding function C1 x + C2 x^2 + C3 x^3 + C3 x^4
-KwonEmbedding(H::KwonHamiltonian) = PairPotential(
-   :( $(H.E0) + r * ($(H.C[1]) + r * ($(H.C[2]) + r * ($(H.C[3]) + r * $(H.C[4])))) ) )
+KwonEmbedding(H::KwonHamiltonian) =
+   let E0=H.E0, C1=H.C[1], C2=H.C[2], C3=H.C[3], C4=H.C[4]
+      @analytic r -> E0 + r * (C1 + r * (C2 + r * (C3 + r * C4)))
+   end
 
 # electron density: (r0/r)^m * exp( - m * (r/dc)^mc + m * (r0/dc)^mc )
-KwonElDensity(H::KwonHamiltonian) = ( PairPotential(
-   :( ($(H.r0)/r)^($(H.m)) * exp( - $(H.m) * (r/$(H.dc))^($(H.mc))
-                                  + $(H.m) * ($(H.r0/H.dc))^($(H.mc)) ) )
-   ) * SplineCutoff(H.r1, H.rcut) )
+KwonElDensity(H::KwonHamiltonian) =
+   let r0 = H.r0, m = H.m, dc = H.dc, mc = H.mc
+      @analytic r -> (r0/r)^m * exp( - m * (r/dc)^mc + m * (r0/dc)^mc )
+   end * SplineCutoff(H.r1, H.rcut)
 
 KwonEAM(H::KwonHamiltonian) = EAM(ZeroPairPotential(), KwonElDensity(H), KwonEmbedding(H))
 
