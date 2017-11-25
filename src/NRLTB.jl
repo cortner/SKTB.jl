@@ -23,7 +23,7 @@ const half_eV = 13.60569301::Float64     # conversion from Ha to eV:  1 eV = 27.
 """
 `NRLHamiltonian `: specifies the parameters for the NRLTB hamiltonian
 """
-type NRLHamiltonian{NORB, FCUT} <: SKHamiltonian{NONORTHOGONAL, NORB}
+mutable struct NRLHamiltonian{NORB, FCUT} <: SKHamiltonian{NONORTHOGONAL, NORB}
     Norbital::Int64
     Nbond::Int64
 # cutoff parameters
@@ -142,7 +142,7 @@ end
 # ρ    : return the pseudo density on site n = 1, ... , length(atm)
 # note that the NRL pseudo density has ignored the self-distance
 pseudoDensity(H::NRLHamiltonian, r::AbstractVector) =
-   sum( exp(- H.λ^2 * r) .* H.fcut(r, H.Rc, H.lc) )
+   sum( exp.(- H.λ^2 * r) .* H.fcut(r, H.Rc, H.lc) )
 
 # auxiliary functions for computing the onsite terms
 nrl_os(H::NRLHamiltonian, ρ, i) =

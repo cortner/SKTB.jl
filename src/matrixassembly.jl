@@ -122,7 +122,7 @@ function onsite_grad! end
 # =========================  Intermediate Hamiltonian Type
 
 
-typealias SKBlock{NORB} SMatrix{NORB, NORB, Float64}
+const SKBlock{NORB} = SMatrix{NORB, NORB, Float64}
 
 """
 a triplet sparse matrix kind of thing that stores pre-computed
@@ -239,7 +239,7 @@ _alloc_full(H::SKHamiltonian{NONORTHOGONAL}, at::AbstractAtoms) =
    Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}(ndofs(H, at), ndofs(H, at))
 
 _alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
-   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}()
+   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}(0, 0)
 
 Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)
@@ -370,7 +370,7 @@ evaluate(H::SKHamiltonian, at::AbstractAtoms, k::AbstractVector; T=best) =
 a sparse-matrix kind of thing that stores pre-computed hamiltonian
 derivative blocks
 """
-type SparseSKHgrad{HT, TV}
+mutable struct SparseSKHgrad{HT, TV}
    H::HT
    at::AbstractAtoms
    i::Vector{Int32}
@@ -383,22 +383,14 @@ type SparseSKHgrad{HT, TV}
 end
 
 
+# TODO
 # this is a work-around until we move to v0.6; at that point
 # StaticArrays changes and we can do
-#    typealias SKBlockGrad{NORB} SArray{Tuple{3,NORB,NORB}, ...}
+#    const SKBlockGrad{NORB} = SArray{Tuple{3,NORB,NORB}, ...}
 # instead. But there is still the problem with D and L, which we need to
 # figure out as well!
 #
 SKBlockGradType{IO, NORB}(H::SKHamiltonian{IO, NORB}) = typeof(@SArray zeros(3, NORB, NORB))
-
-#
-# the next getindex extension is a little trick that let's us do the following:
-#     dH_ij[:,a,b] becomes a JVecF, which is useful for force assemblies
-#
-import Base.getindex
-getindex{T}(a::SArray{(3,1,1), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
-getindex{T}(a::SArray{(3,4,4), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
-getindex{T}(a::SArray{(3,9,9), T, 3}, ::Colon, i, j) = JVec(a[1,i,j], a[2,i,j], a[3,i,j])
 
 
 function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)

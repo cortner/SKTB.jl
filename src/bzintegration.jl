@@ -35,7 +35,7 @@ has_k_array(at::AbstractAtoms, symbol, k) = has_transient(at, (symbol, k))
 `GammaPoint`: defines Γ-point BZ integration, i.e., a single quadrature point
 in the origin.
 """
-type GammaPoint <: BZQuadratureRule end
+mutable struct GammaPoint <: BZQuadratureRule end
 
 Base.length(::GammaPoint) = 1
 
@@ -54,7 +54,7 @@ MPGrid(at::AbstractAtoms, nkpoints)
 ```
  * `nkpoints::Tuple{Int64,Int64,Int64}`
 """
-type MPGrid  <: BZQuadratureRule
+mutable struct MPGrid  <: BZQuadratureRule
    k::Vector{JVecF}
    w::Vector{Float64}
 end
@@ -161,14 +161,14 @@ for (w, k, ϵ, ψ) in BZiter(tbm, at)
 Note in particular that it calls `update!` at the beginning of the
 loop to precompute all the k-arrays.
 """
-type BZiter
+mutable struct BZiter
    tbm::TBModel
    at::AbstractAtoms
    w::Vector{Float64}
    k::Vector{JVecF}
 end
 
-type BZstate
+mutable struct BZstate
    ik::Int    # index into the w, k arrays in BZ
    is::Int    # index into the epsn_k and C_k arrays in BZstate
    epsn_k::Vector{Float64}

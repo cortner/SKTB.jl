@@ -80,7 +80,7 @@ fermidirac(epsn::AbstractVector, eF, beta) = [fermidirac(e, eF, beta) for e in e
 # ================= Grand Potential ============================
 
 
-@pot type GrandPotential <: FiniteTPotential
+@pot mutable struct GrandPotential <: FiniteTPotential
    beta::Float64
    eF::Float64
 end
@@ -117,7 +117,7 @@ fixed_eF(::GrandPotential) = true
 # should still implement it, then deprecate and remove once
 # we have fixed the Atoms.jl - TightBinding.jl equivalence
 
-@pot type FermiDiracSmearing  <: FiniteTPotential
+@pot mutable struct FermiDiracSmearing  <: FiniteTPotential
     beta::Float64
     eF::Float64
     Ne::Float64
@@ -207,12 +207,12 @@ function fermilevel(tbm::TBModel, at::AbstractAtoms, Nel)
    return 0.5 * (e[Nel] + e[Nel+1])
 end
 
-abstract ZeroTPotential <: ChemicalPotential
+abstract type ZeroTPotential <: ChemicalPotential end
 
 """
 `ZeroT`: 0T canonical model (Nel fixed)
 """
-@with_kw type ZeroT <: ZeroTPotential
+@with_kw mutable struct ZeroT <: ZeroTPotential
    Nel::Float64 = 0.0
    eF::Float64 = 0.0
 end
@@ -220,7 +220,7 @@ end
 """
 `ZeroTGrand`: 0T Grand-canonical model (eF fixed)
 """
-@with_kw type ZeroTGrand <: ZeroTPotential
+@with_kw mutable struct ZeroTGrand <: ZeroTPotential
    Nel::Float64 = 0.0
    eF::Float64 = 0.0
 end
@@ -260,7 +260,7 @@ end
 
 # # ================= Canonical Ensemble (Mermin) ============================
 #
-# @pot type MerminFreeEnergy <: ChemicalPotential
+# @pot mutable struct MerminFreeEnergy <: ChemicalPotential
 #    Nel::Float64
 #    beta::Float64
 #    eF::Float64
