@@ -12,12 +12,24 @@ code to experiment with new models, and non-standard multi-scale schemes.
 
 ## Installation
 
-The module depends on the latest versions of [JuLIP.jl](https://github.com/libAtoms/JuLIP.jl). Install
-these via
+`TightBinding.jl` is not registered, install by cloning:
+```julia
+Pkg.clone("https://github.com/cortner/TightBinding.jl.git")
 ```
-Pkg.add("JuLIP")
-Pkg.checkout("JuLIP")
+
+The `master` branch requires `Julia v0.6`. To use `TightBinding.jl` with
+`Julia v0.5` checkout the `v0.5` branch: from the Julia REPL this can be
+achieved via
+```julia
+cd(Pkg.dir("TightBinding"))
+run(`git checkout v0.5`)
 ```
+
+Please run
+```julia
+Pkg.test("TightBinding")
+```
+and file an issue if there are any failed tests.
 
 
 ## Authors
