@@ -115,11 +115,18 @@ end
 
 # this is imported from JuLIP
 energy(tbm::TBModel, at::AbstractAtoms) = (
-   sum( w * energy(tbm.potential, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) )
-   + energy(tbm.Vrep, at) )
+   sum( w * energy(tbm.potential, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) ) )
+   # + energy(tbm.Vrep, at)
 
-
-
+# function energy(tbm::TBModel, at::AbstractAtoms)
+#    update!(at, tbm)
+#    Etot = 0.0
+#    for (w, k) in tbm.bzquad
+#       epsn_k = get_k_array(at, :epsn, k)
+#       Etot += w * sum( energy(tbm.potential, epsn_k) )
+#    end
+#    return Etot # + energy(tbm.Vrep, at)
+# end
 
 # ========================== Forces ==========================
 
@@ -175,7 +182,8 @@ end
 function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
-   frc = forces(tbm.Vrep, atm) # zerovecs(length(atm))
+   # frc = forces(tbm.Vrep, atm)
+   frc = zerovecs(length(atm))
    for (w, k) in tbm.bzquad
       _forces_k!(frc, atm, tbm, tbm.H, k, skhg, w)
    end
@@ -197,7 +205,8 @@ function site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer)
       ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
       Esite += w * sum(energy(tbm.potential, epsn_k)  .* ψ²)
    end
-   return real(Esite) + site_energy(tbm.Vrep, at, n0)
+   return real(Esite)
+   # + site_energy(tbm.Vrep, at, n0)
 end
 
 
@@ -252,3 +261,118 @@ spectrum(tbm, at) = band_structure(tbm, at)[2][:]
 #    end
 #    return K, E
 # end
+
+
+
+# =================== Site Forces for a given k-point =======================
+# The derivatives of the site energy is computed by dual technique.
+# E_{ℓ,k} = ∑_s f'(ɛ_s)⋅ɛ_{s,n}⋅[ψ_s]_{ℓ}⋅[M*ψ_s]_{ℓ}         (=:T1)
+#           + ∑_s f(ɛ_s)⋅[ψ_s]_ℓ⋅[M_{,k}⋅ψ_s]_ℓ               (=:T2)
+#           + ∑_s f(ε_s)⋅[ψ_s]_{ℓ}⋅[M ψ_{s,k}]_ℓ              (=:T3)
+#           + ∑_s f(ε_s)⋅[ψ_s]_{ℓ,k}⋅[M ψ_s]_ℓ                (=:T4)
+#           - ∑_s f(ε_s)⋅⟨ψ_s|M_{,k}|ψ_s⟩⋅⟨ψ_s|M_{,k}|ψ_s⟩_ℓ  (=:T5)
+# Note that T5 comes from the pseudo iverse part that can not be handeled
+# by dual technique.
+# When ISORTH == true, we have T5 = 0 !
+# Dual technique for T3:
+# T3 = ∑_s f(ϵ_s)⋅⟨(H-ϵ_s⋅M)⁻[ψ_s]_{ℓ},(-H_{,k}+ϵ_s⋅M_{,k}+ϵ_{s,k}⋅M)ψ_s⟩
+
+function _dEs_k!{ISORTH, NORB}(dEs::Vector{JVecF},
+                              at::AbstractAtoms, tbm::TBModel,
+                              H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
+                              skhg, w, n0::Integer)
+   # n0 should be a Vector{Integer}? and also in function site_energy?
+   In0  = indexblock(n0, tbm.H)
+   # obtain the precomputed arrays
+   epsn = get_k_array(at, :epsn, k)::Vector{Float64}
+   C    = get_k_array(at, :C, k)::Matrix{Complex128}
+   f    = energy(tbm.potential, epsn)::Vector{Float64}
+   df   = grad(tbm.potential, epsn)::Vector{Float64}
+   M    = get_k_array(at, :M, k)
+   MC   = isorth(tbm) ? C[In0,:] : (M[In0, :] * C)
+   ψ²   = sum( conj(C[In0, :]) .* MC , 1 )[:]
+   # precompute some products
+   C_f_Ct         = (C * (f' .* C)')
+   C_f_ψ²_Ct      = (C * ( (f .* ψ²)' .* C )')
+   C_df_ψ²_Ct     = (C * ( (df .* ψ²)' .* C )')
+   C_dfepsn_ψ²_Ct = (C * ( (df .* epsn .* ψ²)' .* C )')
+   # an array replacing dM_ij when the model is orthogonal
+   dM_ij = zero(typeof(skhg.dH[1]))
+
+   # precompute pseudo-inverse:
+   # (H-ϵ_s⋅M)⁻[ψ_s]_{ℓ} = ∑_t (ϵ_t-ϵ_s)^{-1}⋅ ( [ψ_s]_ℓ⋅[M ψ_t]_ℓ + [M ψ_s]_ℓ⋅[ψ_t]_ℓ )⋅ψ_k
+   Nelc = length(epsn)
+   diff_eps_inv_ψst = zeros(Float64, Nelc, Nelc)
+	for t = 1:Nelc, s = 1:Nelc
+		if abs(epsn[t]-epsn[s]) > 1e-10
+        	diff_eps_inv_ψst[t,s] =  # 2.0 * ( C[In0,t]' * C[In0,s] )[1]
+                     ( C[In0,s]' * MC[:,t] + C[In0,t]' * MC[:,s] )[1] / (epsn[s]-epsn[t])
+      else
+        	diff_eps_inv_ψst[t,s] = 0.0
+      end
+	end
+   pinvC = C * diff_eps_inv_ψst
+   # precompute some products analogous to C_df_Ct
+   pinvC_f_Ct = (pinvC * (f' .* C)')
+   pinvC_fepsn_Ct = (pinvC * ( (f .* epsn)' .* C )')
+
+   for n = 1:length(skhg.i)
+      i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
+      if !ISORTH; dM_ij = skhg.dM[n]; end
+      Ii, Ij = indexblock(i, H), indexblock(j, H)
+      eikr = exp(im * dot(S, k))::Complex{Float64}
+      @inbounds for a = 1:NORB, b = 1:NORB
+         # add T1 part
+         t1 = 2.0 * real(C_df_ψ²_Ct[Ii[a],Ij[b]] * eikr)
+         t2 = 2.0 * real(C_dfepsn_ψ²_Ct[Ii[a],Ij[b]] * eikr)
+         t3 = real(C_df_ψ²_Ct[Ii[a],Ii[b]])
+         dEs[j] += t1 * dH_ij[:,a,b] - t2 * dM_ij[:,a,b] + t3 * dH_ii[:,a,b]
+         dEs[i] += - t3 * dH_ii[:,a,b]
+         # add T2 part
+         if i == n0  # should be i ∈ n0, when n0 is a int vector...
+            # t4 = 2.0 * real(C_f_Ct[Ii[a], Ij[b]] * eikr)
+            t4  = real(C_f_Ct[Ii[a], Ij[b]] * eikr) #+ real(C_f_Ct[Ij[b], Ii[a]] * eikr)
+            dEs[j] += t4 * dM_ij[:,a,b]
+            dEs[i] += - t4 * dM_ij[:,a,b]
+         end
+         # add T3 & T4 part
+         # t5 = 2.0 * real(pinvC_f_Ct[Ii[a],Ij[b]] * eikr)
+         # t6 = 2.0 * real(pinvC_fepsn_Ct[Ii[a],Ij[b]] * eikr)
+         # Be careful: the matrix pinvC_f_Ct is not symmetric !!
+         t5 = real(pinvC_f_Ct[Ii[a],Ij[b]] * eikr) +
+              real(pinvC_f_Ct[Ij[b],Ii[a]] * eikr)
+         t6 = real(pinvC_fepsn_Ct[Ii[a],Ij[b]] * eikr) +
+              real(pinvC_fepsn_Ct[Ij[b],Ii[a]] * eikr)
+         t7 = real(pinvC_f_Ct[Ii[a],Ii[b]])
+         dEs[j] += t5 * dH_ij[:,a,b] - t6 * dM_ij[:,a,b] + t7 * dH_ii[:,a,b]
+         dEs[i] += - t7 * dH_ii[:,a,b]
+         # add T5 part
+         t8 = 2.0 * real(C_f_ψ²_Ct[Ii[a],Ij[b]] * eikr)
+         dEs[j] += - t8 * dM_ij[:,a,b]
+      end
+   end
+
+   # TODO: diagonalize for pertubation of degenerated eigenvalues
+   #   But we need store different C_f_Ct for different partial derivsatives?
+   # The next two could be easy ...
+   # TODO: extend to the case when n0 has more than one site
+   # TODO: missing w in the calculations? (and so is the function forces)
+
+   return dEs
+end
+
+
+# Derivative of site energy using dual technique
+#
+function site_energy_d{HT <: SKHamiltonian}(
+                        tbm::TBModel{HT}, atm::AbstractAtoms, n0::Integer)
+   # println("calculate partial derivatives of site energy by a dual technique.")
+   update!(atm, tbm)
+   skhg = SparseSKHgrad(tbm.H, atm)
+   # dEs = forces(tbm.Vrep, atm)
+   dEs = zerovecs(length(atm))
+   for (w, k) in tbm.bzquad
+      _dEs_k!(dEs, atm, tbm, tbm.H, k, skhg, w, n0)
+   end
+   return dEs
+end
