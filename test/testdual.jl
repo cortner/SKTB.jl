@@ -23,31 +23,15 @@ E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
 println("Testing that the decompositions site energy sums to total energy")
 @show E - ∑En
+@test E - ∑En ≈ 0.0
 JuLIP.rattle!(at, 0.02)
 X = positions(at) |> mat
 
-# println("Finite difference test for energy derivatives")
-# E   = energy(tbm, at)
-# dE  = forces(tbm, at) |> mat
-# dEh = []
-# for p = 2:9
-#    h = 0.1^p
-#    dEh = zeros(dE)
-#    for n = 1:length(X)
-#       X[n] += h
-#       set_positions!(at, X)
-#       Eh = energy(tbm, at)
-#       dEh[n] = (Eh - E) / h
-#       X[n] -= h
-#    end
-#    println( " ", p, " | ", vecnorm(dE + dEh, Inf) )
-# end
-# set_positions!(at, X)
 
 println("Finite difference test for site energy derivatives")
 Es  = site_energy(tbm, at, n0)
 dEs = site_energy_d(tbm, at, n0) |> mat
-dEsh = []
+errors = Float64[]
 for p = 2:9
    h = 0.1^p
    dEsh = zeros(dEs)
@@ -58,8 +42,31 @@ for p = 2:9
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end
-   println( " ", p, " | ", vecnorm(dEs - dEsh, Inf) )
+   push!(errors, vecnorm(dEs - dEsh, Inf))
+   println( " ", p, " | ", errors[end])
 end
+@test minimum(errors) < 1e-3 * maximum(errors)
+
+
+println("Finite difference test for partial_energy")
+Idom = [3, 4, 5, 6]
+Es  = partial_energy(tbm, at, Idom)
+dEs = partial_energy_d(tbm, at, Idom) |> mat
+errors = Float64[]
+for p = 2:9
+   h = 0.1^p
+   dEsh = zeros(dEs)
+   for n = 1:length(X)
+      X[n] += h
+      set_positions!(at, X)
+      Esh = partial_energy(tbm, at, Idom)
+      dEsh[n] = (Esh - Es) / h
+      X[n] -= h
+   end
+   push!(errors, vecnorm(dEs - dEsh, Inf))
+   println( " ", p, " | ", errors[end])
+end
+@test minimum(errors) < 1e-3 * maximum(errors)
 
 
 end
