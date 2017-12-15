@@ -12,11 +12,11 @@ println("    TightBinding Tests  ")
 println("============================================")
 
 # =========== Main tests =================
-# include("testtoymodel.jl")
-# include("testnrltb.jl")
-# include("testcontour.jl")
-# include("testsiteE.jl")
-# include("testkwon.jl")
+include("testtoymodel.jl")
+include("testnrltb.jl")
+include("testcontour.jl")
+include("testsiteE.jl")
+include("testkwon.jl")
 include("testdual.jl")
 # include("test0T.jl")
 
