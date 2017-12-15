@@ -26,11 +26,11 @@ M = E2^2 + π^2/β^2
 k = (sqrt(M/m)-1)/(sqrt(M/m)+1)
 K = TightBinding.FermiContour.JacobiFunc.K(k^2)
 iK = TightBinding.FermiContour.JacobiFunc.iK(k^2)
-predicted = 2 * exp(-π*iK/(2K)*n)
+predicted = 2 * exp.(-π*iK/(2K)*n)
 
 println("n   error    predicted    err/pred")
 display([n  error predicted error./predicted]); println()
-@test maximum(abs(error./predicted - 1.0)) < 0.1
+@test maximum(abs.(error./predicted - 1.0)) < 0.1
 
 # TODO: implement analogous test for 0T contour!
 

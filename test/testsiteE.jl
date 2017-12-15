@@ -21,7 +21,7 @@ E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
 println("Testing that the spectral-decompositions site energy sums to total energy")
 @show E - ∑En
-@test abs(E - ∑En) < 1e-10
+@test abs.(E - ∑En) < 1e-10
 
 
 # now the real system to test on
@@ -73,7 +73,7 @@ end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
 println("Test consistency of ContourCalculator for multiple sites")
-Is = unique(mod(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) + 1)
 Eold = sum( site_energy(tbm, at, n0) for n0 in Is )
 Enew = 0.0
 for nquad in NQUAD
@@ -87,7 +87,7 @@ end
 println("Test consistency of multiple site forces")
 calc.nquad = 8
 X = copy( positions(at) |> mat )
-Is = unique(mod(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) + 1)
 Es, dEs = TB.pexsi_partial_energy(calc, at, Is, true)
 dEs = dEs |> mat
 dEsh = []

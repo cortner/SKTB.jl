@@ -24,13 +24,13 @@ abstract Tight Binding Hamiltonian operator; the parameter
 `ISORTH` is used to  allow dispatch w.r.t. whether the TB model is orthogonal
    or non-orthogonal
 """
-abstract TBHamiltonian{ISORTH}
+abstract type TBHamiltonian{ISORTH} end
 
 """
 An auxiliary hamiltonian that doesn't do anything but lets us
 construct an empty TBModel.
 """
-type NullHamiltonian <: TBHamiltonian{ORTHOGONAL}
+mutable struct NullHamiltonian <: TBHamiltonian{ORTHOGONAL}
 end
 
 isorthogonal{ISORTH}(::TBHamiltonian{ISORTH}) = ISORTH == ORTHOGONAL
@@ -57,7 +57,7 @@ are
 * `ISORTH` ∈ {`true`, `false`} : determine whether TB model is orthogonal or non-orthogonal
 * `NORB` ∈ {1,4,9} : integer, number of orbitals.
 """
-abstract SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH}
+abstract type SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH} end
 
 norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
 
@@ -75,16 +75,16 @@ ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 `TightBinding.jl` implements:
 # TODO: make list
 """
-abstract ChemicalPotential
+abstract type ChemicalPotential end
 
-abstract FiniteTPotential <: ChemicalPotential
-abstract ZeroTPotential <: ChemicalPotential
+abstract type FiniteTPotential <: ChemicalPotential end
+abstract type ZeroTPotential <: ChemicalPotential end
 
 """
 auxiliary smearing function that doesn't do anything but lets us construct
 and empty TBModel.
 """
-type NullPotential <: ChemicalPotential end
+mutable struct NullPotential <: ChemicalPotential end
 
 
 # ======================= BZ Quadrature supertype =====================
@@ -99,21 +99,21 @@ for (w, k) in tbm.bzquad
 end
 ```
 """
-abstract BZQuadratureRule
+abstract type BZQuadratureRule end
 
-type NullBZQ <: BZQuadratureRule end
+mutable struct NullBZQ <: BZQuadratureRule end
 
 # ===================  Standard TightBinding Calculator =====================
 
 """
 supertype for all TB model type calcualtors
 """
-abstract AbstractTBModel <: AbstractCalculator
+abstract type AbstractTBModel <: AbstractCalculator end
 
 """
 `TBModel`: basic non-self consistent tight binding calculator.
 """
-type TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: AbstractTBModel
+mutable struct TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: AbstractTBModel
    H::HT                 # hamiltonian
    Vrep::SitePotential   # additional MM potential (typically but not necessarily pair)
    potential::ST         # chemical potential / smearing function
@@ -122,7 +122,7 @@ type TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: AbstractTBModel
    hfd::Float64          # step used for finite-difference approximations
 end
 
-typealias TightBindingModel TBModel
+const TightBindingModel = TBModel
 
 TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
                     NullPotential(), NullBZQ(), 0.0)

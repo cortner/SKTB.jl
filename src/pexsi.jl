@@ -18,7 +18,7 @@ functionality and is therefore experimental.
       discretisation (nquad) as well as E0, E1.
 * [ ] 0T contour
 """
-type PEXSI{TBM <: TBModel} <: AbstractTBModel
+mutable struct PEXSI{TBM <: TBModel} <: AbstractTBModel
    tbm::TBM
    nquad::Int           # number of quadrature points
    Idom::Vector{Int}    # subset of atoms on which to compute the energy
@@ -80,7 +80,7 @@ function update!(calc::PEXSI, at::AbstractAtoms)
    epsn = spectrum(calc.tbm, at)
    eF = get_eF(calc.tbm)
    # TODO: not so clear that Emin, Emax should be updated!!!!
-   Emin, Emax = extrema( abs(epsn - eF) )
+   Emin, Emax = extrema( abs.(epsn - eF) )
    set_EminEmax!(at, Emin, Emax)
    return nothing
 end

@@ -26,7 +26,7 @@ See also `ToyTBModel`.
 * `ToyHamiltonian(; kwargs...)` where admissible kwargs with defaults are
    `alpha = 2.0, r0 = 1.0, rcut = 2.5, e0 = 10.0`.
 """
-type ToyHamiltonian{VT <: PairPotential} <: SKHamiltonian{ORTHOGONAL, 1}
+mutable struct ToyHamiltonian{VT <: PairPotential} <: SKHamiltonian{ORTHOGONAL, 1}
    V::VT
 end
 
