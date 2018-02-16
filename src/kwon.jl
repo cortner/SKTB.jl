@@ -23,7 +23,7 @@ with a quintic spline on the interval [0.5 (rcut + r0), rcut].
 Transferable tight-binding models for silicon.
 Phys Rev B 49 (11), 1994.
 """
-@with_kw immutable KwonHamiltonian <: SKHamiltonian{ORTHOGONAL, 4}
+@with_kw mutable struct KwonHamiltonian <: SKHamiltonian{ORTHOGONAL, 4}
    r0::Float64 = 2.360352   # Å
    Es::Float64 = -5.25       # eV
    Ep::Float64 = 1.2        # eV

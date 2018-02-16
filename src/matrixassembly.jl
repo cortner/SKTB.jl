@@ -269,6 +269,9 @@ function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
    fill!(Hout, 0.0)
    k = JVecF(k)
    for (i, j, H_ij, S) in zip(skh.i, skh.j, skh.vH, skh.Rcell)
+      if i == 0 || j == 0
+         error("unexplained i or j = 0")
+      end
       eikR = exp( im * dot(k, S) )
       Ii, Ij = indexblock(i, H), indexblock(j, H)
       @inbounds for a = 1:NORB, b = 1:NORB
