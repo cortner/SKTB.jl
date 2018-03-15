@@ -20,12 +20,12 @@ set_k_array!(at::AbstractAtoms, q, symbol, k) = set_transient!(at, (symbol, k), 
 """
 retrieve k-point dependent arrays
 """
-get_k_array(at::AbstractAtoms, symbol, k) = get_transient(at, (symbol, k))
+get_k_array(at::AbstractAtoms, symbol, k) = get_data(at, (symbol, k))
 
 """
 check that a k-array exists
 """
-has_k_array(at::AbstractAtoms, symbol, k) = has_transient(at, (symbol, k))
+has_k_array(at::AbstractAtoms, symbol, k) = has_data(at, (symbol, k))
 
 
 # ===================== Gamma-point =================

@@ -1,5 +1,5 @@
 
-using JuLIP: set_transient!, get_transient
+using JuLIP: set_transient!, get_data, has_data
 
 
 # this file implements the standard spectral decomposition
@@ -68,7 +68,7 @@ atom positions are updated.
 function update!(at::AbstractAtoms, tbm::TBModel)
    # check whether the :tbupdateflag exists;  if it does then atom positions
    # have not changed since last time that update! was called
-   if has_transient(at, :tbupdateflag)
+   if has_data(at, :tbupdateflag)
       return nothing
    end
    # set the update flag (will be deleted as soon as atom positions change)

@@ -1,5 +1,5 @@
 
-using ForwardDiff
+using ForwardDiff, NeighbourLists
 
 # slaterkoster.jl
 #
@@ -162,8 +162,8 @@ end
 Base.length(skh::SparseSKH) = length(skh.i)
 
 function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
-   if has_transient(at, :SKH)
-      return get_transient(at, :SKH)
+   if has_data(at, :SKH)
+      return get_data(at, :SKH)
    end
 
    # here is a little hack that will turn an abstract type into a concrete type
@@ -177,7 +177,7 @@ function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAto
    # neighbourlist
    nlist = neighbourlist(at, cutoff(H))
    #      off-diagonal + diagonal
-   nnz = length(nlist) + length(at)
+   nnz = npairs(nlist) + length(at)
    # allocate space for ordered triplet format
    i = zeros(Int32, nnz)
    j = zeros(Int32, nnz)
@@ -195,7 +195,7 @@ function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAto
    bonds = zeros(nbonds(H))     # temporary array for storing the potentials
 
    # loop through sites
-   for (n, neigs, r, R, _) in sites(nlist)
+   for (n, neigs, r, R) in sites(nlist)
       first[n] = idx+1          # where do the triplet entries for atom n start?
 
       # add the diagonal/on-site entries
@@ -398,8 +398,8 @@ SKBlockGradType{IO, NORB}(H::SKHamiltonian{IO, NORB}) = typeof(@SArray zeros(3, 
 
 function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
    # if the array has previously been computed, just return it
-   if has_transient(at, :SKBg)
-      return get_transient(at, :SKBg)
+   if has_data(at, :SKBg)
+      return get_data(at, :SKBg)
    end
    # (if not then generate it from scratch >>> rest of this function)
 
@@ -413,7 +413,7 @@ function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::Abstrac
    # neighbourlist
    nlist = neighbourlist(at, cutoff(H))
    #      off-diagonal + diagonal
-   nnz = length(nlist)
+   nnz = npairs(nlist)
    # allocate space for ordered triplet format
    i = zeros(Int32, nnz)
    j = zeros(Int32, nnz)
@@ -426,14 +426,14 @@ function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::Abstrac
    idx = 0
 
    # allocate work arrays
-   maxneigs = maximum(length(jj) for (_1, jj, _2, _3, _4) in sites(nlist))
+   maxneigs = maximum(length(jj) for (_1, jj, _2, _3) in sites(nlist))
    const dH_nn = zeros(3, NORB, NORB, maxneigs)
    const dH_nm = zeros(3, NORB, NORB)
    const dM_nm = zeros(3, NORB, NORB)
    const bonds = zeros(nbonds(H))
    const dbonds = zeros(nbonds(H))
 
-   for (n, neigs, r, R, _) in sites(nlist)
+   for (n, neigs, r, R) in sites(nlist)
       first[n] = idx+1
 
       # onsite derivative; copied into the new format in the following loop

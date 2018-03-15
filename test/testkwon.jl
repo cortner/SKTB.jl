@@ -7,11 +7,11 @@ TB=TightBinding
 @testset "Kwon" begin
 
 println("Test Kwon TB Model")
-at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
+at = (1,2,2) * bulk(:Si, pbc=(true, false, true), cubic=true)
 @show length(at)
 β, fixed_eF = 30.0, true
-tbm = TB.Kwon.KwonTBModel(# potential = FermiDiracSmearing(β),
-                          potential = TB.GrandPotential(β, 0.0),
+tbm = TB.Kwon.KwonTBModel(potential = FermiDiracSmearing(β),
+                          # potential = TB.GrandPotential(β, 0.0),
                           # bzquad=TB.MPGrid(at, (4,0,0)) )
                           bzquad = TB.GammaPoint() )
 print("Test setting Nel ... ")
@@ -39,12 +39,12 @@ frc = forces(tbm, at) |> mat
 println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
 @test true
 
-# println("  Finite-difference test:  ")
-# @test fdtest(tbm, at, verbose=true)
-# println("  Finite-difference test without the repulsive part:  ")
-# Vrep, tbm.Vrep = tbm.Vrep, JuLIP.Potentials.ZeroSitePotential()
-# @test fdtest(tbm, at, verbose=true)
-# tbm.Vrep = Vrep
+println("  Finite-difference test:  ")
+@test fdtest(tbm, at, verbose=true)
+println("  Finite-difference test without the repulsive part:  ")
+Vrep, tbm.Vrep = tbm.Vrep, JuLIP.Potentials.ZeroSitePotential()
+@test fdtest(tbm, at, verbose=true)
+tbm.Vrep = Vrep
 
 # ==================== site energy tests ==================
 
@@ -58,49 +58,49 @@ println("Testing that the spectral-decompositions site energy sums to total ener
 @test abs(E - ∑En) < 1e-10
 
 
-calc = TB.PEXSI(tbm, 5, [n0])
-JuLIP.rattle!(at, 0.02)
-# calibrate the PEXSI calculator on a mini-system
-print("calibrating . . . ")
-TB.calibrate!(calc, at; at_train = bulk("Si", pbc=true), npoles = 8)
-println("done."); @test true
-# output some useful info if we are watching the tests...
-@show length(at)
-@show TB.get_EminEmax(at)
+# calc = TB.PEXSI(tbm, 5, [n0])
+# JuLIP.rattle!(at, 0.02)
+# # calibrate the PEXSI calculator on a mini-system
+# print("calibrating . . . ")
+# TB.calibrate!(calc, at; at_train = bulk(:Si, pbc=true), npoles = 8)
+# println("done."); @test true
+# # output some useful info if we are watching the tests...
+# @show length(at)
+# @show TB.get_EminEmax(at)
 
-# compute the site energy the old way and compare against the PEXSI calculation
-Eold = TB.site_energy(tbm, at, n0)
-println("Old Site Energy (via spectral decomposition): ", Eold)
-println("Testing convergence of PEXSI site energy")
-Enew = 0.0
-for nquad in NQUAD
-   TB.set_npoles!(calc, nquad)
-   Enew = site_energy(calc, at, n0)
-   println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
-end
-@show Enew, Eold
-@test abs(Enew - Eold) < 1e-5
-
-println("Test consistency of site forces")
-TB.set_npoles!(calc, 8)
-X = positions(at) |> mat
-Es = site_energy(calc, at, n0)
-dEs = site_energy_d(calc, at, n0) |> mat
-dEsh = []
-errors = Float64[]
-for p = 2:9
-   h = 0.1^p
-   dEsh = zeros(dEs)
-   for n = 1:length(X)
-      X[n] += h
-      set_positions!(at, X)
-      Esh = site_energy(calc, at, n0)
-      dEsh[n] = (Esh - Es) / h
-      X[n] -= h
-   end
-   println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
-   push!(errors, vecnorm(dEs-dEsh, Inf))
-end
-@test minimum(errors) < 1e-3 * maximum(errors)
+# # compute the site energy the old way and compare against the PEXSI calculation
+# Eold = TB.site_energy(tbm, at, n0)
+# println("Old Site Energy (via spectral decomposition): ", Eold)
+# println("Testing convergence of PEXSI site energy")
+# Enew = 0.0
+# for nquad in NQUAD
+#    TB.set_npoles!(calc, nquad)
+#    Enew = site_energy(calc, at, n0)
+#    println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
+# end
+# @show Enew, Eold
+# @test abs(Enew - Eold) < 1e-5
+#
+# println("Test consistency of site forces")
+# TB.set_npoles!(calc, 8)
+# X = positions(at) |> mat
+# Es = site_energy(calc, at, n0)
+# dEs = site_energy_d(calc, at, n0) |> mat
+# dEsh = []
+# errors = Float64[]
+# for p = 2:9
+#    h = 0.1^p
+#    dEsh = zeros(dEs)
+#    for n = 1:length(X)
+#       X[n] += h
+#       set_positions!(at, X)
+#       Esh = site_energy(calc, at, n0)
+#       dEsh[n] = (Esh - Es) / h
+#       X[n] -= h
+#    end
+#    println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
+#    push!(errors, vecnorm(dEs-dEsh, Inf))
+# end
+# @test minimum(errors) < 1e-3 * maximum(errors)
 
 end

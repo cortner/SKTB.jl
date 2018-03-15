@@ -1,5 +1,5 @@
 using TightBinding
-using JuLIP, JuLIP.ASE
+using JuLIP
 using JuLIP.Testing
 using Base.Test
 
@@ -13,10 +13,10 @@ println("============================================")
 
 # =========== Main tests =================
 # include("testtoymodel.jl")
-include("testnrltb.jl")
+# include("testnrltb.jl")
 # include("testcontour.jl")
 # include("testsiteE.jl")
-# include("testkwon.jl")
+include("testkwon.jl")
 # include("testdual.jl")
 # include("test0T.jl")
 
