@@ -58,11 +58,11 @@ partial_energy(calc::PEXSI, at::AbstractAtoms, Idom) =
 
 
 function set_EminEmax!(at::AbstractAtoms, Emin, Emax)
-   set_info!(at, :EminEmax, (Emin, Emax))
+   set_data!(at, :EminEmax, (Emin, Emax))
 end
 
 function get_EminEmax(at::AbstractAtoms)
-   Emin, Emax = get_info(at, :EminEmax)::Tuple{Float64, Float64}
+   Emin, Emax = get_data(at, :EminEmax)::Tuple{Float64, Float64}
    return Emin, Emax
 end
 

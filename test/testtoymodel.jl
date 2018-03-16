@@ -4,7 +4,7 @@
 println("Testing TB Toy Model")
 
 TB = TightBinding
-at = (1,2,3) * bulk("Al", pbc=false, cubic=true)
+at = (1,2,3) * bulk(:Al, pbc=false, cubic=true)
 tbm = TightBinding.ToyTBModel(r0=2.5, rcut=4.9)
 
 X = positions(at)

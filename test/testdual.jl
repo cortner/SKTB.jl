@@ -15,7 +15,7 @@ DIM = (2,3,4)
 
 # define the model
 tbm = NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), bzquad = TB.GammaPoint() )
-at = bulk("Si", pbc = (false, false, true), cubic=false) * DIM
+at = bulk(:Si, pbc = (false, false, true), cubic=false) * DIM
 @show length(at)
 
 # TB.set_δNel!(tbm, at)
@@ -23,7 +23,7 @@ E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
 println("Testing that the decompositions site energy sums to total energy")
 @show E - ∑En
-@test E - ∑En ≈ 0.0
+@test abs(E - ∑En) < 1e-12
 JuLIP.rattle!(at, 0.02)
 X = positions(at) |> mat
 

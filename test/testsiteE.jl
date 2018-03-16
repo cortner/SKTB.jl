@@ -15,7 +15,7 @@ DIM = (1,2,3)
 tbm = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(beta), bzquad = TB.GammaPoint() )
 
 # check that the site energies add up to the total
-at = bulk("Si", pbc = (true, false, false), cubic=true) * DIM
+at = bulk(:Si, pbc = (true, false, false), cubic=true) * DIM
 TB.set_δNel!(tbm, at)
 E = energy(tbm, at)
 ∑En = sum( site_energy(tbm, at, n) for n = 1:length(at) )
@@ -26,12 +26,12 @@ println("Testing that the spectral-decompositions site energy sums to total ener
 
 # now the real system to test on
 calc = TB.PEXSI(tbm, 5, [1])
-at = DIM * bulk("Si", pbc=(false,false,false), cubic=true)
+at = DIM * bulk(:Si, pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
 
 # calibrate the PEXSI calculator on a mini-system
 print("calibrating . . . ")
-TB.calibrate!(calc, at; at_train = bulk("Si", pbc=true), npoles = 8)
+TB.calibrate!(calc, at; at_train = bulk(:Si, pbc=true), npoles = 8)
 println("done."); @test true
 
 # output some useful info if we are watching the tests...

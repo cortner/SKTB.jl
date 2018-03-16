@@ -63,7 +63,7 @@ Base.length(q::MPGrid) = length(q.w)
 
 w_and_pts(qrule::MPGrid) = (qrule.w, qrule.k)
 
-MPGrid(cell::Matrix{Float64}, nkpoints::Tuple{Int64, Int64, Int64}) =
+MPGrid(cell::AbstractMatrix, nkpoints::Tuple{Int64, Int64, Int64}) =
    MPGrid(monkhorstpackgrid(cell, nkpoints)...)
 
 MPGrid(at::AbstractAtoms, nkpoints::Tuple{Int64, Int64, Int64}) =
@@ -87,7 +87,7 @@ it can only be (0, 0, kz::Int).
 * `K`: `JVecsF` vector of length Nk
 * `weights`: integration weights; scalar (uniform grid) or Nk vector.
 """
-function monkhorstpackgrid(cell::Matrix{Float64},
+function monkhorstpackgrid(cell::AbstractMatrix,
                            nkpoints::Tuple{Int64, Int64, Int64})
    kx, ky, kz = nkpoints
    ## We need to check somewhere that 'nkpoints' and 'pbc' are compatable,
@@ -101,7 +101,7 @@ function monkhorstpackgrid(cell::Matrix{Float64},
                 grid so that the Γ-point can be sampled!"))
 	end
 	# compute the lattice vector of reciprocal space
-   B = 2*pi*pinv(cell)
+   B = 2 * pi * inv(cell)
    b1, b2, b3 = JVec(B[:,1]), JVec(B[:,2]), JVec(B[:,3])
 
 	# We can exploit the symmetry of the BZ (somewhat; more coudl be done here).
