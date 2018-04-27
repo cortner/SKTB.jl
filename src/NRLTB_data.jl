@@ -40,7 +40,7 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    else
       try
          fname = TBDataFiles.get_datafile(s, orbitals)
-         H = load_NRLHamiltonian(fname)
+         H = load_NRLHamiltonian2(fname)
       catch
          error("unkown species / orbitals combination in `NRLParams`")
       end

@@ -1,3 +1,8 @@
+# NRLTB_data2.jl
+# This function reads the ASCII format data files from the NRL server.
+#
+# The website has been lost, but a functional version remains on the Internet Archive:
+# https://web.archive.org/web/20121003160812/http://cst-www.nrl.navy.mil/bind/
 
 function NRLHamiltonian2(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    s = string(s)
@@ -13,7 +18,8 @@ function NRLHamiltonian2(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    # elseif s == "Ge" && orbitals == "spd"
    #   H = Ge_spd
    else
-      cd("/Users/hjchen/packages/TightBinding.jl/nrl_data")
+       cd(homedir())
+       cd(".julia/v0.6/TightBinding/nrl_data") # Relatively universal!
       fname = read_nrl_data(s)
       M = readdlm(fname)
       H =  NRLHamiltonian{9, Function}(9, 10,	   # norbital, nbond

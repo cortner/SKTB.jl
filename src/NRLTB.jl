@@ -105,7 +105,7 @@ and enjoy the benefits of a discontinuous potential. Other options:
 NRLTBModel(species, fs::ChemicalPotential;
            orbitals=default_orbitals(species), bzquad=GammaPoint(), hfd=1e-6,
             cutoff = :forceshift) =
-   TBModel(NRLHamiltonian(species, orbitals=orbitals, cutoff=cutoff),
+   TBModel(NRLHamiltonian2(species, orbitals=orbitals, cutoff=cutoff),
            ZeroSitePotential(), fs, bzquad, hfd)
 
 
