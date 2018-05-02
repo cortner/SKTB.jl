@@ -239,15 +239,22 @@ end
 spectrum(tbm, at) = band_structure(tbm, at)[2][:]
 
 function spectrum(k::JVec, tbm::TBModel, at::AbstractAtoms)
-   wrk = _alloc_full(H)
    H = SparseSKH(tbm.H, at)
+   wrk = _alloc_full(H)
    Hk, Mk = full!(wrk, H, k)
    epsn, C = sorted_eig(Hk, Mk)
    return epsn
 end
 
-band_structure(K::AbstractVector{JVec}, tbm::TBModel, at::AbstractAtoms) =
-   [ spectrum(k, tbm, at) for k in K ]
+function band_structure(K::AbstractVector, tbm::TBModel, at::AbstractAtoms)
+   EE = [ spectrum(k, tbm, at) for k in K ]
+   bands = [ zeros(length(EE)) for n = 1:length(EE[1]) ]
+   for n = 1:length(EE[1]), m = 1:length(EE)
+      bands[n][m] = EE[m][n]
+   end
+   return bands
+end 
+
 
 
 # """
