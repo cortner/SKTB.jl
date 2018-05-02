@@ -9,7 +9,6 @@ import JuLIP: energy, forces, cutoff
 import JuLIP.Potentials: evaluate, evaluate_d, site_energy, site_energy_d,
                         partial_energy, partial_energy_d
 
-# using FixedSizeArrays
 export hamiltonian, densitymatrix, TBModel, TightBindingModel
 
 

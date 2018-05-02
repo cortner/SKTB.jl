@@ -238,6 +238,17 @@ end
 """
 spectrum(tbm, at) = band_structure(tbm, at)[2][:]
 
+function spectrum(k::JVec, tbm::TBModel, at::AbstractAtoms)
+   wrk = _alloc_full(H)
+   H = SparseSKH(tbm.H, at)
+   Hk, Mk = full!(wrk, H, k)
+   epsn, C = sorted_eig(Hk, Mk)
+   return epsn
+end
+
+band_structure(K::AbstractVector{JVec}, tbm::TBModel, at::AbstractAtoms) =
+   [ spectrum(k, tbm, at) for k in K ]
+
 
 # """
 # `band_structure_near_eF(Nb::Integer, at::AbstractAtoms, tbm::TBModel) -> k, E`
