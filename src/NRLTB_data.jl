@@ -1,13 +1,5 @@
-#
-# This file is a temporary "hack" - we need to get a database
-#
+######################### Specification for NRL-TB ############################
 
-############################### DATAS FOR NRL-TB #######################################
-
-try
-   import TBDataFiles
-catch
-end
 
 function default_orbitals(s)
    s = string(s)
@@ -22,28 +14,61 @@ function default_orbitals(s)
 end
 
 
-function load_NRLHamiltonian(fname)
-   # HUAJIE TODO
-end
-
+# This function reads the ASCII format data files from the NRL server.
+#
+# The website has been lost, but a functional version remains on the Internet Archive:
+# https://web.archive.org/web/20121003160812/http://cst-www.nrl.navy.mil/bind/
+# 
 function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
-   s = string(s)
-   orbitals = string(orbitals)
-   if s == "Al"  && orbitals == "spd"
-      H = Al_spd
-   elseif s == "Si" && orbitals == "sp"
-      H = Si_sp
-   elseif s == "Si" && orbitals == "spd"
-      H = Si_spd
-   elseif s == "C" && orbitals == "sp"
+#   s = string(s)
+#   orbitals = string(orbitals)
+   if s == :C && orbitals == :sp
       H = C_sp
+   elseif s == :Si && orbitals == :sp
+      H = Si_sp
+   elseif s == :Si && orbitals == :spd
+      H = Si_spd
+   elseif s == :Al && orbitals == :spd
+      H = Al_spd
    else
-      try
-         fname = TBDataFiles.get_datafile(s, orbitals)
-         H = load_NRLHamiltonian2(fname)
-      catch
-         error("unkown species / orbitals combination in `NRLParams`")
-      end
+        cd(Pkg.dir("TightBinding"))
+        cd("nrl_data") # Relatively universal!
+        fname = NRLFILENAME[s] # Lookup species -> filename
+
+        M = readdlm(fname,skipstart=1)
+        H =  NRLHamiltonian{9, Function}(9, 10,	   # norbital, nbond
+                           M[3,1], M[3,2], cutoff_NRL,			# Rc, lc
+                           M[7,1],		# λ
+                           [M[8,1],   M[12,1],  M[12,1],  M[12,1],
+                            M[16,1],  M[16,1],  M[16,1],  M[16,1], M[16,1]],        #a
+                           [M[9,1],   M[13,1],  M[13,1],  M[13,1],
+                            M[17,1],  M[17,1],  M[17,1],  M[17,1], M[17,1]],       	#b
+                           [M[10,1],  M[14,1],  M[14,1],  M[14,1],
+                            M[18,1],  M[18,1],  M[18,1],  M[18,1], M[18,1]],  	   #c
+                           [M[11,1],  M[15,1],  M[15,1],  M[15,1],
+                            M[19,1],  M[19,1],  M[19,1],  M[19,1], M[19,1]],       	#d
+
+                           [M[24,1],   M[28,1],  M[32,1],  M[36,1],  M[40,1],
+                            M[44,1],   M[48,1],  M[52,1],  M[56,1],  M[60,1]],		#e
+                           [M[25,1],   M[29,1],  M[33,1],  M[37,1],  M[41,1],
+                            M[45,1],   M[49,1],  M[53,1],  M[57,1],  M[61,1]],      #f
+                           [M[26,1],   M[30,1],  M[34,1],  M[38,1],  M[42,1],
+                            M[46,1],   M[50,1],  M[54,1],  M[58,1],  M[62,1]],      #g
+                           [M[27,1],   M[31,1],  M[35,1],  M[39,1],  M[43,1],
+                            M[47,1],   M[51,1],  M[55,1],  M[59,1],  M[63,1]],      #h
+
+                           [M[64,1],   M[68,1],   M[72,1],   M[76,1],   M[80,1],
+                            M[84,1],   M[88,1],   M[92,1],   M[96,1],   M[100,1]],  #p
+                           [M[65,1],   M[69,1],   M[73,1],   M[77,1],   M[81,1],
+                            M[85,1],   M[89,1],   M[93,1],   M[97,1],   M[101,1]],  #q
+                           [M[66,1],   M[70,1],   M[74,1],   M[78,1],   M[82,1],
+                            M[86,1],   M[90,1],   M[94,1],   M[98,1],   M[102,1]],  #r
+                           [0.0,   0.0,   0.0,   0.0,   0.0,
+                            0.0,   0.0,   0.0,   0.0,   0.0],     						#s
+                           [M[67,1],   M[71,1],   M[75,1],   M[79,1],   M[83,1],
+                            M[87,1],   M[91,1],   M[95,1],   M[99,1],   M[103,1]],  #t
+                           )
+   #   error("unkown species / orbitals combination in `NRLParams`")
    end
 
    if cutoff == :original
@@ -58,9 +83,66 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    return H
 end
 
+# Lookup table between species and NRL data filename
+NRLFILENAME = Dict(
+   :Ag => "ag_par",
+   :Al => "al_par",
+   (:Al, :spd) => "al_par",
+#    : => " al_par_t2g_eq_eg",
+    :Au => "au_par",
+    :Ba => "ba_par",
+    :Ca => "ca_par",
+#    :Ca => "ca_par_315",
+#    :Co => "co_ferro_par",
+    :Co => "co_par",
+#    : => "co_para_par",
+    :C => "c_par",
+#    :C => "c_par.105",
+    :Cr => "cr_par",
+    :Cu => "cu_par",
+#    :Cu => "cu_par_99",
+#    :Fe => "fe_ferro_par",
+#    :Fe => "fe_par",
+    :Fe => "fe_para_par",
+    :Ga => "ga_par",
+    (:Ge, :sp)  => "ge_par.sp.125 ",
+    (:Ge, :spd) => "ge_par.spd.125 ",
+    :Hf => "hf_par",
+    :In => "in_par",
+    :Ir => "ir_par",
+    :Mg => "mg_par",
+    :Mn => "mn_par",
+    :Mo => "mo_par",
+    :Nb => "nb_par",
+    :Ni => "ni_par",
+    :Os => "os_par",
+    :Pb => "pb_par",
+    :Pd => "pd_par",
+#    :Pd => "pd_par.105",
+    :Pt => "pt_par",
+    :Re => "re_par",
+    :Rh => "rh_par",
+    :Ru => "ru_par",
+    :Sc => "sc_par",
+    (:Si, :sp) => "si_par",
+#    :Si => " si_par.125",
+    (:Si, :spd) => "si_par.spd",
+    :Sn => "sn_case1_par",
+#    :Sn => "sn_case2_par",
+    :Sr => "sr_par",
+    :Ta => "ta_par",
+    :Tc => "tc_par",
+#    :Ti => "ti_gga_par",
+#    :Ti => "ti_par",
+    :Ti => "ti_par_01",
+    :V => "v_par",
+    :W => "w_par",
+    :Y => "y_par",
+    :Zr => "zr_par"
+)
 
 
-
+# Directly entered we have parameters for Si_sp; Si_spd, C_sp and Al_spd
 
 # SILICON
 # 'Si' : silicon with s&p orbitals
@@ -181,3 +263,4 @@ Al_spd  =  NRLHamiltonian{9, Function}(9, 10,			        # norbital, nbond
                      [1.06584516722,   0.943623371617,   0.915429215594,   1.17753799190,   0.988337965212,
                       0.873041790591,   0.999293973116,   1.02005972107,   1.01466433826,   1.14341718458],     #t
                     )
+

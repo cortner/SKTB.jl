@@ -1,5 +1,3 @@
-
-
 module NRLTB
 
 using ForwardDiff
@@ -80,10 +78,8 @@ cutoff_NRL_Fshift(r, Rc, lc, Mc=5.0) =
 # default
 cutoff_NRL = cutoff_NRL_Fshift
 
-# contains information for Si, C, Al
-#    TODO: switch to data files
+# Loading routines; and spec of minimal set of parameters
 include("NRLTB_data.jl")
-include("NRLTB_data2.jl")
 
 
 
@@ -105,7 +101,7 @@ and enjoy the benefits of a discontinuous potential. Other options:
 NRLTBModel(species, fs::ChemicalPotential;
            orbitals=default_orbitals(species), bzquad=GammaPoint(), hfd=1e-6,
             cutoff = :forceshift) =
-   TBModel(NRLHamiltonian2(species, orbitals=orbitals, cutoff=cutoff),
+   TBModel(NRLHamiltonian(species, orbitals=orbitals, cutoff=cutoff),
            ZeroSitePotential(), fs, bzquad, hfd)
 
 
