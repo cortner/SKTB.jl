@@ -1,5 +1,3 @@
-
-
 module NRLTB
 
 using ForwardDiff
@@ -80,10 +78,8 @@ cutoff_NRL_Fshift(r, Rc, lc, Mc=5.0) =
 # default
 cutoff_NRL = cutoff_NRL_Fshift
 
-# contains information for Si, C, Al
-#    TODO: switch to data files
+# Loading routines; and spec of minimal set of parameters
 include("NRLTB_data.jl")
-include("NRLTB_data2.jl")
 
 
 
