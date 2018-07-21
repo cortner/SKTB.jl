@@ -6,9 +6,9 @@ function default_orbitals(s)
    # if s == "Al"  return "spd"
    # if s == "Si"  return "sp"
    if s == "C" || s == "Si"
-      return "sp"
+      return :sp
    else
-      return "spd"
+      return :spd
    end
    error("unkown species in `NRLParams`")
 end
@@ -18,7 +18,7 @@ end
 #
 # The website has been lost, but a functional version remains on the Internet Archive:
 # https://web.archive.org/web/20121003160812/http://cst-www.nrl.navy.mil/bind/
-# 
+#
 function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
 #   s = string(s)
 #   orbitals = string(orbitals)
@@ -263,4 +263,3 @@ Al_spd  =  NRLHamiltonian{9, Function}(9, 10,			        # norbital, nbond
                      [1.06584516722,   0.943623371617,   0.915429215594,   1.17753799190,   0.988337965212,
                       0.873041790591,   0.999293973116,   1.02005972107,   1.01466433826,   1.14341718458],     #t
                     )
-

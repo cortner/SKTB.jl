@@ -253,7 +253,7 @@ function band_structure(K::AbstractVector, tbm::TBModel, at::AbstractAtoms)
       bands[n][m] = EE[m][n]
    end
    return bands
-end 
+end
 
 
 
@@ -285,16 +285,6 @@ end
 
 # =================== Site Forces for a given k-point =======================
 # The derivatives of the site energy is computed by dual technique.
-# E_{ℓ,k} = ∑_s f'(ɛ_s)⋅ɛ_{s,n}⋅[ψ_s]_{ℓ}⋅[M*ψ_s]_{ℓ}         (=:T1)
-#           + ∑_s f(ɛ_s)⋅[ψ_s]_ℓ⋅[M_{,k}⋅ψ_s]_ℓ               (=:T2)
-#           + ∑_s f(ε_s)⋅[ψ_s]_{ℓ}⋅[M ψ_{s,k}]_ℓ              (=:T3)
-#           + ∑_s f(ε_s)⋅[ψ_s]_{ℓ,k}⋅[M ψ_s]_ℓ                (=:T4)
-#           - ∑_s f(ε_s)⋅⟨ψ_s|M_{,k}|ψ_s⟩⋅⟨ψ_s|M_{,k}|ψ_s⟩_ℓ  (=:T5)
-# Note that T5 comes from the pseudo iverse part that can not be handeled
-# by dual technique.
-# When ISORTH == true, we have T5 = 0 !
-# Dual technique for T3:
-# T3 = ∑_s f(ϵ_s)⋅⟨(H-ϵ_s⋅M)⁻[ψ_s]_{ℓ},(-H_{,k}+ϵ_s⋅M_{,k}+ϵ_{s,k}⋅M)ψ_s⟩
 
 function _dEs_k!(dEs::Vector{JVecF},
                   at::AbstractAtoms, tbm::TBModel,
@@ -321,21 +311,23 @@ function _dEs_k!(dEs::Vector{JVecF},
    dM_ij = zero(typeof(skhg.dH[1]))
 
    # precompute pseudo-inverse:
-   # (H-ϵ_s⋅M)⁻[ψ_s]_{ℓ} = ∑_t (ϵ_t-ϵ_s)^{-1}⋅ ( [ψ_s]_ℓ⋅[M ψ_t]_ℓ + [M ψ_s]_ℓ⋅[ψ_t]_ℓ )⋅ψ_k
    Nelc = length(epsn)
-   diff_eps_inv_ψst = zeros(Float64, Nelc, Nelc)
+   diff_f_inv_ψst = zeros(Float64, Nelc, Nelc)
+   diff_fepsn_inv_ψst = zeros(Float64, Nelc, Nelc)
 	for t = 1:Nelc, s = 1:Nelc
 		if abs(epsn[t]-epsn[s]) > 1e-10
-        	diff_eps_inv_ψst[t,s] =  # 2.0 * ( C[In0,t]' * C[In0,s] )[1]
-                     ( C[In0,s]' * MC[:,t] + C[In0,t]' * MC[:,s] )[1] / (epsn[s]-epsn[t])
+        	diff_f_inv_ψst[t,s] =
+               (f[s]-f[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
+         diff_fepsn_inv_ψst[t,s] =
+               (f[s]*epsn[s]-f[t]*epsn[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
       else
-        	diff_eps_inv_ψst[t,s] = 0.0
+        	diff_f_inv_ψst[t,s] = df[s] * ( C[In0,s]' * MC[:,t] )[1]
+         diff_fepsn_inv_ψst[t,s] = (df[s]*epsn[s] + f[s]) * ( C[In0,s]' * MC[:,t] )[1]
       end
 	end
-   pinvC = C * diff_eps_inv_ψst
-   # precompute some products analogous to C_df_Ct
-   pinvC_f_Ct = (pinvC * (f' .* C)')
-   pinvC_fepsn_Ct = (pinvC * ( (f .* epsn)' .* C )')
+   # precompute the arrays (H-ϵ_s⋅M)⁻[ψ_s]
+   pinvC_f_Ct = (C * diff_f_inv_ψst * C')
+   pinvC_fepsn_Ct = (C * diff_fepsn_inv_ψst * C')
 
    for n = 1:length(skhg.i)
       i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
@@ -343,23 +335,12 @@ function _dEs_k!(dEs::Vector{JVecF},
       Ii, Ij = indexblock(i, H), indexblock(j, H)
       eikr = exp(im * dot(S, k))::Complex{Float64}
       @inbounds for a = 1:NORB, b = 1:NORB
-         # add T1 part
-         t1 = 2.0 * real(C_df_ψ²_Ct[Ii[a],Ij[b]] * eikr)
-         t2 = 2.0 * real(C_dfepsn_ψ²_Ct[Ii[a],Ij[b]] * eikr)
-         t3 = real(C_df_ψ²_Ct[Ii[a],Ii[b]])
-         dEs[j] += t1 * dH_ij[:,a,b] - t2 * dM_ij[:,a,b] + t3 * dH_ii[:,a,b]
-         dEs[i] += - t3 * dH_ii[:,a,b]
-         # add T2 part
-         if i ∈ Idom  # should be i ∈ n0, when n0 is a int vector...
-            # t4 = 2.0 * real(C_f_Ct[Ii[a], Ij[b]] * eikr)
-            t4  = real(C_f_Ct[Ii[a], Ij[b]] * eikr) #+ real(C_f_Ct[Ij[b], Ii[a]] * eikr)
+         if i ∈ Idom
+            t4  = real(C_f_Ct[Ii[a], Ij[b]] * eikr)
             dEs[j] += t4 * dM_ij[:,a,b]
             dEs[i] += - t4 * dM_ij[:,a,b]
          end
-         # add T3 & T4 part
-         # t5 = 2.0 * real(pinvC_f_Ct[Ii[a],Ij[b]] * eikr)
-         # t6 = 2.0 * real(pinvC_fepsn_Ct[Ii[a],Ij[b]] * eikr)
-         # Be careful: the matrix pinvC_f_Ct is not symmetric !!
+         # be careful: the matrix pinvC_f_Ct is not symmetric
          t5 = real(pinvC_f_Ct[Ii[a],Ij[b]] * eikr) +
               real(pinvC_f_Ct[Ij[b],Ii[a]] * eikr)
          t6 = real(pinvC_fepsn_Ct[Ii[a],Ij[b]] * eikr) +
@@ -367,17 +348,10 @@ function _dEs_k!(dEs::Vector{JVecF},
          t7 = real(pinvC_f_Ct[Ii[a],Ii[b]])
          dEs[j] += t5 * dH_ij[:,a,b] - t6 * dM_ij[:,a,b] + t7 * dH_ii[:,a,b]
          dEs[i] += - t7 * dH_ii[:,a,b]
-         # add T5 part
-         t8 = 2.0 * real(C_f_ψ²_Ct[Ii[a],Ij[b]] * eikr)
-         dEs[j] += - t8 * dM_ij[:,a,b]
       end
    end
-
-   # TODO: diagonalize for pertubation of degenerated eigenvalues
-   #   But we need store different C_f_Ct for different partial derivatives?
-   # The next two could be easy ...
-   # TODO: extend to the case when n0 has more than one site
-   # TODO: missing w in the calculations? (and so is the function forces)
+   # TODO: missing w in the calculations? (and so is the function forces),
+   #       when one wants to do blending
 
    return dEs
 end

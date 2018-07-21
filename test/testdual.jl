@@ -10,12 +10,12 @@ println("Testing Dual Method Implementation of Partial Energies")
 
 # test parameters
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
-n0 = 5             # site index where we compute the site energy
-DIM = (2,3,4)
+n0 = 1             # site index where we compute the site energy
+DIM = (2,2,3)
 
 # define the model
 tbm = NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), bzquad = TB.GammaPoint() )
-at = bulk(:Si, pbc = (false, false, true), cubic=false) * DIM
+at = bulk(:Si, pbc = (true, true, true), cubic = false) * DIM
 @show length(at)
 
 # TB.set_δNel!(tbm, at)
@@ -24,7 +24,8 @@ E = energy(tbm, at)
 println("Testing that the decompositions site energy sums to total energy")
 @show E - ∑En
 @test abs(E - ∑En) < 1e-12
-JuLIP.rattle!(at, 0.02)
+
+# JuLIP.rattle!(at, 0.02)
 X = positions(at) |> mat
 
 
