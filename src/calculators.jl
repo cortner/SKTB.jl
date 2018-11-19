@@ -299,7 +299,7 @@ function _dEs_k!(dEs::Vector{JVecF},
    C    = get_k_array(at, :C, k)::Matrix{Complex128}
    f    = energy(tbm.potential, epsn)::Vector{Float64}
    df   = grad(tbm.potential, epsn)::Vector{Float64}
-   M    = get_k_array(at, :M, k)
+   M    = get_k_array(at, :M, k)::Matrix{Complex128}
    MC   = isorth(tbm) ? C[In0,:] : (M[In0, :] * C)
    ψ²   = sum( conj(C[In0, :]) .* MC , 1 )[:]
    # precompute some products
@@ -309,25 +309,40 @@ function _dEs_k!(dEs::Vector{JVecF},
    C_dfepsn_ψ²_Ct = (C * ( (df .* epsn .* ψ²)' .* C )')
    # an array replacing dM_ij when the model is orthogonal
    dM_ij = zero(typeof(skhg.dH[1]))
+   _A1 = zeros(Complex128, size(C))
 
    # precompute pseudo-inverse:
    Nelc = length(epsn)
-   diff_f_inv_ψst = zeros(Float64, Nelc, Nelc)
-   diff_fepsn_inv_ψst = zeros(Float64, Nelc, Nelc)
+   diff_f_inv_ψst = zeros(Complex128, Nelc, Nelc)
+   diff_fepsn_inv_ψst = zeros(Complex128, Nelc, Nelc)
 	for t = 1:Nelc, s = 1:Nelc
+      # _aa = sum( conj(C[In0[ii], s]) * MC[ii, t] for ii = 1:length(In0))
+      _aa = zero(Complex128)
+      for ii = 1:length(In0)
+         _aa += conj(C[In0[ii], s]) * MC[ii, t]
+      end
+
 		if abs(epsn[t]-epsn[s]) > 1e-10
         	diff_f_inv_ψst[t,s] =
-               (f[s]-f[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
+               (f[s]-f[t]) * _aa/ (epsn[s]-epsn[t])
          diff_fepsn_inv_ψst[t,s] =
-               (f[s]*epsn[s]-f[t]*epsn[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
+               (f[s]*epsn[s]-f[t]*epsn[t]) * _aa / (epsn[s]-epsn[t])
+         # diff_f_inv_ψst[t,s] =
+         #       (f[s]-f[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
+         # diff_fepsn_inv_ψst[t,s] =
+         #       (f[s]*epsn[s]-f[t]*epsn[t]) * ( C[In0,s]' * MC[:,t] )[1] / (epsn[s]-epsn[t])
       else
-        	diff_f_inv_ψst[t,s] = df[s] * ( C[In0,s]' * MC[:,t] )[1]
-         diff_fepsn_inv_ψst[t,s] = (df[s]*epsn[s] + f[s]) * ( C[In0,s]' * MC[:,t] )[1]
+        	diff_f_inv_ψst[t,s] = df[s] * _aa
+         diff_fepsn_inv_ψst[t,s] = (df[s]*epsn[s] + f[s]) * _aa
+         # diff_f_inv_ψst[t,s] = df[s] * ( C[In0,s]' * MC[:,t] )[1]
+         # diff_fepsn_inv_ψst[t,s] = (df[s]*epsn[s] + f[s]) * ( C[In0,s]' * MC[:,t] )[1]
       end
 	end
    # precompute the arrays (H-ϵ_s⋅M)⁻[ψ_s]
-   pinvC_f_Ct = (C * diff_f_inv_ψst * C')
-   pinvC_fepsn_Ct = (C * diff_fepsn_inv_ψst * C')
+   # pinvC_f_Ct = (C * diff_f_inv_ψst * C')
+   pinvC_f_Ct = A_mul_Bc(A_mul_B!(_A1, C, diff_f_inv_ψst), C)
+   # pinvC_fepsn_Ct = (C * diff_fepsn_inv_ψst * C')
+   pinvC_fepsn_Ct = A_mul_Bc(A_mul_B!(_A1, C, diff_fepsn_inv_ψst), C)
 
    for n = 1:length(skhg.i)
       i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
@@ -350,9 +365,6 @@ function _dEs_k!(dEs::Vector{JVecF},
          dEs[i] += - t7 * dH_ii[:,a,b]
       end
    end
-   # TODO: missing w in the calculations? (and so is the function forces),
-   #       when one wants to do blending
-
    return dEs
 end
 

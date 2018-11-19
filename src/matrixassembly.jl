@@ -461,6 +461,6 @@ function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::Abstrac
    end
 
    skhg = SparseSKHgrad(H, at, i, j, first, dH, dOS, dM, Rcell)
-   set_transient!(at, :SKHg, skhg)
+   set_transient!(at, :SKBg, skhg)
    return skhg
 end
