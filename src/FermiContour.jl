@@ -6,7 +6,7 @@ include("JacobiFunc.jl")
 
 import Base.(|>)
 
-immutable Sn{M}
+struct Sn{M}
     m::M
 end
 @inline function |>(p, s::Sn)
@@ -15,7 +15,7 @@ end
     return w*cn*dn, sn
 end
 
-immutable Möbius{A,B,C,D}
+struct Möbius{A,B,C,D}
     a::A; b::B; c::C; d::D
 end
 @inline function |>(p, m::Möbius)
@@ -24,7 +24,7 @@ end
           (m.a*z+m.b)/(m.c*z+m.d)
 end
 
-immutable Affine{A,B}
+struct Affine{A,B}
     a::A; b::B
 end
 @inline function |>(p, a::Affine)
@@ -32,7 +32,7 @@ end
     return w*a.a, a.a*z+a.b
 end
 
-immutable Sqrt end
+struct Sqrt end
 @inline function |>(p, s::Sqrt)
     w,z = p
     return w/(2*sqrt(z)), sqrt(z)

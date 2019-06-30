@@ -2,7 +2,7 @@ module NRLTB
 
 using ForwardDiff
 
-using JuLIP.Potentials.ZeroSitePotential
+using JuLIP.Potentials: ZeroSitePotential
 using TightBinding: TBModel, SKHamiltonian, NONORTHOGONAL,
                   norbitals, ChemicalPotential
 import TightBinding: hop!, overlap!, onsite!, hop, overlap, onsite_grad!, GammaPoint

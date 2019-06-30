@@ -172,12 +172,12 @@ mutable struct BZstate
    ik::Int    # index into the w, k arrays in BZ
    is::Int    # index into the epsn_k and C_k arrays in BZstate
    epsn_k::Vector{Float64}
-   C_k::Matrix{Complex128}
+   C_k::Matrix{ComplexF64}
 end
 
 BZiter(tbm::TBModel, at::AbstractAtoms) = BZiter(tbm, at, w_and_pts(tbm.bzquad)...)
 
-Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(0), Matrix{Complex128}(0,0))
+Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(0), Matrix{ComplexF64}(0,0))
 
 Base.done(bz::BZiter, state::BZstate) = (state.ik > length(bz.w))
 

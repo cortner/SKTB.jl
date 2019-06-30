@@ -98,9 +98,9 @@ a sub-domain defined by `Is`.
 * `Is`: a list (`AbstractVector`) of indices specifying the subdomain
 * `deriv`: whether or not to compute derivatives as well
 """
-function pexsi_partial_energy{TI <: Integer}(
+function pexsi_partial_energy(
                      calc::PEXSI, at::AbstractAtoms,
-                     Is::AbstractVector{TI}, deriv=false)
+                     Is::AbstractVector{TI}, deriv=false) where {TI <: Integer}
    tbm = calc.tbm
 
    # ----------- some temporary things to check simplifying assumptions
@@ -173,8 +173,8 @@ end
 # import Base.getindex
 # getindex(a::SArray, ::Colon, i, j) = JVecF(a[1,i,j], a[2,i,j], a[3,i,j])
 
-function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skhg,
-                                   res, resM, e0, wi, zi)
+function _pexsi_site_grad!(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skhg,
+                                   res, resM, e0, wi, zi) where {NORB}
    for t = 1:length(skhg.i)
       n, m, dH_nm, dH_nn, dM_nm = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t], skhg.dM[t]
       In, Im = indexblock(n, H), indexblock(m, H)
@@ -191,8 +191,8 @@ function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{NONORTHOGONAL,NORB}, skh
 end
 
 
-function _pexsi_site_grad!{NORB}(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
-                                 res, resM, e0, wi, zi)
+function _pexsi_site_grad!(∇E, H::SKHamiltonian{ORTHOGONAL,NORB}, skhg,
+                                 res, resM, e0, wi, zi) where {NORB}
    for t = 1:length(skhg.i)
       n, m, dH_nm, dH_nn = skhg.i[t], skhg.j[t], skhg.dH[t], skhg.dOS[t]
       In = indexblock(n, H)

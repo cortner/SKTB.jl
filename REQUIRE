@@ -5,3 +5,5 @@ StaticArrays
 Parameters
 PyCall
 Roots
+SparseArrays
+LinearAlgebra

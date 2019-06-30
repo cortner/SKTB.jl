@@ -80,10 +80,12 @@ fermidirac(epsn::AbstractVector, eF, beta) = [fermidirac(e, eF, beta) for e in e
 # ================= Grand Potential ============================
 
 
-@pot mutable struct GrandPotential <: FiniteTPotential
+mutable struct GrandPotential <: FiniteTPotential
    beta::Float64
    eF::Float64
 end
+
+@pot GrandPotential
 
 """
 Finite temperature grand-potential, e ↦ 2/β log(1 - f(e)),
@@ -117,12 +119,14 @@ fixed_eF(::GrandPotential) = true
 # should still implement it, then deprecate and remove once
 # we have fixed the Atoms.jl - TightBinding.jl equivalence
 
-@pot mutable struct FermiDiracSmearing  <: FiniteTPotential
+mutable struct FermiDiracSmearing  <: FiniteTPotential
     beta::Float64
     eF::Float64
     Ne::Float64
     fixed_eF::Bool
 end
+
+@pot FermiDiracSmearing
 
 get_Ne(f::FermiDiracSmearing) = f.Ne
 fixed_eF(f::FermiDiracSmearing) = f.fixed_eF

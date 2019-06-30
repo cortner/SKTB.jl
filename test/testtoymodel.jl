@@ -28,12 +28,12 @@ println("ok : E = ", E, ".")
 print("check that `forces` evaluates ... ")
 frc = forces(tbm, at)
 println("ok : |f|∞ = ", maximum(norm.(frc)), ".")
-@test true
+println(@test true)
 
 println("-------------------------------------------")
 println("  Finite-difference test with ToyTBModel:  ")
 println("-------------------------------------------")
-@test fdtest(tbm, at, verbose=true)
+println(@test fdtest(tbm, at, verbose=true))
 println("-------------------------------------------")
 
 end

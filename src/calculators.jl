@@ -1,6 +1,7 @@
 
 using JuLIP: set_transient!, get_data, has_data
 
+using LinearAlgebra: UniformScaling
 
 # this file implements the standard spectral decomposition
 # calculator for energy, forces, etc.
@@ -11,7 +12,7 @@ using JuLIP: set_transient!, get_data, has_data
 # k ≠ 0 (Complex, Hermitian). For large systems with only Gamma-point,
 # this might seem useful, but it actually seems that the timings are
 # not so different, e.g., for a 1000 x 1000 system,
-#    Float64 ~ 400ms, Complex128 ~ 500ms per `eig`.
+#    Float64 ~ 400ms, ComplexF64 ~ 500ms per `eig`.
 # this indicates that we probably shouldn't bother.
 # This is difference, btw, for LU decompositions, so for the Contour
 # calculator we will most likely
@@ -38,7 +39,7 @@ end
 `update_eig!(atm::AbstractAtoms, tbm::TBModel)` : updates the hamiltonians
 and spectral decompositions on the MP grid.
 """
-function update_eig!{ISORTH}(atm::AbstractAtoms, H::SparseSKH{ISORTH}, tbm::TBModel)
+function update_eig!(atm::AbstractAtoms, H::SparseSKH{ISORTH}, tbm::TBModel) where {ISORTH}
    wrk = _alloc_full(H)
    for (w, k) in tbm.bzquad
       if !has_k_array(atm, :epsn, k)
@@ -137,13 +138,13 @@ energy(tbm::TBModel, at::AbstractAtoms) = (
 # it prevents allocating lots of sparse matrices for the hamiltonian
 # derivatives.
 
-function _forces_k!{ISORTH, NORB}(frc::Vector{JVecF},
+function _forces_k!(frc::Vector{JVecF},
                                  at::AbstractAtoms, tbm::TBModel,
                                  H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
-                                 skhg, w)
+                                 skhg, w) where {ISORTH, NORB}
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
-   C = get_k_array(at, :C, k)::Matrix{Complex128}
+   C = get_k_array(at, :C, k)::Matrix{ComplexF64}
    df = grad(tbm.potential, epsn)::Vector{Float64}
 
    # precompute some products
@@ -179,7 +180,7 @@ end
 #   specific assumptions about the structure of the hamiltonian, hence is
 #   only valid for SK-type hamiltonians.
 #
-function forces{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms)
+function forces(tbm::TBModel{HT}, atm::AbstractAtoms) where {HT <: SKHamiltonian}
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
    frc = forces(tbm.Vrep, atm)
@@ -296,10 +297,10 @@ function _dEs_k!(dEs::Vector{JVecF},
    In0  = indexblock(Idom, tbm.H)
    # obtain the precomputed arrays
    epsn = get_k_array(at, :epsn, k)::Vector{Float64}
-   C    = get_k_array(at, :C, k)::Matrix{Complex128}
+   C    = get_k_array(at, :C, k)::Matrix{ComplexF64}
    f    = energy(tbm.potential, epsn)::Vector{Float64}
    df   = grad(tbm.potential, epsn)::Vector{Float64}
-   M    = get_k_array(at, :M, k)::Matrix{Complex128}
+   M    = get_k_array(at, :M, k)::Matrix{ComplexF64}
    MC   = isorth(tbm) ? C[In0,:] : (M[In0, :] * C)
    ψ²   = sum( conj(C[In0, :]) .* MC , 1 )[:]
    # precompute some products
@@ -309,15 +310,15 @@ function _dEs_k!(dEs::Vector{JVecF},
    C_dfepsn_ψ²_Ct = (C * ( (df .* epsn .* ψ²)' .* C )')
    # an array replacing dM_ij when the model is orthogonal
    dM_ij = zero(typeof(skhg.dH[1]))
-   _A1 = zeros(Complex128, size(C))
+   _A1 = zeros(ComplexF64, size(C))
 
    # precompute pseudo-inverse:
    Nelc = length(epsn)
-   diff_f_inv_ψst = zeros(Complex128, Nelc, Nelc)
-   diff_fepsn_inv_ψst = zeros(Complex128, Nelc, Nelc)
+   diff_f_inv_ψst = zeros(ComplexF64, Nelc, Nelc)
+   diff_fepsn_inv_ψst = zeros(ComplexF64, Nelc, Nelc)
 	for t = 1:Nelc, s = 1:Nelc
       # _aa = sum( conj(C[In0[ii], s]) * MC[ii, t] for ii = 1:length(In0))
-      _aa = zero(Complex128)
+      _aa = zero(ComplexF64)
       for ii = 1:length(In0)
          _aa += conj(C[In0[ii], s]) * MC[ii, t]
       end
@@ -371,9 +372,8 @@ end
 
 # Derivative of site energy using dual technique
 #
-function partial_energy_d{HT <: SKHamiltonian, TI <: Integer}(
-                        tbm::TBModel{HT}, atm::AbstractAtoms,
-                        Idom::AbstractVector{TI})
+function partial_energy_d(tbm::TBModel{HT}, atm::AbstractAtoms,
+                        Idom::AbstractVector{TI}) where {HT <: SKHamiltonian, TI <: Integer}
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
    dE = zerovecs(length(atm))
@@ -384,6 +384,6 @@ function partial_energy_d{HT <: SKHamiltonian, TI <: Integer}(
 end
 
 
-site_energy_d{HT <: SKHamiltonian}(tbm::TBModel{HT}, atm::AbstractAtoms,
-                                    n0::Integer) =
+site_energy_d(tbm::TBModel{HT}, atm::AbstractAtoms,
+                                    n0::Integer) where {HT <: SKHamiltonian} =
    partial_energy_d(tbm, atm, [n0])

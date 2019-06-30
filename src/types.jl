@@ -33,7 +33,7 @@ construct an empty TBModel.
 mutable struct NullHamiltonian <: TBHamiltonian{ORTHOGONAL}
 end
 
-isorthogonal{ISORTH}(::TBHamiltonian{ISORTH}) = ISORTH == ORTHOGONAL
+isorthogonal(::TBHamiltonian{ISORTH}) where {ISORTH} = (ISORTH == ORTHOGONAL)
 isorth(H::TBHamiltonian) = isorthogonal(H)
 
 """
@@ -59,11 +59,11 @@ are
 """
 abstract type SKHamiltonian{ISORTH, NORB} <: TBHamiltonian{ISORTH} end
 
-norbitals{ISORTH,NORB}(::SKHamiltonian{ISORTH, NORB}) = NORB
+norbitals(::SKHamiltonian{ISORTH, NORB}) where {ISORTH,NORB} = NORB
 
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 1}) = 1
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 4}) = 4
-nbonds{ISORTH}(::SKHamiltonian{ISORTH, 9}) = 10
+nbonds(::SKHamiltonian{ISORTH, 1}) where {ISORTH} = 1
+nbonds(::SKHamiltonian{ISORTH, 4}) where {ISORTH} = 4
+nbonds(::SKHamiltonian{ISORTH, 9}) where {ISORTH} = 10
 
 ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 

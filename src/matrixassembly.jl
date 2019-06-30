@@ -1,6 +1,8 @@
 
 using ForwardDiff, NeighbourLists
 
+import SparseArrays: nnz, sparse
+
 # slaterkoster.jl
 #
 # Collect all generic stuff for Slater-Koster-type Tight-binding
@@ -15,10 +17,10 @@ a little auxiliary function to compute indices of Slater Koster orbitals,
 this is returned as an SVector, i.e. it is generated on the stack so that no
 heap memory is allocated.
 """
-indexblock{IO,NORB}(n::Integer, H::SKHamiltonian{IO,NORB}) =
+indexblock(n::Integer, H::SKHamiltonian{IO,NORB}) where {IO,NORB} =
    SVector{NORB, Int}( ((n-1)*NORB+1):(n*NORB) )
 
-function indexblock{T <: Integer}(Iat::AbstractVector{T}, H::SKHamiltonian)
+function indexblock(Iat::AbstractVector{T}, H::SKHamiltonian) where {T <: Integer}
    out = T[]
    for n in Iat
       append!(out, indexblock(n, H))
@@ -33,12 +35,12 @@ end
 
 ######## s-orbital model
 
-function sk!{IO}(H::SKHamiltonian{IO, 1}, U, bonds, out)
+function sk!(H::SKHamiltonian{IO, 1}, U, bonds, out) where {IO}
    setindex!(out, bonds[1], 1)
    return out
 end
 
-function sk_d!{IO}(H::SKHamiltonian{IO, 1}, r, R, b, db, dH_nm)
+function sk_d!(H::SKHamiltonian{IO, 1}, r, R, b, db, dH_nm) where {IO}
    # dH_nm is 3 x 1 x 1 so we can just index it linearly    (NORB = 1)
    for a = 1:3
       dH_nm[a] = db[1] * R[a] / r
@@ -48,13 +50,13 @@ end
 
 ######## sp-orbital model
 
-sk!{IO}(H::SKHamiltonian{IO, 4}, U, bonds, out) = _sk4!(U, bonds, out)
-sk_d!{IO}(H::SKHamiltonian{IO, 4}, r, R, b, db, dout) = _sk4_d!(R/r, r, b, db, dout)
+sk!(H::SKHamiltonian{IO, 4}, U, bonds, out) where {IO} = _sk4!(U, bonds, out)
+sk_d!(H::SKHamiltonian{IO, 4}, r, R, b, db, dout) where {IO} = _sk4_d!(R/r, r, b, db, dout)
 
 ######## spd-orbital model
 
-sk!{IO}(H::SKHamiltonian{IO, 9}, U, bonds, out) = _sk9!(U, bonds, out)
-sk_d!{IO}(H::SKHamiltonian{IO, 9}, r, R, b, db, dout) = _sk9_d!(R/r, r, b, db, dout)
+sk!(H::SKHamiltonian{IO, 9}, U, bonds, out) where {IO} = _sk9!(U, bonds, out)
+sk_d!(H::SKHamiltonian{IO, 9}, r, R, b, db, dout) where {IO} = _sk9_d!(R/r, r, b, db, dout)
 
 
 # ======================================================================
@@ -148,7 +150,7 @@ either sparse of full.
 * `Rcell` : each hamiltonian block is associated with an e^{i k ⋅ S} multiplier
             from the Bloch transform; this S is stored in Rcell.
 """
-immutable SparseSKH{HT, TV}  # v0.6: require that TV <: SKBlock{NORB}
+struct SparseSKH{HT, TV}  # v0.6: require that TV <: SKBlock{NORB}
    H::HT
    at::AbstractAtoms
    i::Vector{Int32}
@@ -161,7 +163,7 @@ end
 
 Base.length(skh::SparseSKH) = length(skh.i)
 
-function SparseSKH{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
+function SparseSKH(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms) where {ISORTH, NORB}
    if has_data(at, :SKH)
       return get_data(at, :SKH)
    end
@@ -236,10 +238,10 @@ end
 _alloc_full(skh::SparseSKH) = _alloc_full(skh.H, skh.at)
 
 _alloc_full(H::SKHamiltonian{NONORTHOGONAL}, at::AbstractAtoms) =
-   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}(ndofs(H, at), ndofs(H, at))
+   Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at))
 
 _alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
-   Matrix{Complex128}(ndofs(H, at), ndofs(H, at)), Matrix{Complex128}(0, 0)
+   Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(0, 0)
 
 Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)
@@ -247,7 +249,7 @@ Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
 full!(out, H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    _full!(out[1], out[2], H, k, H.H)
 
-function _full!{NORB}(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB})
+function _full!(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB}) where {NORB}
    fill!(Hout, 0.0)
    fill!(Mout, 0.0)
    k = JVecF(k)
@@ -265,7 +267,7 @@ function _full!{NORB}(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB})
 end
 
 
-function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
+function _full!(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB}) where {NORB}
    fill!(Hout, 0.0)
    k = JVecF(k)
    for (i, j, H_ij, S) in zip(skh.i, skh.j, skh.vH, skh.Rcell)
@@ -283,14 +285,14 @@ function _full!{NORB}(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB})
 end
 
 
-function Base.nnz(skh::SparseSKH)
+function nnz(skh::SparseSKH)
    norb = norbitals(skh.H)
    return length(skh) * norb^2 + length(skh.at) * norb^2
 end
 
 # append to triplet format: version 1 for H and M (non-orth TB)
-function _append!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
-                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx)
+function _append!(H::SKHamiltonian{NONORTHOGONAL, NORB},
+                  It, Jt, Ht, Mt, In, Im, H_nm, M_nm, exp_i_kR, idx) where {NORB}
    @inbounds for i = 1:NORB, j = 1:NORB
       idx += 1
       It[idx] = In[i]
@@ -302,8 +304,8 @@ function _append!{NORB}(H::SKHamiltonian{NONORTHOGONAL, NORB},
 end
 
 # append to triplet format: version 2 for H only (orthogonal TB)
-function _append!{NORB}(H::SKHamiltonian{ORTHOGONAL, NORB},
-                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, idx)
+function _append!(H::SKHamiltonian{ORTHOGONAL, NORB},
+                  It, Jt, Ht, _Mt_, In, Im, H_nm, _Mnm_, exp_i_kR, idx) where {NORB}
    @inbounds for i = 1:NORB, j = 1:NORB
       idx += 1
       It[idx] = In[i]
@@ -325,8 +327,8 @@ end
 #  * exp_i_kR = complex multiplier needed for BZ integration
 #  * we could use cell * S instead of R[m] - (X[neigs[m]] - X[n])
 #       but this would actually be less efficient, and less clear to read
-function _assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
-                                  k, It, Jt, Ht, Mt, skh)
+function _assemble!(H::SKHamiltonian{ISORTH, NORB},
+                                  k, It, Jt, Ht, Mt, skh) where {ISORTH, NORB}
    N = ndofs(H, skh.at)
    M_nm = @SMatrix zeros(NORB, NORB)  # empty M_nm for ORTHOGONAL case
    idx = 0  # initialise index into triplet format
@@ -345,12 +347,12 @@ function _assemble!{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB},
 end
 
 
-Base.sparse(skh::SparseSKH, k = JVecF(0.0,0.0,0.0)) =
+sparse(skh::SparseSKH, k = JVecF(0.0,0.0,0.0)) =
    _assemble!(skh.H, k, alloc_sparse(skh)..., skh)
 
 
 function best(skh, k)
-   const FULLSPARSE_CROSSOVER = 0.4  # based on testing with sp NRLTB model for Si
+   FULLSPARSE_CROSSOVER = 0.4  # based on testing with sp NRLTB model for Si
    nnz_full = (length(skh.at) * norbitals(skh.H))^2
    nnz_sparse = nnz(skh)
    if nnz_sparse / nnz_full  <= FULLSPARSE_CROSSOVER
@@ -393,10 +395,10 @@ end
 # instead. But there is still the problem with D and L, which we need to
 # figure out as well!
 #
-SKBlockGradType{IO, NORB}(H::SKHamiltonian{IO, NORB}) = typeof(@SArray zeros(3, NORB, NORB))
+SKBlockGradType(H::SKHamiltonian{IO, NORB}) where {IO, NORB} = typeof(@SArray zeros(3, NORB, NORB))
 
 
-function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms)
+function SparseSKHgrad(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms) where {ISORTH, NORB}
    # if the array has previously been computed, just return it
    if has_data(at, :SKBg)
       return get_data(at, :SKBg)
@@ -427,11 +429,11 @@ function SparseSKHgrad{ISORTH, NORB}(H::SKHamiltonian{ISORTH, NORB}, at::Abstrac
 
    # allocate work arrays
    maxneigs = maximum(length(jj) for (_1, jj, _2, _3) in sites(nlist))
-   const dH_nn = zeros(3, NORB, NORB, maxneigs)
-   const dH_nm = zeros(3, NORB, NORB)
-   const dM_nm = zeros(3, NORB, NORB)
-   const bonds = zeros(nbonds(H))
-   const dbonds = zeros(nbonds(H))
+   dH_nn = zeros(3, NORB, NORB, maxneigs)
+   dH_nm = zeros(3, NORB, NORB)
+   dM_nm = zeros(3, NORB, NORB)
+   bonds = zeros(nbonds(H))
+   dbonds = zeros(nbonds(H))
 
    for (n, neigs, r, R) in sites(nlist)
       first[n] = idx+1
