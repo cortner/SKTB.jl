@@ -1,7 +1,6 @@
-using TightBinding
-using JuLIP
+using Test
+using TightBinding, JuLIP, LinearAlgebra
 using JuLIP.Testing
-using Base.Test
 
 COMPAREATOMS = false    # if Atoms.jl is installed
 COMPAREQUIP = false     # if QUIP and quippy are installed

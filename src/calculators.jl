@@ -1,7 +1,7 @@
 
 using JuLIP: set_transient!, get_data, has_data
 
-using LinearAlgebra: UniformScaling
+using LinearAlgebra: UniformScaling, eigen, dot, Hermitian
 
 # this file implements the standard spectral decomposition
 # calculator for energy, forces, etc.
@@ -18,18 +18,20 @@ using LinearAlgebra: UniformScaling
 # calculator we will most likely
 
 
+eig_(args...) = (eigen(args...)...,)
+
 """
 `sorted_eig`:  helper function to compute eigenvalues, then sort them
 in ascending order and sort the eig-vectors as well.
 """
 function sorted_eig(H::Matrix, M::Matrix)
-   epsn, C = eig(Hermitian(H), Hermitian(M))
+   epsn, C = eig_(Hermitian(H), Hermitian(M))
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
 
 function sorted_eig(H::Matrix, ::UniformScaling)
-   epsn, C = eig(Hermitian(H))
+   epsn, C = eig_(Hermitian(H))
    Isort = sortperm(epsn)
    return epsn[Isort], C[:, Isort]
 end
@@ -138,7 +140,7 @@ energy(tbm::TBModel, at::AbstractAtoms) = (
 # it prevents allocating lots of sparse matrices for the hamiltonian
 # derivatives.
 
-function _forces_k!(frc::Vector{JVecF},
+function _forces_k!(frc::AbstractVector{JVecF},
                                  at::AbstractAtoms, tbm::TBModel,
                                  H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
                                  skhg, w) where {ISORTH, NORB}

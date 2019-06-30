@@ -1,7 +1,8 @@
 
 using ForwardDiff, NeighbourLists
 
-import SparseArrays: nnz, sparse
+using LinearAlgebra: diagind, dot
+import SparseArrays: nnz, sparse, I 
 
 # slaterkoster.jl
 #
@@ -238,10 +239,10 @@ end
 _alloc_full(skh::SparseSKH) = _alloc_full(skh.H, skh.at)
 
 _alloc_full(H::SKHamiltonian{NONORTHOGONAL}, at::AbstractAtoms) =
-   Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at))
+   Matrix{ComplexF64}(undef, ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(undef, ndofs(H, at), ndofs(H, at))
 
 _alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
-   Matrix{ComplexF64}(ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(0, 0)
+   Matrix{ComplexF64}(undef, ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(undef, 0, 0)
 
 Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)

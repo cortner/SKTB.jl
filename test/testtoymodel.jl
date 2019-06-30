@@ -1,6 +1,8 @@
 
 @testset "ToyModel" begin
 
+using LinearAlgebra
+
 println("Testing TB Toy Model")
 
 TB = TightBinding

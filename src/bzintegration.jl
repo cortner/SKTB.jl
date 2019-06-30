@@ -177,7 +177,7 @@ end
 
 BZiter(tbm::TBModel, at::AbstractAtoms) = BZiter(tbm, at, w_and_pts(tbm.bzquad)...)
 
-Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(0), Matrix{ComplexF64}(0,0))
+Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(undef, 0), Matrix{ComplexF64}(undef, 0,0))
 
 Base.done(bz::BZiter, state::BZstate) = (state.ik > length(bz.w))
 
