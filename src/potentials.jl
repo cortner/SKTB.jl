@@ -203,7 +203,8 @@ end
 
 function fermilevel(tbm::TBModel, at::AbstractAtoms, Nel)
    e = spectrum(tbm, at) |> sort
-   Nel = floor(Int, Nel)
+   Nel = length(e) ÷ 2
+   # Nel = floor(Int, Nel)
    return 0.5 * (e[Nel] + e[Nel+1])
 end
 
