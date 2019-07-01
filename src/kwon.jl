@@ -4,7 +4,7 @@ module Kwon
 using Parameters
 using TightBinding: SKHamiltonian, hop, TBModel, NullPotential, ORTHOGONAL
 using JuLIP.Potentials: fcut, fcut_d, SplineCutoff,
-   PairPotential, ZeroPairPotential, EAM, @analytic
+   PairPotential, ZeroPairPotential, EAM1, @analytic
 
 
 import JuLIP: cutoff
@@ -74,7 +74,7 @@ KwonElDensity(H::KwonHamiltonian) =
       @analytic r -> (r0/r)^m * exp( - m * (r/dc)^mc + m * (r0/dc)^mc )
    end * SplineCutoff(H.r1, H.rcut)
 
-KwonEAM(H::KwonHamiltonian) = EAM(ZeroPairPotential(), KwonElDensity(H), KwonEmbedding(H))
+KwonEAM(H::KwonHamiltonian) = EAM1(ZeroPairPotential(), KwonElDensity(H), KwonEmbedding(H))
 
 
 function KwonTBModel(; potential = NullPotential(), bzquad = NullBZQ())

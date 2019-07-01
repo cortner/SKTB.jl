@@ -1,7 +1,7 @@
 
 using JuLIP: set_transient!, get_data, has_data
 
-using LinearAlgebra: UniformScaling, eigen, dot, Hermitian
+using LinearAlgebra: UniformScaling, eigen, dot, Hermitian, mul!
 
 # this file implements the standard spectral decomposition
 # calculator for energy, forces, etc.
@@ -289,7 +289,7 @@ end
 # =================== Site Forces for a given k-point =======================
 # The derivatives of the site energy is computed by dual technique.
 
-function _dEs_k!(dEs::Vector{JVecF},
+function _dEs_k!(dEs::AbstractVector{JVecF},
                   at::AbstractAtoms, tbm::TBModel,
                   H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
                   skhg, w, Idom::AbstractVector{TI}
@@ -304,7 +304,7 @@ function _dEs_k!(dEs::Vector{JVecF},
    df   = grad(tbm.potential, epsn)::Vector{Float64}
    M    = get_k_array(at, :M, k)::Matrix{ComplexF64}
    MC   = isorth(tbm) ? C[In0,:] : (M[In0, :] * C)
-   ψ²   = sum( conj(C[In0, :]) .* MC , 1 )[:]
+   ψ²   = sum( conj(C[In0, :]) .* MC , dims=1 )[:]
    # precompute some products
    C_f_Ct         = (C * (f' .* C)')
    C_f_ψ²_Ct      = (C * ( (f .* ψ²)' .* C )')
@@ -343,9 +343,9 @@ function _dEs_k!(dEs::Vector{JVecF},
 	end
    # precompute the arrays (H-ϵ_s⋅M)⁻[ψ_s]
    # pinvC_f_Ct = (C * diff_f_inv_ψst * C')
-   pinvC_f_Ct = A_mul_Bc(A_mul_B!(_A1, C, diff_f_inv_ψst), C)
+   pinvC_f_Ct = mul!(_A1, C, diff_f_inv_ψst) * adjoint(C)
    # pinvC_fepsn_Ct = (C * diff_fepsn_inv_ψst * C')
-   pinvC_fepsn_Ct = A_mul_Bc(A_mul_B!(_A1, C, diff_fepsn_inv_ψst), C)
+   pinvC_fepsn_Ct = mul!(_A1, C, diff_fepsn_inv_ψst) * adjoint(C)
 
    for n = 1:length(skhg.i)
       i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]

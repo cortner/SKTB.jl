@@ -90,7 +90,7 @@ dEsh = []
 errors = Float64[]
 for p = 2:9
    h = 0.1^p
-   dEsh = zeros(dEs)
+   dEsh = zero(dEs)
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)

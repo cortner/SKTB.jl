@@ -124,7 +124,8 @@ function pexsi_partial_energy(
    H, M = hamiltonian(tbm, at)
    # for now convert `I` into `speye`
    if isa(M, UniformScaling)
-      M = speye(ndofs(tbm.H, at))
+      _n = ndofs(tbm.H, at)
+      M = sparse(1.0I, _n, _n)    # speye(ndofs(tbm.H, at))
    end
 
    # get the Fermi-contour;
