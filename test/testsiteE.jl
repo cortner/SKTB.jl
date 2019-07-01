@@ -67,8 +67,8 @@ for p = 2:9
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end
-   println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
-   push!(errors, vecnorm(dEs-dEsh, Inf))
+   println( " ", p, " | ", norm(dEs-dEsh, Inf) )
+   push!(errors, norm(dEs-dEsh, Inf))
 end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
@@ -103,8 +103,8 @@ for p = 2:9
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end
-   println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
-   push!(errors, vecnorm(dEs-dEsh, Inf))
+   println( " ", p, " | ", norm(dEs-dEsh, Inf) )
+   push!(errors, norm(dEs-dEsh, Inf))
 end
 @test minimum(errors) < 1e-3 * maximum(errors)
 

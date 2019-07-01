@@ -21,21 +21,21 @@ tbj = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp, cutoff=
 
 # JulIP matrices
 Hj, Mj = hamiltonian(tbj, at)
-Hj = full(Hj)
-Mj = full(Mj)
+Hj = Array(Hj)
+Mj = Array(Mj)
 
 # Atoms.jl TB Model
 tba = AtJuLIP.JuLIPTB(:Si, nkpoints = nkpoints)
 
 # Atoms Matrices
 Ha, Ma = hamiltonian(tba, at)
-Ha = TB.NRLTB.half_eV * full(Ha)
-Ma = full(Ma)
+Ha = TB.NRLTB.half_eV * Array(Ha)
+Ma = Array(Ma)
 
-@show vecnorm(Hj - Ha, Inf)
-@test vecnorm(Hj - Ha, Inf) < 1e-12
-@show vecnorm(Mj - Ma, Inf)
-@test vecnorm(Mj - Ma, Inf) < 1e-12
-ae = full(Ha) |> eigvals |> real |> sort
-je = full(Hj) |> eigvals |> real |> sort
-@show vecnorm(ae - je, Inf)
+@show norm(Hj - Ha, Inf)
+@test norm(Hj - Ha, Inf) < 1e-12
+@show norm(Mj - Ma, Inf)
+@test norm(Mj - Ma, Inf) < 1e-12
+ae = Array(Ha) |> eigvals |> real |> sort
+je = Array(Hj) |> eigvals |> real |> sort
+@show norm(ae - je, Inf)

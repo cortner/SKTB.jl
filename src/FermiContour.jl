@@ -69,9 +69,9 @@ function fermicontour(E1,E2,β,n)
     K = JacobiFunc.K(k^2)
     iK = im*JacobiFunc.iK(k^2)
 
-    t = -K + iK/2 + 4*K*(0.5:1:2*n-0.5)/(2*n)
-    w = Vector{Complex{typeof(k)}}(length(t))
-    z = Vector{Complex{typeof(k)}}(length(t))
+    t = (-K + iK/2) .+ 4*K*(0.5:1:2*n-0.5)/(2*n)
+    w = Vector{Complex{typeof(k)}}(undef, length(t))
+    z = Vector{Complex{typeof(k)}}(undef, length(t))
     for i = 1:length(t)
         # Quadrature points and weights
         w[i],z[i] = (-1/(2π*im) * 4*K/n, t[i]) |>
@@ -91,7 +91,7 @@ export fermidirac
 Compute `1/(1+exp(β*z))` in a numerically stable way.
 """
 function fermidirac(z,β)
-    return abs(β*z) < log(realmax(real(typeof(z)))) ?
+    return abs(β*z) < log(floatmax(real(typeof(z)))) ?
             1/(1 + exp(β*z)) :
             0.5*(1-sign(real(z)))
 end

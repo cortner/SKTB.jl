@@ -22,6 +22,14 @@ print("check that hamiltonian evaluates ... ")
 H, M = hamiltonian(tbm, at)
 println("ok.")
 print("check that `densitymatrix` evaluates ... ")
+
+# it1, state = iterate(tbm.bzquad)
+# t = iterate(tbm.bzquad, state)
+# iter = TightBinding.BZiter(tbm, at)
+# state = iterate(iter)
+# it1, state = iterate(iter, state)
+
+
 Γ = densitymatrix(tbm, at)
 println("ok.")
 print("check that `energy` evaluates ... ")

@@ -38,7 +38,7 @@ for pot in (TB.ZeroT(), TB.ZeroTGrand())
    println("ok : E = ", E, ".")
    print("check that `forces` evaluates ... ")
    frc = forces(tbm, at) |> mat
-   println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
+   println("ok : |f|∞ = ", norm(frc, Inf), ".")
    @test true
 
    println("  Finite-difference test:  ")
@@ -104,8 +104,8 @@ end
 #       dEsh[n] = (Esh - Es) / h
 #       X[n] -= h
 #    end
-#    println( " ", p, " | ", vecnorm(dEs-dEsh, Inf) )
-#    push!(errors, vecnorm(dEs-dEsh, Inf))
+#    println( " ", p, " | ", norm(dEs-dEsh, Inf) )
+#    push!(errors, norm(dEs-dEsh, Inf))
 # end
 # @test minimum(errors) < 1e-3 * maximum(errors)
 

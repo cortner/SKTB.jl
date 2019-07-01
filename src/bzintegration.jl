@@ -7,6 +7,7 @@
 #   * better exploit BZ symmetries?
 #   * high-accuracy adaptive integration?
 
+import Base: iterate
 
 
 
@@ -134,11 +135,29 @@ end
 #  for (w, k) in quadrule
 #       ...
 
-Base.start(q::BZQuadratureRule) = (w_and_pts(q), 1)
-Base.done(q::BZQuadratureRule, state) = (state[2] > length(q))
-Base.next(::BZQuadratureRule, state) =
-   (state[1][1][state[2]], state[1][2][state[2]]), (state[1], state[2]+1)
+# Base.start(q::BZQuadratureRule) = (w_and_pts(q), 1)
+# Base.done(q::BZQuadratureRule, state) = (state[2] > length(q))
+# Base.next(::BZQuadratureRule, state) =
+#    (state[1][1][state[2]], state[1][2][state[2]]), (state[1], state[2]+1)
 
+struct BZquadstate{WT, KT}
+	w::WT
+	k::KT
+	idx::Int
+end
+
+BZquadstate(q::BZQuadratureRule) =
+	BZquadstate(w_and_pts(q)..., 1)
+
+function iterate(q::BZQuadratureRule)
+	state = BZquadstate(q)
+	return (state.w[1], state.k[1]), state
+end
+
+iterate(q::BZQuadratureRule, state::BZquadstate) =
+		( (state.idx >= length(state.w)) ? nothing :
+       		((state.w[state.idx+1], state.q[state.idx+1]),
+					BZquadstate(state.w, state.q, state.idx+1)) )
 
 
 # we can replace the double-loop over bz and then over the eigenvalues with
@@ -177,11 +196,37 @@ end
 
 BZiter(tbm::TBModel, at::AbstractAtoms) = BZiter(tbm, at, w_and_pts(tbm.bzquad)...)
 
-Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(undef, 0), Matrix{ComplexF64}(undef, 0,0))
 
-Base.done(bz::BZiter, state::BZstate) = (state.ik > length(bz.w))
+# Base.start(::BZiter) = BZstate(1, 1, Vector{Float64}(undef, 0), Matrix{ComplexF64}(undef, 0,0))
+#
+# Base.done(bz::BZiter, state::BZstate) = (state.ik > length(bz.w))
+#
+# function Base.next(bz::BZiter, state::BZstate)
+#    is, ik = state.is, state.ik
+#    if is == 1
+#       if ik == 1; update!(bz.at, bz.tbm); end
+#       state.epsn_k = get_k_array(bz.at, :epsn, bz.k[ik])
+#       state.C_k = get_k_array(bz.at, :C, bz.k[ik])
+#    end
+#    # construct the next item to return to the iteration
+#    nextitem = (bz.w[ik], bz.k[ik], state.epsn_k[is], state.C_k[:, is])
+#    # update the state
+#    state.is += 1
+#    if state.is > length(state.epsn_k)
+#       state.is = 1
+#       state.ik += 1
+#    end
+#    return nextitem, state
+# end
 
-function Base.next(bz::BZiter, state::BZstate)
+
+iterate(bz::BZiter) = iterate(bz, BZstate(1, 1, Vector{Float64}(undef, 0),
+					   					 				   Matrix{ComplexF64}(undef, 0,0)) )
+
+function iterate(bz::BZiter, state::BZstate)
+	if (state.ik > length(bz.w))
+		return nothing
+	end
    is, ik = state.is, state.ik
    if is == 1
       if ik == 1; update!(bz.at, bz.tbm); end
@@ -196,5 +241,5 @@ function Base.next(bz::BZiter, state::BZstate)
       state.is = 1
       state.ik += 1
    end
-   return nextitem, state
+   return (nextitem, state)
 end

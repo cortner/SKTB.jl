@@ -1,4 +1,5 @@
 
+using SparseArrays: issparse
 
 TB=TightBinding
 
@@ -46,7 +47,7 @@ for orbitals in Orbitals
    println("ok : E = ", E, ".")
    print("check that `forces` evaluates ... ")
    frc = forces(tbm, at) |> mat
-   println("ok : |f|∞ = ", vecnorm(frc, Inf), ".")
+   println("ok : |f|∞ = ", norm(frc, Inf), ".")
    @test true
 
    println("-------------------------------------------")
@@ -64,8 +65,8 @@ for N = 2:6
    Hf, Mf =  TightBinding.evaluate(tbm.H, at, zeros(3), T = full)
    @show typeof(H)
    @test issparse(H) == (N > 3)
-   @show vecnorm(full(H) - Hf, Inf)
-   @test vecnorm(full(H) - Hf, Inf) == 0.0
+   @show norm(Array(H) - Hf, Inf)
+   @test norm(Array(H) - Hf, Inf) == 0.0
 end
 
 end

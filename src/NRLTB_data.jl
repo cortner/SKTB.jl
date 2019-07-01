@@ -1,5 +1,6 @@
 ######################### Specification for NRL-TB ############################
 
+using DelimitedFiles: readdlm
 
 function default_orbitals(s)
    s = string(s)
@@ -31,8 +32,9 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
    elseif s == :Al && orbitals == :spd
       H = Al_spd
    else
-        cd(Pkg.dir("TightBinding"))
-        cd("nrl_data") # Relatively universal!
+        # Relatively universal!
+        data_dir = joinpath(dirname(pathof(TightBinding)), "..", "nrl_data")
+        cd(data_dir)
         fname = NRLFILENAME[s] # Lookup species -> filename
 
         M = readdlm(fname,skipstart=1)

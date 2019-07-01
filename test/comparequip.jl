@@ -12,8 +12,8 @@ rattle!(at, 0.02)
 tbm = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp, cutoff=:original)
 
 H, M = hamiltonian(tbm, at)
-H = full(H)
-M = full(M)
+H = Array(H)
+M = Array(M)
 
 using PyCall
 @pyimport quippy
@@ -59,10 +59,10 @@ Hq, Mq = tb_matrices(quip_tb, at, tbm)
 
 M, H, Mq, Hq = real(M), real(H), real(Mq), real(Hq)
 
-@show vecnorm(H - Hq, Inf)
-@test vecnorm(H - Hq, Inf) < 1e-5
-@show vecnorm(M - Mq, Inf)
-@test vecnorm(M - Mq, Inf) < 1e-5
+@show norm(H - Hq, Inf)
+@test norm(H - Hq, Inf) < 1e-5
+@show norm(M - Mq, Inf)
+@test norm(M - Mq, Inf) < 1e-5
 
 E = sort(real(eigvals(H, M)))
 Eq = sort(real(eigvals(Hq, Mq)))

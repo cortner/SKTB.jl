@@ -2,7 +2,8 @@
 using ForwardDiff, NeighbourLists
 
 using LinearAlgebra: diagind, dot
-import SparseArrays: nnz, sparse, I 
+
+import SparseArrays: nnz, sparse, I
 
 # slaterkoster.jl
 #
@@ -244,16 +245,15 @@ _alloc_full(H::SKHamiltonian{NONORTHOGONAL}, at::AbstractAtoms) =
 _alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
    Matrix{ComplexF64}(undef, ndofs(H, at), ndofs(H, at)), Matrix{ComplexF64}(undef, 0, 0)
 
-Base.full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
+full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)
 
 full!(out, H::SparseSKH, k::AbstractVector = zero(JVecF)) =
-   _full!(out[1], out[2], H, k, H.H)
+   _full!(out[1], out[2], H, convert(JVecF, k), H.H)
 
-function _full!(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB}) where {NORB}
+function _full!(Hout, Mout, skh, k::JVecF, H::SKHamiltonian{NONORTHOGONAL, NORB}) where {NORB}
    fill!(Hout, 0.0)
    fill!(Mout, 0.0)
-   k = JVecF(k)
    for (i, j, H_ij, M_ij, S) in zip(skh.i, skh.j, skh.vH, skh.vM, skh.Rcell)
       eikR = exp( im * dot(k, S) )
       Ii, Ij = indexblock(i, H), indexblock(j, H)
@@ -268,9 +268,8 @@ function _full!(Hout, Mout, skh, k, H::SKHamiltonian{NONORTHOGONAL, NORB}) where
 end
 
 
-function _full!(Hout, _Mout_, skh, k, H::SKHamiltonian{ORTHOGONAL, NORB}) where {NORB}
+function _full!(Hout, _Mout_, skh, k::JVecF, H::SKHamiltonian{ORTHOGONAL, NORB}) where {NORB}
    fill!(Hout, 0.0)
-   k = JVecF(k)
    for (i, j, H_ij, S) in zip(skh.i, skh.j, skh.vH, skh.Rcell)
       if i == 0 || j == 0
          error("unexplained i or j = 0")
