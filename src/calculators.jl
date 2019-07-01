@@ -204,7 +204,7 @@ function partial_energy(tbm::TBModel, at::AbstractAtoms,
       M_k = get_k_array(at, :M, k)
       C_k = get_k_array(at, :C, k)
       MC_k = isorth(tbm) ? C_k[In0,:] : (M_k[In0, :] * C_k)
-      ψ² = sum( conj(C_k[In0, :] .* MC_k), 1 )[:]
+      ψ² = sum( conj(C_k[In0, :] .* MC_k), dims=1 )[:]
       E += w * sum(energy(tbm.potential, epsn_k)  .* ψ²)
    end
    return real(E) + partial_energy(tbm.Vrep, at, Idom)

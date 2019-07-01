@@ -117,7 +117,7 @@ function monkhorstpackgrid(cell::AbstractMatrix,
    for k1 = 1:nx, k2 = 1:ny, k3 = 1:nz
       # TODO: use `sub2ind` here
       k = k1 + (k2-1) * nx + (k3-1) * nx * ny
-      @assert k == sub2ind((nx, ny, nz), k1, k2, k3)
+      @assert k == _sub2ind((nx, ny, nz), k1, k2, k3)
       # check when kx==0 or ky==0 or kz==0
       K[k] = (k1 - kxs) * b1/nx + (k2 - kys) * b2/ny + (k3 - kzs) * b3/nz
       weight[k] = 1.0 / ( nx * ny * nz )
@@ -127,6 +127,7 @@ function monkhorstpackgrid(cell::AbstractMatrix,
 end
 
 
+_sub2ind(dims, I...) = (LinearIndices(dims))[I...]
 
 
 # ================ BZ iterators ================
@@ -156,8 +157,8 @@ end
 
 iterate(q::BZQuadratureRule, state::BZquadstate) =
 		( (state.idx >= length(state.w)) ? nothing :
-       		((state.w[state.idx+1], state.q[state.idx+1]),
-					BZquadstate(state.w, state.q, state.idx+1)) )
+       		((state.w[state.idx+1], state.k[state.idx+1]),
+					BZquadstate(state.w, state.k, state.idx+1)) )
 
 
 # we can replace the double-loop over bz and then over the eigenvalues with

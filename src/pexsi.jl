@@ -1,5 +1,7 @@
 
 using TightBinding.FermiContour: fermicontour
+using SparseArrays: speye
+using LinearAlgebra: lu, tr
 
 """
 `PEXSI <: AbstractTBModel`:
@@ -80,7 +82,7 @@ function update!(calc::PEXSI, at::AbstractAtoms)
    epsn = spectrum(calc.tbm, at)
    eF = get_eF(calc.tbm)
    # TODO: not so clear that Emin, Emax should be updated!!!!
-   Emin, Emax = extrema( abs.(epsn - eF) )
+   Emin, Emax = extrema( abs.(epsn .- eF) )
    set_EminEmax!(at, Emin, Emax)
    return nothing
 end
@@ -131,16 +133,16 @@ function pexsi_partial_energy(
    Emin, Emax = get_EminEmax(at)
    w, z = fermicontour(0.0, Emax, beta(tbm.potential), calc.nquad)
    w = -w    # flip weights due to change in fermicontour implementation
-   z += get_eF(tbm.potential)
+   z .+= get_eF(tbm.potential)
    Ez = energy(tbm.potential, z)
 
    # collect all the orbital-indices corresponding to the site-indices into a long vector
    Iorb = indexblock(Is, tbm.H)
    Norb = length(Iorb)
    # define the right-hand sides in the linear solver at each quad-point
-   rhsM = full(M[:, Iorb])
+   rhsM = Array(M[:, Iorb])
    rhs = zeros(size(H,1), Norb);
-   rhs[Iorb,:] = eye(Norb)
+   rhs[Iorb,:] = Matrix(I, Norb, Norb) # eye(Norb)
 
    # allocate
    E = partial_energy(tbm.Vrep, at, Is)
@@ -155,10 +157,10 @@ function pexsi_partial_energy(
    # integrate over the contour
    for (wi, zi, Ei) in zip(w, z, Ez)
       # Green's function
-      LU = lufact(H - zi * M)
+      LU = lu(H - zi * M)
       # --------------- assemble energy -----------
       resM = LU \ rhsM
-      E += real(wi * Ei * trace(resM[Iorb,:]))
+      E += real(wi * Ei * tr(resM[Iorb,:]))
       # --------------- assemble forces -----------
       if deriv
          res = isorthogonal(tbm) ? resM : LU \ rhs

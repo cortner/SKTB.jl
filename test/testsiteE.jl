@@ -1,4 +1,4 @@
-using JuLIP, JuLIP.Potentials, TightBinding
+using JuLIP, JuLIP.Potentials, TightBinding, SparseArrays
 using JuLIP.Potentials: site_energy, site_energy_d
 TB = TightBinding
 
@@ -59,7 +59,7 @@ dEsh = []
 errors = Float64[]
 for p = 2:9
    h = 0.1^p
-   dEsh = zeros(dEs)
+   dEsh = zero(dEs)
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)
@@ -73,7 +73,7 @@ end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
 println("Test consistency of ContourCalculator for multiple sites")
-Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) .+ 1)
 Eold = sum( site_energy(tbm, at, n0) for n0 in Is )
 Enew = 0.0
 for nquad in NQUAD
@@ -87,7 +87,7 @@ end
 println("Test consistency of multiple site forces")
 calc.nquad = 8
 X = copy( positions(at) |> mat )
-Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) + 1)
+Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) .+ 1)
 Es, dEs = TB.pexsi_partial_energy(calc, at, Is, true)
 dEs = dEs |> mat
 dEsh = []
@@ -95,7 +95,7 @@ errors = []
 println(" p  |  error ")
 for p = 2:9
    h = 0.1^p
-   dEsh = zeros(dEs)
+   dEsh = zero(dEs)
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)
