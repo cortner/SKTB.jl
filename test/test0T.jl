@@ -11,7 +11,7 @@ for pot in (TB.ZeroT(), TB.ZeroTGrand())
 
    println("Testing ", typeof(pot))
 
-   at = (1,2,2) * bulk("Si", pbc=(true, false, true), cubic=true)
+   at = (1,2,2) * bulk(:Si, pbc=(true, false, true), cubic=true)
    @show length(at)
    tbm = TB.Kwon.KwonTBModel(potential = pot,
                            #   bzquad=TB.MPGrid(at, (4,0,0)) )
@@ -109,4 +109,4 @@ end
 # end
 # @test minimum(errors) < 1e-3 * maximum(errors)
 
-end 
+end

@@ -16,8 +16,8 @@ println("============================================")
 # include("testcontour.jl")
 # include("testsiteE.jl")
 # include("testkwon.jl")
-include("testdual.jl")
-# include("test0T.jl")
+# include("testdual.jl")
+include("test0T.jl")
 
 # ============= Compare with Atoms.jl and QUIP implementations
 if COMPAREATOMS; include("compareatoms.jl"); end
