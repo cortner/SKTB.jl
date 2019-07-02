@@ -3,9 +3,9 @@
 
 push!(LOAD_PATH, "/Users/ortner/gits/Atoms.jl")
 
-using JuLIP, TightBinding
+using JuLIP, SKTB
 import AtJuLIP
-TB = TightBinding
+TB = SKTB
 
 
 

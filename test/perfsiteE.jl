@@ -1,7 +1,7 @@
 addprocs(3)
 
 @everywhere using JuLIP, JuLIP.ASE
-@everywhere using TightBinding
+@everywhere using SKTB
 # using ProfileView
 
 # test parameters
@@ -12,7 +12,7 @@ NQUAD = 8         # number of contour points
 DIM = (7,7,7)
 
 
-TB=TightBinding
+TB=SKTB
 
 # define the model
 tbm = TB.NRLTB.NRLTBModel(elem = TB.NRLTB.Si_sp, nkpoints = (0,0,0))

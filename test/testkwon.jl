@@ -1,8 +1,8 @@
 
-using JuLIP, JuLIP.Potentials, TightBinding
+using JuLIP, JuLIP.Potentials, SKTB
 using JuLIP.Potentials: site_energy, site_energy_d
 
-TB=TightBinding
+TB=SKTB
 
 @testset "Kwon" begin
 

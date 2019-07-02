@@ -5,9 +5,9 @@ using LinearAlgebra
 
 println("Testing TB Toy Model")
 
-TB = TightBinding
+TB = SKTB
 at = (1,2,3) * bulk(:Al, pbc=false, cubic=true)
-tbm = TightBinding.ToyTBModel(r0=2.5, rcut=4.9)
+tbm = SKTB.ToyTBModel(r0=2.5, rcut=4.9)
 
 X = positions(at)
 X[2] += [0.123, 0.234, 0.01]
@@ -25,7 +25,7 @@ print("check that `densitymatrix` evaluates ... ")
 
 # it1, state = iterate(tbm.bzquad)
 # t = iterate(tbm.bzquad, state)
-# iter = TightBinding.BZiter(tbm, at)
+# iter = SKTB.BZiter(tbm, at)
 # state = iterate(iter)
 # it1, state = iterate(iter, state)
 

@@ -1,8 +1,8 @@
 using JuLIP, JuLIP.Potentials
 using JuLIP.Potentials: site_energy, site_energy_d
-using TightBinding
-using TightBinding: FermiDiracSmearing
-TB = TightBinding
+using SKTB
+using SKTB: FermiDiracSmearing
+TB = SKTB
 NRLTB = TB.NRLTB
 
 @testset "Dual Method Partial Energies" begin

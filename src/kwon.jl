@@ -2,13 +2,13 @@
 module Kwon
 
 using Parameters
-using TightBinding: SKHamiltonian, hop, TBModel, NullPotential, ORTHOGONAL
+using SKTB: SKHamiltonian, hop, TBModel, NullPotential, ORTHOGONAL
 using JuLIP.Potentials: fcut, fcut_d, SplineCutoff,
    PairPotential, ZeroPairPotential, EAM1, @analytic
 
 
 import JuLIP: cutoff
-import TightBinding: hop, onsite!, onsite_grad!
+import SKTB: hop, onsite!, onsite_grad!
 
 """
 `KwonHamiltonian <: SKHamiltonian{ORTHOGONAL, 4}`

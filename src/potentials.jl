@@ -117,7 +117,7 @@ fixed_eF(::GrandPotential) = true
 
 # ================= The Old Smearing Function ============================
 # should still implement it, then deprecate and remove once
-# we have fixed the Atoms.jl - TightBinding.jl equivalence
+# we have fixed the Atoms.jl - SKTB.jl equivalence
 
 mutable struct FermiDiracSmearing  <: FiniteTPotential
     beta::Float64
@@ -159,7 +159,7 @@ end
 
 * `at`: `AbstractAtoms`
 * `f`: potential (e.g. `FermiDiracSmearing`, `GrandPotential`, etc)
-* `tbm`: `TightBindingModel`
+* `tbm`: `SKTBModel`
 * `Ne` : number of electrons in the system
 
 Given an electron number `Ne` compute the fermi-level (chemical potential)

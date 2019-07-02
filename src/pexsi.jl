@@ -1,6 +1,6 @@
 
-using TightBinding.FermiContour: fermicontour
-using SparseArrays: speye
+using SKTB.FermiContour: fermicontour
+using SparseArrays: sparse
 using LinearAlgebra: lu, tr
 
 """

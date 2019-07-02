@@ -1,7 +1,7 @@
-import TightBinding
+import SKTB
 using JuLIP, JuLIP.ASE
 
-TB=TightBinding
+TB=SKTB
 β, eF, fixed_eF = 1.0, 0.0, true
 
 tests = Any[]

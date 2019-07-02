@@ -33,7 +33,7 @@ function NRLHamiltonian(s; orbitals=default_orbitals(s), cutoff=:forceshift)
       H = Al_spd
    else
         # Relatively universal!
-        data_dir = joinpath(dirname(pathof(TightBinding)), "..", "nrl_data")
+        data_dir = joinpath(dirname(pathof(SKTB)), "..", "nrl_data")
         cd(data_dir)
         fname = NRLFILENAME[s] # Lookup species -> filename
 

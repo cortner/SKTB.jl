@@ -1,12 +1,12 @@
 
 using JuLIP
-using TightBinding
+using SKTB
 
-# @testset "Compare TightBinding.jl against QUIP" begin
+# @testset "Compare SKTB.jl against QUIP" begin
 
 beta = 10.0
 
-TB = TightBinding
+TB = SKTB
 at = bulk("Si", cubic = true) * 2
 rattle!(at, 0.02)
 tbm = TB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(beta), orbitals = :sp, cutoff=:original)

@@ -1,5 +1,5 @@
 using Test
-using TightBinding, JuLIP, LinearAlgebra
+using SKTB, JuLIP, LinearAlgebra
 using JuLIP.Testing
 
 COMPAREATOMS = false    # if Atoms.jl is installed
@@ -7,16 +7,16 @@ COMPAREQUIP = false     # if QUIP and quippy are installed
 TESTDEPTH = 1
 
 println("============================================")
-println("    TightBinding Tests  ")
+println("    SKTB Tests  ")
 println("============================================")
 
 # =========== Main tests =================
-# include("testtoymodel.jl")
-# include("testnrltb.jl")
-# include("testcontour.jl")
-# include("testsiteE.jl")
-# include("testkwon.jl")
-# include("testdual.jl")
+include("testtoymodel.jl")
+include("testnrltb.jl")
+include("testcontour.jl")
+include("testsiteE.jl")
+include("testkwon.jl")
+include("testdual.jl")
 include("test0T.jl")
 
 # ============= Compare with Atoms.jl and QUIP implementations

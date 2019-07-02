@@ -1,7 +1,7 @@
 
 using SparseArrays: issparse
 
-TB=TightBinding
+TB=SKTB
 
 @testset "NRLTB" begin
 
@@ -60,9 +60,9 @@ end
 println("Test sparse hamiltonian assembly")
 for N = 2:6
    at = (N,N,N) * bulk(:Si, pbc=false, cubic=true)
-   tbm = TightBinding.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(1.0))
+   tbm = SKTB.NRLTB.NRLTBModel(:Si, FermiDiracSmearing(1.0))
    H, M = hamiltonian(tbm, at)
-   Hf, Mf =  TightBinding.evaluate(tbm.H, at, zeros(3), T = full)
+   Hf, Mf =  SKTB.evaluate(tbm.H, at, zeros(3), T = full)
    @show typeof(H)
    @test issparse(H) == (N > 3)
    @show norm(Array(H) - Hf, Inf)

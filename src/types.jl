@@ -72,7 +72,7 @@ ndofs(H::SKHamiltonian, at::AbstractAtoms) = norbitals(H) * length(at)
 
 """
 `ChemicalPotential`: abstract supertype for different chemical potentials.
-`TightBinding.jl` implements:
+`SKTB.jl` implements:
 # TODO: make list
 """
 abstract type ChemicalPotential end
@@ -103,7 +103,7 @@ abstract type BZQuadratureRule end
 
 mutable struct NullBZQ <: BZQuadratureRule end
 
-# ===================  Standard TightBinding Calculator =====================
+# ===================  Standard SKTB Calculator =====================
 
 """
 supertype for all TB model type calcualtors
@@ -122,7 +122,7 @@ mutable struct TBModel{HT <: TBHamiltonian, ST <: ChemicalPotential} <: Abstract
    hfd::Float64          # step used for finite-difference approximations
 end
 
-const TightBindingModel = TBModel
+const SKTBModel = TBModel
 
 TBModel() = TBModel(NullHamiltonian(), ZeroSitePotential(),
                     NullPotential(), NullBZQ(), 0.0)

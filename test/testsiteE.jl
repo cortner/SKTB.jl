@@ -1,6 +1,6 @@
-using JuLIP, JuLIP.Potentials, TightBinding, SparseArrays
+using JuLIP, JuLIP.Potentials, SKTB, SparseArrays
 using JuLIP.Potentials: site_energy, site_energy_d
-TB = TightBinding
+TB = SKTB
 
 @testset "Site Energy" begin
 
