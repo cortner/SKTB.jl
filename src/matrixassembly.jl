@@ -248,6 +248,9 @@ _alloc_full(H::SKHamiltonian{ORTHOGONAL}, at::AbstractAtoms) =
 full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)
 
+Base.Array(H::SparseSKH, args...) = full(H, args...)
+Base.Matrix(H::SparseSKH, args...) = sparse(H, args...) 
+
 full!(out, H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    _full!(out[1], out[2], H, convert(JVecF, k), H.H)
 

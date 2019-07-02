@@ -2,7 +2,6 @@ using Test
 using SKTB, JuLIP, LinearAlgebra
 using JuLIP.Testing
 
-COMPAREATOMS = false    # if Atoms.jl is installed
 COMPAREQUIP = false     # if QUIP and quippy are installed
 TESTDEPTH = 1
 
@@ -11,16 +10,17 @@ println("    SKTB Tests  ")
 println("============================================")
 
 # =========== Main tests =================
-include("testtoymodel.jl")
-include("testnrltb.jl")
-include("testcontour.jl")
-include("testsiteE.jl")
-include("testkwon.jl")
-include("testdual.jl")
-include("test0T.jl")
+@testset "SKTB Tests" begin
+   include("testtoymodel.jl")
+   include("testnrltb.jl")
+   include("testcontour.jl")
+   include("testsiteE.jl")
+   include("testkwon.jl")
+   include("testdual.jl")
+   include("test0T.jl")
+end
 
 # ============= Compare with Atoms.jl and QUIP implementations
-if COMPAREATOMS; include("compareatoms.jl"); end
 if COMPAREQUIP; include("comparequip.jl"); end
 
 # ============= Performance benchmarks
