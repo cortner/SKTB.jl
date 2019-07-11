@@ -389,3 +389,80 @@ end
 site_energy_d(tbm::TBModel{HT}, atm::AbstractAtoms,
                                     n0::Integer) where {HT <: SKHamiltonian} =
    partial_energy_d(tbm, atm, [n0])
+
+
+
+
+   # ========================== Virial ==========================
+
+   # compute the virial ( = - ∂E / ∂F ) through
+   # vir = - ∑_s f'(ϵ_s) < ψ_s | ∂H/∂u_{αβ} - ϵ_s * ∂M/∂u_{αβ} | ψ_s >
+   # but instead of computing H and M as matrices, this assembly loops over
+   # the non-zero blocks first and the inner loop is over the derivative
+
+   function _virial_k!(vir_k::Array{Float64,2},
+                              at::AbstractAtoms, tbm::TBModel,
+                              H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
+                              skhg, w) where {ISORTH, NORB}
+      # deformation
+      F = defm(at)
+      F⁻ = inv(F)
+      X = positions(at)|>mat
+
+      # obtain the precomputed arrays
+      epsn = get_k_array(at, :epsn, k)::Vector{Float64}
+      C = get_k_array(at, :C, k)::Matrix{ComplexF64}
+      df = grad(tbm.potential, epsn)::Vector{Float64}
+
+      # precompute some products
+      # TODO: optimise these two lines? These are O(N^3) scaling, while overall
+      #       force assembly should be just O(N^2) (but can we beat BLAS3?)
+      C_df_Ct = (C * (df' .* C)')
+      C_dfepsn_Ct = (C * ((df.*epsn)' .* C)')
+
+      # an array replacing dM_ij when the model is orthogonal
+      dM_ij = zero(typeof(skhg.dH[1]))
+      dH_ij_F = zeros(Float64, 3, size(skhg.dH[1])[1], size(skhg.dH[1])[2], size(skhg.dH[1])[3])
+      dH_ii_F = zeros(Float64, 3, size(skhg.dH[1])[1], size(skhg.dH[1])[2], size(skhg.dH[1])[3])
+      dM_ij_F = zeros(Float64, 3, size(skhg.dH[1])[1], size(skhg.dH[1])[2], size(skhg.dH[1])[3])
+
+      for n = 1:length(skhg.i)
+         i, j, dH_ij, dH_ii, S = skhg.i[n], skhg.j[n], skhg.dH[n], skhg.dOS[n], skhg.Rcell[n]
+         if !ISORTH; dM_ij = skhg.dM[n]; end
+         Ii, Ij = indexblock(i, H), indexblock(j, H)
+         eikr = exp(im * dot(S, k))::Complex{Float64}
+         # x ↦ F⋅F⁻x
+         F⁻xi = F⁻ * X[:,i]
+         F⁻xj = F⁻ * (S + X[:,j])
+         for t = 1:3
+            dM_ij_F[t,:,:,:] = dM_ij .* ( F⁻xj[t] - F⁻xi[t] )
+            dH_ij_F[t,:,:,:] = dH_ij .* ( F⁻xj[t] - F⁻xi[t] )
+            dH_ii_F[t,:,:,:] = dH_ii .* ( F⁻xj[t] - F⁻xi[t] )
+         end
+
+         @inbounds for a = 1:NORB, b = 1:NORB
+            t1 = real(C_df_Ct[Ii[a], Ij[b]] * eikr)
+            t2 = real(C_dfepsn_Ct[Ii[a], Ij[b]] * eikr)
+            t3 = real(C_df_Ct[Ii[a],Ii[b]])
+            vir_k += (-t1) * dH_ij_F[:,:,a,b] + t2 * dM_ij_F[:,:,a,b] - t3 * dH_ii_F[:,:,a,b]
+         end
+      end
+
+      return vir_k
+   end
+
+
+   # * `virial` is imported from JuLIP  "CHECK"
+   # hence is only valid for SK-type hamiltonians.
+
+   function virial(tbm::TBModel{HT}, atm::AbstractAtoms) where {HT <: SKHamiltonian}
+      update!(atm, tbm)
+      skhg = SparseSKHgrad(tbm.H, atm)
+      # TODO: fix -- vir = virial(tbm.Vrep, atm)
+      vir = zeros(Float64, 3, 3)
+      for (w, k) in tbm.bzquad
+         vir_k = zeros(Float64, 3, 3)
+         vir += w * _virial_k!(vir_k, atm, tbm, tbm.H, k, skhg, w)
+      end
+      return vir
+   end
