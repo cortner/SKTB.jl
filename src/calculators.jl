@@ -1,7 +1,7 @@
 
 using JuLIP: set_transient!, get_data, has_data
 
-using LinearAlgebra: UniformScaling, eigen, dot, Hermitian, mul!
+using LinearAlgebra: UniformScaling, eigen, dot, Hermitian, mul!, rmul!
 
 # this file implements the standard spectral decomposition
 # calculator for energy, forces, etc.
@@ -117,7 +117,7 @@ end
 
 
 # this is imported from JuLIP
-energy(tbm::TBModel, at::AbstractAtoms) = (
+_energy(tbm::TBModel, at::AbstractAtoms) = (
    sum( w * energy(tbm.potential, ϵ) for (w, _1, ϵ, _2) in BZiter(tbm, at) )
    + energy(tbm.Vrep, at) )
 
@@ -182,11 +182,10 @@ end
 #   specific assumptions about the structure of the hamiltonian, hence is
 #   only valid for SK-type hamiltonians.
 #
-function forces(tbm::TBModel{HT}, atm::AbstractAtoms) where {HT <: SKHamiltonian}
+function _forces(tbm::TBModel{HT}, atm::AbstractAtoms) where {HT <: SKHamiltonian}
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
    frc = forces(tbm.Vrep, atm)
-   # frc = zerovecs(length(atm))
    for (w, k) in tbm.bzquad
       _forces_k!(frc, atm, tbm, tbm.H, k, skhg, w)
    end
@@ -194,10 +193,12 @@ function forces(tbm::TBModel{HT}, atm::AbstractAtoms) where {HT <: SKHamiltonian
 end
 
 
-function partial_energy(tbm::TBModel, at::AbstractAtoms,
-                        Idom::AbstractVector{TI})    where TI <: Integer
+function energy(tbm::TBModel,
+                at::AbstractAtoms;
+                domain = 1:length(at))
+   if domain == 1:length(at); return _energy(tbm, at); end
    update!(at, tbm)
-   In0 = indexblock(Idom, tbm.H)
+   In0 = indexblock(domain, tbm.H)
    E = 0.0
    for (w, k) in tbm.bzquad
       epsn_k = get_k_array(at, :epsn, k)
@@ -207,12 +208,12 @@ function partial_energy(tbm::TBModel, at::AbstractAtoms,
       ψ² = sum( conj(C_k[In0, :] .* MC_k), dims=1 )[:]
       E += w * sum(energy(tbm.potential, epsn_k)  .* ψ²)
    end
-   return real(E) + partial_energy(tbm.Vrep, at, Idom)
+   return real(E) + energy(tbm.Vrep, at; domain=domain)
 end
 
 
 site_energy(tbm::TBModel, at::AbstractAtoms, n0::Integer) =
-      partial_energy(tbm, at, [n0])
+      energy(tbm, at; domain = [n0])
 
 
 # ================ Band-structure =================
@@ -374,18 +375,19 @@ end
 
 # Derivative of site energy using dual technique
 #
-function partial_energy_d(tbm::TBModel{HT}, atm::AbstractAtoms,
-                        Idom::AbstractVector{TI}) where {HT <: SKHamiltonian, TI <: Integer}
+function forces(tbm::TBModel{HT}, atm::AbstractAtoms{T};
+                domain = 1:length(atm) ) where {T, HT <: SKHamiltonian}
+   if domain ==  1:length(atm); return _forces(tbm, atm); end
    update!(atm, tbm)
    skhg = SparseSKHgrad(tbm.H, atm)
-   dE = zerovecs(length(atm))
+   dE = zeros(JVec{T}, length(atm))
    for (w, k) in tbm.bzquad
-      _dEs_k!(dE, atm, tbm, tbm.H, k, skhg, w, Idom)
+      _dEs_k!(dE, atm, tbm, tbm.H, k, skhg, w, domain)
    end
-   return dE + partial_energy_d(tbm.Vrep, atm, Idom)
+   return rmul!(dE + forces(tbm.Vrep, atm; domain  = domain), -1)
 end
 
 
 site_energy_d(tbm::TBModel{HT}, atm::AbstractAtoms,
-                                    n0::Integer) where {HT <: SKHamiltonian} =
-   partial_energy_d(tbm, atm, [n0])
+               n0::Integer) where {HT <: SKHamiltonian} =
+   rmul!(forces(tbm, atm; domain = [n0]), -1)

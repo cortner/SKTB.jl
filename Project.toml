@@ -1,6 +1,6 @@
 name = "SKTB"
 uuid = "9c0324d0-6785-59b7-97dc-0c015a243b66"
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 Calculus = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
@@ -15,7 +15,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
-julia = "≥0.7"
+julia = "≥0.8"
 
 [extras]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"

@@ -1,5 +1,5 @@
 using JuLIP, JuLIP.Potentials, SKTB, SparseArrays
-using JuLIP.Potentials: site_energy, site_energy_d
+using JuLIP: site_energy, site_energy_d, energy, forces
 TB = SKTB
 
 @testset "Site Energy" begin
@@ -23,7 +23,6 @@ println("Testing that the spectral-decompositions site energy sums to total ener
 @show E - ∑En
 @test abs.(E - ∑En) < 1e-10
 
-
 # now the real system to test on
 calc = TB.PEXSI(tbm, 5, [1])
 at = DIM * bulk(:Si, pbc=(false,false,false), cubic=true)
@@ -39,7 +38,7 @@ println("done."); @test true
 @show TB.get_EminEmax(at)
 
 # compute the site energy the old way and compare against the PEXSI calculation
-Eold = TB.site_energy(tbm, at, n0)
+Eold = site_energy(tbm, at, n0)
 println("Old Site Energy (via spectral decomposition): ", Eold)
 println("Testing convergence of PEXSI site energy")
 Enew = 0.0
@@ -78,11 +77,10 @@ Eold = sum( site_energy(tbm, at, n0) for n0 in Is )
 Enew = 0.0
 for nquad in NQUAD
    calc.nquad = nquad
-   Enew = TB.partial_energy(calc, at, Is)
+   Enew = energy(calc, at; domain = Is)
    println("nquad = ", nquad, "; rel-error = ", abs(Enew - Eold) / abs(Eold))
 end
 @test  abs(Enew - Eold) / abs(Eold) < 1e-5
-
 
 println("Test consistency of multiple site forces")
 calc.nquad = 8
@@ -99,7 +97,7 @@ for p = 2:9
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)
-      Esh = TB.partial_energy(calc, at, Is)
+      Esh = energy(calc, at; domain = Is)
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end

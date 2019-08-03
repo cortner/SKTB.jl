@@ -2,6 +2,7 @@
 # ----------------------
 #  * Let's try to get away without definint cutoff for the TBModel ?!?!
 
+using JuLIP: AbstractAtoms, AbstractCalculator
 
 export AbstractTBModel,
       TBModel,
@@ -41,9 +42,7 @@ isorth(H::TBHamiltonian) = isorthogonal(H)
 
 returns total number of electron dofs
 """
-@protofun ndofs(::TBHamiltonian, ::AbstractAtoms)
-
-@protofun evaluate(::TBHamiltonian, ::AbstractAtoms, ::AbstractVector)
+function ndofs end
 
 evaluate(H::TBHamiltonian, at::AbstractAtoms) = evaluate(H, at, JVecF([0.0,0.0,0.0]))
 

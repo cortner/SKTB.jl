@@ -43,11 +43,11 @@ function set_npoles!(calc::PEXSI, n)
    calc.nquad = n
 end
 
-energy(calc::PEXSI, at::AbstractAtoms) =
-         pexsi_partial_energy(calc, at, calc.Idom, false)[1]
+energy(calc::PEXSI, at::AbstractAtoms; domain  = calc.Idom) =
+         pexsi_partial_energy(calc, at, domain, false)[1]
 
-forces(calc::PEXSI, at::AbstractAtoms) =
-         - pexsi_partial_energy(calc, at, calc.Idom, true)[2]
+forces(calc::PEXSI, at::AbstractAtoms; domain = calc.Idom) =
+         - pexsi_partial_energy(calc, at, domain, true)[2]
 
 site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
          pexsi_partial_energy(calc, at, [n0], false)[1]
@@ -55,8 +55,6 @@ site_energy(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
 site_energy_d(calc::PEXSI, at::AbstractAtoms, n0::Integer) =
          pexsi_partial_energy(calc, at, [n0], true)[2]
 
-partial_energy(calc::PEXSI, at::AbstractAtoms, Idom) =
-         pexsi_partial_energy(calc, at, Idom, false)[1]
 
 
 function set_EminEmax!(at::AbstractAtoms, Emin, Emax)
@@ -101,8 +99,8 @@ a sub-domain defined by `Is`.
 * `deriv`: whether or not to compute derivatives as well
 """
 function pexsi_partial_energy(
-                     calc::PEXSI, at::AbstractAtoms,
-                     Is::AbstractVector{TI}, deriv=false) where {TI <: Integer}
+                     calc::PEXSI, at::AbstractAtoms{T},
+                     Is::AbstractVector{TI}, deriv=false) where {T, TI <: Integer}
    tbm = calc.tbm
 
    # ----------- some temporary things to check simplifying assumptions
@@ -146,13 +144,13 @@ function pexsi_partial_energy(
    rhs[Iorb,:] = Matrix(I, Norb, Norb) # eye(Norb)
 
    # allocate
-   E = partial_energy(tbm.Vrep, at, Is)
+   E = energy(tbm.Vrep, at; domain = Is)
    # precompute the hamiltonian derivatives
    if deriv
       skhg = SparseSKHgrad(tbm.H, at)
-      ∇E = partial_energy_d(tbm.Vrep, at, Is)
+      ∇E = - forces(tbm.Vrep, at; domain  = Is)
    else
-      ∇E = zerovecs(length(at))
+      ∇E = zeros(JVec{T}, length(at))
    end
 
    # integrate over the contour

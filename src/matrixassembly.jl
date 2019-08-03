@@ -1,7 +1,7 @@
 
 using ForwardDiff, NeighbourLists
 
-using LinearAlgebra: diagind, dot
+using LinearAlgebra: diagind, dot, norm 
 
 import SparseArrays: nnz, sparse, I
 
@@ -71,7 +71,7 @@ sk_d!(H::SKHamiltonian{IO, 9}, r, R, b, db, dout) where {IO} = _sk9_d!(R/r, r, b
 `hop(H::SKHamiltonian, r, i)`: where `r` is real, `i` integer, this
 should return the
 """
-@protofun hop(::SKHamiltonian, ::Any, ::Any)
+function hop end
 
 
 # TODO: this is probably type-unstable!
@@ -95,7 +95,7 @@ function hop_d!(H::SKHamiltonian, r, b, db)
 end
 
 
-@protofun overlap(::SKHamiltonian, ::Real, ::Integer)
+function overlap end # (::SKHamiltonian, ::Real, ::Integer)
 
 overlap_d(H::SKHamiltonian, r::Real, i) = ForwardDiff.derivative(s->overlap(H,s,i), r)
 
@@ -199,7 +199,9 @@ function SparseSKH(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms) where {ISO
    bonds = zeros(nbonds(H))     # temporary array for storing the potentials
 
    # loop through sites
-   for (n, neigs, r, R) in sites(nlist)
+   for n = 1:length(at)   # (n, neigs, r, R) in sites(nlist)
+      neigs, R = NeighbourLists.neigs(nlist, n)
+      r = norm.(R)
       first[n] = idx+1          # where do the triplet entries for atom n start?
 
       # add the diagonal/on-site entries
@@ -249,7 +251,7 @@ full(H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    full!(_alloc_full(H), H, k)
 
 Base.Array(H::SparseSKH, args...) = full(H, args...)
-Base.Matrix(H::SparseSKH, args...) = sparse(H, args...) 
+Base.Matrix(H::SparseSKH, args...) = sparse(H, args...)
 
 full!(out, H::SparseSKH, k::AbstractVector = zero(JVecF)) =
    _full!(out[1], out[2], H, convert(JVecF, k), H.H)
@@ -431,14 +433,17 @@ function SparseSKHgrad(H::SKHamiltonian{ISORTH, NORB}, at::AbstractAtoms) where 
    idx = 0
 
    # allocate work arrays
-   maxneigs = maximum(length(jj) for (_1, jj, _2, _3) in sites(nlist))
+   maxneigs = NeighbourLists.maxneigs(nlist)
    dH_nn = zeros(3, NORB, NORB, maxneigs)
    dH_nm = zeros(3, NORB, NORB)
    dM_nm = zeros(3, NORB, NORB)
    bonds = zeros(nbonds(H))
    dbonds = zeros(nbonds(H))
 
-   for (n, neigs, r, R) in sites(nlist)
+   for n = 1:length(at)  # (n, neigs, r, R) in sites(nlist)
+      neigs, R = NeighbourLists.neigs(nlist, n)
+      r = norm.(R)
+
       first[n] = idx+1
 
       # onsite derivative; copied into the new format in the following loop

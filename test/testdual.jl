@@ -49,10 +49,10 @@ end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
 
-println("Finite difference test for partial_energy")
+println("Finite difference test for partial energy")
 Idom = [3, 4, 5, 6]
-Es  = partial_energy(tbm, at, Idom)
-dEs = partial_energy_d(tbm, at, Idom) |> mat
+Es  = energy(tbm, at; domain = Idom)
+dEs = - forces(tbm, at; domain = Idom) |> mat
 errors = Float64[]
 for p = 2:9
    h = 0.1^p
@@ -60,7 +60,7 @@ for p = 2:9
    for n = 1:length(X)
       X[n] += h
       set_positions!(at, X)
-      Esh = partial_energy(tbm, at, Idom)
+      Esh = energy(tbm, at; domain = Idom)
       dEsh[n] = (Esh - Es) / h
       X[n] -= h
    end

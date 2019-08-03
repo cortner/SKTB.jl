@@ -88,8 +88,8 @@ it can only be (0, 0, kz::Int).
 * `K`: `JVecsF` vector of length Nk
 * `weights`: integration weights; scalar (uniform grid) or Nk vector.
 """
-function monkhorstpackgrid(cell::AbstractMatrix,
-                           nkpoints::Tuple{Int64, Int64, Int64})
+function monkhorstpackgrid(cell::AbstractMatrix{T},
+                           nkpoints::Tuple{Int64, Int64, Int64}) where {T}
    kx, ky, kz = nkpoints
    ## We need to check somewhere that 'nkpoints' and 'pbc' are compatable,
    ## e.g., if pbc[1]==false, then kx!=0 should return an error.
@@ -109,7 +109,7 @@ function monkhorstpackgrid(cell::AbstractMatrix,
 	nx, ny, nz = nn = max(kx, 1), max(ky, 1), max(kz, 1)
    kxs, kys, kzs = (kx==0 ? nx : (kx/2)), (ky==0 ? ny : (ky/2)), (kz==0 ? nz : (kz/2))
 	N = nx * ny * nz
-	K = zerovecs(N)
+	K = zeros(JVec{T}, N)
 	weight = zeros(N)
 
 	# evaluate K and weight
