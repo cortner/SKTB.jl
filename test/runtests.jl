@@ -18,6 +18,7 @@ println("============================================")
    include("testkwon.jl")
    include("testdual.jl")
    include("test0T.jl")
+   include("testvirial.jl")
 end
 
 # ============= Compare with Atoms.jl and QUIP implementations
