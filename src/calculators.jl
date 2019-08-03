@@ -410,7 +410,7 @@ function _virial_k!(vir_k::Array{Float64,2},
                            H::SKHamiltonian{ISORTH,NORB}, k::JVecF,
                            skhg, w) where {ISORTH, NORB}
    # deformation
-   F = defm(at)
+   F = cell(at)'
    F⁻ = inv(F)
    X = positions(at)|>mat
 

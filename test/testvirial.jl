@@ -12,7 +12,7 @@ DIM = (2,2,2)
 tbm = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(beta), bzquad = TB.GammaPoint() )
 at = DIM * bulk(:Si, pbc=(true, true, true), cubic = true)
 # JuLIP.rattle!(at, 0.02)
-F = defm(at)
+F = cell(at)'
 pert = zeros(Float64, 3, 3)
 @show length(at)
 println("Finite difference test for virial, with Gamma point only")
@@ -24,7 +24,7 @@ for p = 2:9
     dEh = zero(vir)
     for n = 1:length(F)
         pert[n] += h
-        set_defm!(at, F+pert; updatepositions=true)
+        set_cell!(at, (F+pert)'; updatepositions=true)
         Eh = energy(tbm, at)
         dEh[n] = (Eh - E) / h
         pert[n] -= h
@@ -42,7 +42,7 @@ tbm = TB.NRLTB.NRLTBModel(:Si, TB.FermiDiracSmearing(beta), bzquad = bzquad)
 DIM = (2,2,2)
 at = DIM * bulk(:Si, pbc=(true, true, true), cubic = true)
 # JuLIP.rattle!(at, 0.02)
-F = defm(at)
+F = cell(at)'
 pert = zeros(Float64, 3, 3)
 @show length(at)
 
@@ -55,7 +55,7 @@ for p = 2:9
     dEh = zero(vir)
     for n = 1:length(F)
         pert[n] += h
-        set_defm!(at, F+pert; updatepositions=true)
+        set_cell!(at, (F+pert)'; updatepositions=true)
         Eh = energy(tbm, at)
         dEh[n] = (Eh - E) / h
         pert[n] -= h
