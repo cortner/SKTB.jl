@@ -24,15 +24,18 @@ for p = 2:9
     dEh = zero(vir)
     for n = 1:length(F)
         pert[n] += h
-        set_cell!(at, (F+pert)'; updatepositions=true)
+        Defm = I + pert * inv(F)
+        apply_defm!(at, Defm)
+        # set_cell!(at, (F+pert)'; updatepositions=true)
         Eh = energy(tbm, at)
+        apply_defm!(at, inv(Defm))
         dEh[n] = (Eh - E) / h
         pert[n] -= h
     end
     push!(errors, norm(vir + dEh, Inf))
     println( " ", p, " | ", errors[end])
 end
-@test minimum(errors) < 1e-3 * maximum(errors)
+println(@test minimum(errors) < 1e-3 * maximum(errors))
 
 
 # multiple k-points
@@ -55,15 +58,18 @@ for p = 2:9
     dEh = zero(vir)
     for n = 1:length(F)
         pert[n] += h
-        set_cell!(at, (F+pert)'; updatepositions=true)
+        Defm  = I + pert * inv(F)
+        apply_defm!(at, Defm)
+        # set_cell!(at, (F+pert)'; updatepositions=true)
         Eh = energy(tbm, at)
         dEh[n] = (Eh - E) / h
+        apply_defm!(at, inv(Defm))
         pert[n] -= h
     end
     push!(errors, norm(vir + dEh, Inf))
     println( " ", p, " | ", errors[end])
 end
-@test minimum(errors) < 1e-3 * maximum(errors)
+println(@test minimum(errors) < 1e-3 * maximum(errors))
 
 
 end
