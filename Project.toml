@@ -1,6 +1,6 @@
 name = "SKTB"
 uuid = "9c0324d0-6785-59b7-97dc-0c015a243b66"
-version = "0.1.1"
+version = "0.2.0"
 
 [deps]
 Calculus = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
