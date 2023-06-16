@@ -1,8 +1,8 @@
-using JuLIP, JuLIP.Potentials, SKTB, SparseArrays
+using JuLIP, JuLIP.Potentials, SKTB, SparseArrays, Test, LinearAlgebra
 using JuLIP: site_energy, site_energy_d, energy, forces
 TB = SKTB
 
-
+##
 # test parameters
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
 n0 = 1            # site index where we compute the site energy
@@ -27,6 +27,8 @@ calc = TB.PEXSI(tbm, 5, [1])
 at = DIM * bulk(:Si, pbc=(false,false,false), cubic=true)
 JuLIP.rattle!(at, 0.02)
 
+##
+
 # calibrate the PEXSI calculator on a mini-system
 print("calibrating . . . ")
 TB.calibrate!(calc, at; at_train = bulk(:Si, pbc=true), npoles = 8)
@@ -36,17 +38,24 @@ println("done."); @test true
 @show length(at)
 @show TB.get_EminEmax(at)
 
+##
+
 # compute the site energy the old way and compare against the PEXSI calculation
 Eold = site_energy(tbm, at, n0)
 println("Old Site Energy (via spectral decomposition): ", Eold)
 println("Testing convergence of PEXSI site energy")
-Enew = 0.0
-for nquad in NQUAD
-   TB.set_npoles!(calc, nquad)
-   Enew = site_energy(calc, at, n0)
-   println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
+Enew = let 
+   Enew = 0.0 
+   for nquad in NQUAD
+      TB.set_npoles!(calc, nquad)
+      Enew = site_energy(calc, at, n0)
+      println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
+   end
+   Enew 
 end
 @test abs(Enew - Eold) < 1e-5
+
+##
 
 println("Test consistency of site forces")
 TB.set_npoles!(calc, 8)
@@ -70,16 +79,23 @@ for p = 2:9
 end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
+##
+
 println("Test consistency of ContourCalculator for multiple sites")
 Is = unique(mod.(rand(Int, length(at) ÷ 3), length(at)) .+ 1)
 Eold = sum( site_energy(tbm, at, n0) for n0 in Is )
-Enew = 0.0
-for nquad in NQUAD
-   calc.nquad = nquad
-   Enew = energy(calc, at; domain = Is)
-   println("nquad = ", nquad, "; rel-error = ", abs(Enew - Eold) / abs(Eold))
+Enew = let 
+   Enew = 0.0 
+   for nquad in NQUAD
+      calc.nquad = nquad
+      Enew = energy(calc, at; domain = Is)
+      println("nquad = ", nquad, "; rel-error = ", abs(Enew - Eold) / abs(Eold))
+   end
+   Enew
 end
 @test  abs(Enew - Eold) / abs(Eold) < 1e-5
+
+##
 
 println("Test consistency of multiple site forces")
 calc.nquad = 8

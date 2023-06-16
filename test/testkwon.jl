@@ -1,6 +1,7 @@
 
 using JuLIP, JuLIP.Potentials, SKTB
 using JuLIP.Potentials: site_energy, site_energy_d
+using JuLIP.Testing
 
 TB=SKTB
 
@@ -70,11 +71,14 @@ println("done."); @test true
 Eold = TB.site_energy(tbm, at, n0)
 println("Old Site Energy (via spectral decomposition): ", Eold)
 println("Testing convergence of PEXSI site energy")
-Enew = 0.0
-for nquad in NQUAD
-   TB.set_npoles!(calc, nquad)
-   Enew = site_energy(calc, at, n0)
-   println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
+Enew = let 
+   Enew = 0.0 
+   for nquad in NQUAD
+      TB.set_npoles!(calc, nquad)
+      Enew = site_energy(calc, at, n0)
+      println("nquad = ", nquad, "; error = ", abs(Enew - Eold))
+   end
+   Enew 
 end
 @show Enew, Eold
 @test abs(Enew - Eold) < 1e-5
