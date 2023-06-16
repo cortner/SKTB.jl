@@ -5,7 +5,7 @@ using SKTB: FermiDiracSmearing
 TB = SKTB
 NRLTB = TB.NRLTB
 
-@testset "Dual Method Partial Energies" begin
+
 println("Testing Dual Method Implementation of Partial Energies")
 
 # test parameters
@@ -70,4 +70,3 @@ end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
 
-end

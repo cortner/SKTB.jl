@@ -4,7 +4,6 @@ using Test
 # Compare the rate of convergence with the predicted rate.
 # Not a proper unit test, but good enough for our purposes.
 
-@testset "FermiContour" begin
 
 E1 = 0
 E2 = 1
@@ -34,4 +33,3 @@ display([n  error predicted error./predicted]); println()
 
 # TODO: implement analogous test for 0T contour!
 
-end

@@ -2,7 +2,6 @@ using JuLIP, JuLIP.Potentials, SKTB, SparseArrays
 using JuLIP: site_energy, site_energy_d, energy, forces
 TB = SKTB
 
-@testset "Site Energy" begin
 
 # test parameters
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
@@ -107,4 +106,3 @@ end
 @test minimum(errors) < 1e-3 * maximum(errors)
 
 
-end

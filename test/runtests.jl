@@ -5,20 +5,22 @@ using JuLIP.Testing
 COMPAREQUIP = false     # if QUIP and quippy are installed
 TESTDEPTH = 1
 
+##
+
 println("============================================")
 println("    SKTB Tests  ")
 println("============================================")
 
 # =========== Main tests =================
 @testset "SKTB Tests" begin
-   include("testtoymodel.jl")
-   include("testnrltb.jl")
-   include("testcontour.jl")
-   include("testsiteE.jl")
-   include("testkwon.jl")
-   include("testdual.jl")
-   include("test0T.jl")
-   include("testvirial.jl")
+   @testset "Toy Model" begin include("testtoymodel.jl"); end 
+   @testset "NRLTB" begin include("testnrltb.jl"); end 
+   @testset "Contour" begin include("testcontour.jl"); end 
+   @testset "Site Energy" begin include("testsiteE.jl"); end 
+   @testset "Kwon" begin include("testkwon.jl"); end 
+   @testset "Dual" begin include("testdual.jl"); end 
+   @testset "Zero-T" begin include("test0T.jl"); end 
+   @testset "Virial" begin include("testvirial.jl"); end 
 end
 
 # ============= Compare with Atoms.jl and QUIP implementations

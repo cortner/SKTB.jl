@@ -3,8 +3,6 @@ using SparseArrays: issparse
 
 TB=SKTB
 
-@testset "NRLTB" begin
-
 println("Testing NRLTBModel: ")
 
 if TESTDEPTH == 0
@@ -69,4 +67,3 @@ for N = 2:6
    @test norm(Array(H) - Hf, Inf) == 0.0
 end
 
-end

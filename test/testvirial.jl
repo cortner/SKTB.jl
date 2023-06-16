@@ -3,7 +3,6 @@ using JuLIP, JuLIP.Potentials, SKTB, SparseArrays
 using JuLIP.Potentials: site_energy, site_energy_d
 TB = SKTB
 
-@testset "Virial" begin
 
 # gamma point only
 beta = 10.0        # temperature / smearing paramter: 10 to 50 for room temperature
@@ -72,4 +71,3 @@ end
 println(@test minimum(errors) < 1e-3 * maximum(errors))
 
 
-end

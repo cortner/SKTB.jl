@@ -1,5 +1,4 @@
 
-@testset "ToyModel" begin
 
 using LinearAlgebra
 
@@ -46,4 +45,3 @@ println("-------------------------------------------")
 println(@test fdtest(tbm, at, verbose=true))
 println("-------------------------------------------")
 
-end
